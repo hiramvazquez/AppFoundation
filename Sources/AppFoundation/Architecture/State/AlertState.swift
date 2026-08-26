@@ -63,7 +63,7 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
     /// Optional secondary button (usually cancel).
     public let secondaryButton: Button?
 
-    /// Creates a new alert state.
+    /// Creates a new alert state from localized resources (A13).
     ///
     /// - Parameters:
     ///   - title: Title displayed at the top
@@ -71,6 +71,23 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
     ///   - primaryButton: The primary action button
     ///   - secondaryButton: Optional secondary action button
     ///   - id: Unique identifier (auto-generated if not provided)
+    public init(
+        title: LocalizedStringResource,
+        message: LocalizedStringResource,
+        primaryButton: Button,
+        secondaryButton: Button? = nil,
+        id: UUID = UUID()
+    ) {
+        self.id = id
+        self.title = String(localized: title)
+        self.message = String(localized: message)
+        self.primaryButton = primaryButton
+        self.secondaryButton = secondaryButton
+    }
+
+    /// Creates an alert from already-localized runtime strings.
+    /// Literals prefer the `LocalizedStringResource` initializer (see `ScreenError`).
+    @_disfavoredOverload
     public init(
         title: String,
         message: String,
@@ -102,6 +119,20 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
     ///   - dismiss: Action to execute when dismissed
     /// - Returns: A new `AlertState` configured for informational purposes
     public static func info(
+        title: LocalizedStringResource,
+        message: LocalizedStringResource,
+        dismiss: @escaping Action = {}
+    ) -> AlertState {
+        AlertState(
+            title: title,
+            message: message,
+            primaryButton: Button(title: L10n.ok, role: .default, action: dismiss)
+        )
+    }
+
+    /// Runtime-string variant of `info(title:message:dismiss:)`.
+    @_disfavoredOverload
+    public static func info(
         title: String,
         message: String,
         dismiss: @escaping Action = {}
@@ -109,7 +140,7 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
         AlertState(
             title: title,
             message: message,
-            primaryButton: Button(title: "OK", role: .default, action: dismiss)
+            primaryButton: Button(title: L10n.ok, role: .default, action: dismiss)
         )
     }
 
@@ -124,6 +155,23 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
     ///   - cancel: Title for the cancel button
     ///   - onConfirm: Action to execute if confirmed
     /// - Returns: A new `AlertState` configured for confirmation
+    public static func confirmation(
+        title: LocalizedStringResource,
+        message: LocalizedStringResource,
+        confirm: LocalizedStringResource,
+        cancel: LocalizedStringResource,
+        onConfirm: @escaping Action
+    ) -> AlertState {
+        AlertState(
+            title: title,
+            message: message,
+            primaryButton: Button(title: confirm, role: .default, action: onConfirm),
+            secondaryButton: Button(title: cancel, role: .cancel, action: {})
+        )
+    }
+
+    /// Runtime-string variant of `confirmation(title:message:confirm:cancel:onConfirm:)`.
+    @_disfavoredOverload
     public static func confirmation(
         title: String,
         message: String,
@@ -152,6 +200,23 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
     ///   - onConfirm: Action to execute if confirmed
     /// - Returns: A new `AlertState` configured for destructive actions
     public static func destructive(
+        title: LocalizedStringResource,
+        message: LocalizedStringResource,
+        confirm: LocalizedStringResource,
+        cancel: LocalizedStringResource,
+        onConfirm: @escaping Action
+    ) -> AlertState {
+        AlertState(
+            title: title,
+            message: message,
+            primaryButton: Button(title: confirm, role: .destructive, action: onConfirm),
+            secondaryButton: Button(title: cancel, role: .cancel, action: {})
+        )
+    }
+
+    /// Runtime-string variant of `destructive(title:message:confirm:cancel:onConfirm:)`.
+    @_disfavoredOverload
+    public static func destructive(
         title: String,
         message: String,
         confirm: String,
@@ -177,12 +242,24 @@ public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
         /// Action executed when the button is tapped.
         public let action: Action
 
-        /// Creates a new alert button.
+        /// Creates a new alert button from a localized resource (A13).
         ///
         /// - Parameters:
         ///   - title: Text displayed on the button
         ///   - role: Semantic role (default, cancel, destructive)
         ///   - action: Action executed when tapped
+        public init(
+            title: LocalizedStringResource,
+            role: Role,
+            action: @escaping Action
+        ) {
+            self.title = String(localized: title)
+            self.role = role
+            self.action = action
+        }
+
+        /// Runtime-string variant (already-localized text).
+        @_disfavoredOverload
         public init(
             title: String,
             role: Role,

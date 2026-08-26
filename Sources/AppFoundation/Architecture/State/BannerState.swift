@@ -55,6 +55,21 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     ///   - duration: How long to show the banner
     ///   - id: Unique identifier (auto-generated if not provided)
     public init(
+        message: LocalizedStringResource,
+        style: Style,
+        duration: Duration,
+        id: UUID = UUID()
+    ) {
+        self.id = id
+        self.message = String(localized: message)
+        self.style = style
+        self.duration = duration
+    }
+
+    /// Runtime-string variant (already-localized text).
+    /// Literals prefer the `LocalizedStringResource` initializer (see `ScreenError`).
+    @_disfavoredOverload
+    public init(
         message: String,
         style: Style,
         duration: Duration,
@@ -77,6 +92,12 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     ///
     /// - Parameter message: Text displayed in the banner
     /// - Returns: A new `BannerState` configured for success feedback
+    public static func success(_ message: LocalizedStringResource) -> BannerState {
+        BannerState(message: message, style: .success, duration: .seconds(3))
+    }
+
+    /// Runtime-string variant of `success(_:)`.
+    @_disfavoredOverload
     public static func success(_ message: String) -> BannerState {
         BannerState(message: message, style: .success, duration: .seconds(3))
     }
@@ -85,6 +106,12 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     ///
     /// - Parameter message: Text displayed in the banner
     /// - Returns: A new `BannerState` configured for error feedback
+    public static func error(_ message: LocalizedStringResource) -> BannerState {
+        BannerState(message: message, style: .error, duration: .seconds(4))
+    }
+
+    /// Runtime-string variant of `error(_:)`.
+    @_disfavoredOverload
     public static func error(_ message: String) -> BannerState {
         BannerState(message: message, style: .error, duration: .seconds(4))
     }
@@ -93,6 +120,12 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     ///
     /// - Parameter message: Text displayed in the banner
     /// - Returns: A new `BannerState` configured for informational feedback
+    public static func info(_ message: LocalizedStringResource) -> BannerState {
+        BannerState(message: message, style: .info, duration: .seconds(3))
+    }
+
+    /// Runtime-string variant of `info(_:)`.
+    @_disfavoredOverload
     public static func info(_ message: String) -> BannerState {
         BannerState(message: message, style: .info, duration: .seconds(3))
     }
@@ -101,6 +134,12 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     ///
     /// - Parameter message: Text displayed in the banner
     /// - Returns: A new `BannerState` configured for warning feedback
+    public static func warning(_ message: LocalizedStringResource) -> BannerState {
+        BannerState(message: message, style: .warning, duration: .seconds(4))
+    }
+
+    /// Runtime-string variant of `warning(_:)`.
+    @_disfavoredOverload
     public static func warning(_ message: String) -> BannerState {
         BannerState(message: message, style: .warning, duration: .seconds(4))
     }

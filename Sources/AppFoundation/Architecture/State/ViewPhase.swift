@@ -71,12 +71,32 @@ public nonisolated struct ScreenError: Equatable, Sendable {
     /// If provided, a retry button is shown to the user.
     public let retry: Action?
 
-    /// Creates a new screen error.
+    /// Creates a new screen error from localized resources (A13).
+    ///
+    /// String literals localize through the app's catalog (`ScreenError(title: "error_title", ...)`
+    /// looks "error_title" up in the main bundle and falls back to the literal).
     ///
     /// - Parameters:
     ///   - title: Title displayed at the top of the error screen
     ///   - message: Detailed message explaining the error
     ///   - retry: Optional action to retry the failed operation
+    public init(
+        title: LocalizedStringResource,
+        message: LocalizedStringResource,
+        retry: Action? = nil
+    ) {
+        self.title = String(localized: title)
+        self.message = String(localized: message)
+        self.retry = retry
+    }
+
+    /// Creates a screen error from already-localized runtime strings
+    /// (e.g. a backend message or `error.localizedDescription`).
+    ///
+    /// `@_disfavoredOverload` (the same technique SwiftUI's `Text` uses): string
+    /// LITERALS prefer the `LocalizedStringResource` initializer and localize; only
+    /// runtime `String` values land here, stored verbatim.
+    @_disfavoredOverload
     public init(
         title: String,
         message: String,

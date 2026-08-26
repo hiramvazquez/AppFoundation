@@ -35,6 +35,9 @@ let package = Package(
         .target(
             name: "AppFoundation",
             path: "Sources/AppFoundation",
+            resources: [
+                .process("Resources")
+            ],
             swiftSettings: swiftSettings
         ),
         .testTarget(

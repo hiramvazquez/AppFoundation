@@ -457,7 +457,7 @@ public struct ScreenContainer<Content: View>: View {
 public extension ScreenContainer {
     init(
         viewModel: BaseViewModel,
-        title: String,
+        title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         navigationPlacement: NavigationPlacement = .stack,
         @ViewBuilder content: @escaping () -> Content
@@ -472,7 +472,7 @@ public extension ScreenContainer {
 
     init(
         viewModel: BaseViewModel,
-        title: String,
+        title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         navigationPlacement: NavigationPlacement = .stack,
         onBack: @escaping Action,
@@ -488,9 +488,9 @@ public extension ScreenContainer {
 
     init(
         viewModel: BaseViewModel,
-        title: String,
+        title: LocalizedStringResource,
         searchText: Binding<String>,
-        searchPlaceholder: String = "Search",
+        searchPlaceholder: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .solid,
         navigationPlacement: NavigationPlacement = .stack,
         onSearchSubmit: Action? = nil,
@@ -527,7 +527,7 @@ struct DefaultInlineActivityView: View {
     var body: some View {
         HStack(spacing: 10) {
             ProgressView()
-            Text("Updating…")
+            Text("Updating…", bundle: .module)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -554,8 +554,10 @@ struct DefaultErrorView: View {
                 .padding(.horizontal, 24)
 
             if let retry = error.retry {
-                Button("Retry", action: retry)
-                    .buttonStyle(.borderedProminent)
+                Button(action: retry) {
+                    Text("Retry", bundle: .module)
+                }
+                .buttonStyle(.borderedProminent)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -568,9 +570,9 @@ struct DefaultEmptyView: View {
         VStack(spacing: 12) {
             Image(systemName: "tray")
                 .font(.system(size: 34))
-            Text("Nothing to show yet")
+            Text("Nothing to show yet", bundle: .module)
                 .font(.title3.bold())
-            Text("The operation succeeded, but there is no content to display.")
+            Text("The operation succeeded, but there is no content to display.", bundle: .module)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 24)

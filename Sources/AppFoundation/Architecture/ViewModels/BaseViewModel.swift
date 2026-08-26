@@ -87,7 +87,17 @@ open class BaseViewModel {
         phase = .error(error)
     }
 
-    /// Convenience overload for constructing a `ScreenError` inline.
+    /// Convenience overload for constructing a `ScreenError` inline (localized resources).
+    open func setError(
+        title: LocalizedStringResource,
+        message: LocalizedStringResource,
+        retry: Action? = nil
+    ) {
+        phase = .error(ScreenError(title: title, message: message, retry: retry))
+    }
+
+    /// Runtime-string variant of `setError(title:message:retry:)`.
+    @_disfavoredOverload
     open func setError(
         title: String,
         message: String,
@@ -173,7 +183,7 @@ open class BaseViewModel {
     @discardableResult
     open func performLoad(
         style: ActivityStyle = .fullScreen,
-        errorTitle: String = "Error",
+        errorTitle: LocalizedStringResource? = nil,
         successTransition: LoadSuccessTransition = .setContent,
         _ work: @escaping () async throws -> Void
     ) -> Task<Void, Never> {
@@ -199,7 +209,8 @@ open class BaseViewModel {
                         work
                     )
                 }
-                self.setError(Self.screenError(from: error, fallbackTitle: errorTitle, retry: retry))
+                let fallbackTitle = errorTitle.map { String(localized: $0) } ?? L10n.error
+                self.setError(Self.screenError(from: error, fallbackTitle: fallbackTitle, retry: retry))
             }
         }
         loadTask = task
@@ -255,7 +266,7 @@ open class BaseViewModel {
     /// Consults `AppErrorConvertible` (A1) so domain errors surface their user-facing
     /// message in banners and alerts too.
     open func handleActivityError(_ error: Error, strategy: ActivityErrorHandling) {
-        let screenError = Self.screenError(from: error, fallbackTitle: "Error", retry: nil)
+        let screenError = Self.screenError(from: error, fallbackTitle: L10n.error, retry: nil)
         switch strategy {
         case .banner:
             showBanner(.error(screenError.message))

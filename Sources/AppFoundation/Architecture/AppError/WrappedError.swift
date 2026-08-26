@@ -153,7 +153,7 @@ nonisolated extension WrappedError: AppErrorConvertible {
     /// Converts this wrapped error to a screen error for UI display.
     public var screenError: ScreenError {
         ScreenError(
-            title: "Error",
+            title: L10n.error,
             message: message
         )
     }

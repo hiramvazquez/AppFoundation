@@ -331,10 +331,12 @@ struct NavigationSearchBar: View {
 
             // Cancel button
             if configuration.showsCancelButton && isFocused {
-                Button("Cancel") {
+                Button {
                     configuration.text.wrappedValue = ""
                     textFieldFocused = false
                     configuration.onCancel?()
+                } label: {
+                    Text("Cancel", bundle: .module)
                 }
                 .font(.body)
                 .foregroundColor(tintColor)

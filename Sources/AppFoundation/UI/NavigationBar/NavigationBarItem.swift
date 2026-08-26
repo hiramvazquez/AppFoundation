@@ -82,9 +82,10 @@ public struct NavigationBarItem: Identifiable {
         NavigationBarItem(id: id ?? "icon:\(imageName)", role: .plain, content: .icon(imageName, badge: badge), action: action)
     }
 
-    /// Creates a text button.
-    public static func text(_ text: String, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(id: id ?? "text:\(text)", role: .plain, content: .text(text), action: action)
+    /// Creates a text button (localized resource; literals localize through the app's catalog).
+    public static func text(_ text: LocalizedStringResource, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
+        let resolved = String(localized: text)
+        return NavigationBarItem(id: id ?? "text:\(resolved)", role: .plain, content: .text(resolved), action: action)
     }
 
     /// Creates a button with a custom view.
@@ -114,9 +115,10 @@ public enum NavigationBarTitle {
 
     // MARK: - Factory Methods
 
-    /// Creates a text title.
-    public static func title(_ text: String) -> NavigationBarTitle {
-        .text(text)
+    /// Creates a text title (localized resource). For runtime, already-localized
+    /// strings use the `.text(_:)` case directly.
+    public static func title(_ text: LocalizedStringResource) -> NavigationBarTitle {
+        .text(String(localized: text))
     }
 
     /// Creates a custom view title.
@@ -218,19 +220,19 @@ public struct SearchBarConfiguration {
     ///
     /// - Parameters:
     ///   - text: Binding to the search text.
-    ///   - placeholder: Placeholder text. Defaults to "Search".
+    ///   - placeholder: Placeholder text. Defaults to the localized "Search" (A13).
     ///   - showsCancelButton: Show cancel button when focused. Defaults to true.
     ///   - onSubmit: Called when user taps return on keyboard.
     ///   - onCancel: Called when user taps cancel button.
     public init(
         text: Binding<String>,
-        placeholder: String = "Search",
+        placeholder: LocalizedStringResource? = nil,
         showsCancelButton: Bool = true,
         onSubmit: Action? = nil,
         onCancel: Action? = nil
     ) {
         self.text = text
-        self.placeholder = placeholder
+        self.placeholder = placeholder.map { String(localized: $0) } ?? L10n.search
         self.showsCancelButton = showsCancelButton
         self.onSubmit = onSubmit
         self.onCancel = onCancel
@@ -297,18 +299,18 @@ public struct NavigationBarConfiguration {
     // MARK: - Convenience Initializers
 
     /// Creates a configuration with just a title.
-    public static func title(_ text: String, style: NavigationBarStyle = .default) -> NavigationBarConfiguration {
-        NavigationBarConfiguration(title: .text(text), style: style)
+    public static func title(_ text: LocalizedStringResource, style: NavigationBarStyle = .default) -> NavigationBarConfiguration {
+        NavigationBarConfiguration(title: .title(text), style: style)
     }
 
     /// Creates a configuration with title and back button.
     public static func withBack(
-        title: String = "",
+        title: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .default,
         backAction: @escaping Action
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
-            title: .text(title),
+            title: title.map { .title($0) } ?? .none,
             leftItems: [.back(action: backAction)],
             style: style
         )
@@ -316,12 +318,12 @@ public struct NavigationBarConfiguration {
 
     /// Creates a configuration with title and close button.
     public static func withClose(
-        title: String,
+        title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         closeAction: @escaping Action
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
-            title: .text(title),
+            title: .title(title),
             rightItems: [.close(action: closeAction)],
             style: style
         )
@@ -378,13 +380,13 @@ public struct NavigationBarConfiguration {
     /// }
     /// ```
     public static func withBackAndAccessory<Accessory: View>(
-        title: String = "",
+        title: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .default,
         backAction: @escaping Action,
         @ViewBuilder accessory: () -> Accessory
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
-            title: .text(title),
+            title: title.map { .title($0) } ?? .none,
             leftItems: [.back(action: backAction)],
             accessoryView: AnyView(accessory()),
             style: style
@@ -416,14 +418,14 @@ public struct NavigationBarConfiguration {
 
     /// Creates a configuration with title and search bar.
     public static func withSearch(
-        title: String,
+        title: LocalizedStringResource,
         searchText: Binding<String>,
-        searchPlaceholder: String = "Search",
+        searchPlaceholder: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .solid,
         onSubmit: Action? = nil
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
-            title: .text(title),
+            title: .title(title),
             searchBar: SearchBarConfiguration(
                 text: searchText,
                 placeholder: searchPlaceholder,
@@ -435,15 +437,15 @@ public struct NavigationBarConfiguration {
 
     /// Creates a configuration with back button, title, and search bar.
     public static func withBackAndSearch(
-        title: String,
+        title: LocalizedStringResource,
         searchText: Binding<String>,
-        searchPlaceholder: String = "Search",
+        searchPlaceholder: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .solid,
         backAction: @escaping Action,
         onSubmit: Action? = nil
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
-            title: .text(title),
+            title: .title(title),
             leftItems: [.back(action: backAction)],
             searchBar: SearchBarConfiguration(
                 text: searchText,
