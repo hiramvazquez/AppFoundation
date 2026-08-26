@@ -41,7 +41,19 @@ public nonisolated struct AppEnvironment {
     /// Detects if running under TestFlight.
     ///
     /// Useful for enabling beta features or analytics.
+    ///
+    /// - Note: Implemented via the sandbox receipt check. `Bundle.appStoreReceiptURL`
+    ///   is deprecated as of iOS 18 (StoreKit 2's `AppTransaction` replaces receipts),
+    ///   but the replacement is async-only and this API is deliberately synchronous.
+    ///   The private accessor below carries the availability annotation so the decision
+    ///   stays visible; revisit when the package adopts StoreKit 2.
     public static var isTestFlight: Bool {
+        legacySandboxReceiptCheck
+    }
+
+    @available(iOS, introduced: 17.0, deprecated: 18.0, message: "Bundle.appStoreReceiptURL is deprecated; migrate to StoreKit 2 AppTransaction when isTestFlight can become async")
+    @available(macOS, introduced: 14.0, deprecated: 15.0, message: "Bundle.appStoreReceiptURL is deprecated; migrate to StoreKit 2 AppTransaction when isTestFlight can become async")
+    private static var legacySandboxReceiptCheck: Bool {
         Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
     }
 

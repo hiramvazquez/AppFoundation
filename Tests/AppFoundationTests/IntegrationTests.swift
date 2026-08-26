@@ -37,7 +37,8 @@ struct IntegrationTests {
             super.init()
         }
 
-        func loadData() {
+        @discardableResult
+        func loadData() -> Task<Void, Never> {
             performLoad(errorTitle: "Load Failed") {
                 _ = try await self.dataService.fetchData()
             }
@@ -97,25 +98,24 @@ struct IntegrationTests {
 
     // MARK: - ViewModel + Data Service
 
-    @Test func loadSuccessReachesContent() async throws {
-        viewModel.loadData()
-        try await waitUntil { viewModel.phase == .content }
+    @Test func loadSuccessReachesContent() async {
+        await viewModel.loadData().value
         #expect(viewModel.phase == .content)
         #expect(dataService.callCount == 1)
     }
 
-    @Test func loadFailureSurfacesError() async throws {
+    @Test func loadFailureSurfacesError() async {
         dataService.shouldFail = true
-        viewModel.loadData()
-        try await waitUntil { viewModel.hasError }
+        await viewModel.loadData().value
         #expect(viewModel.currentError?.title == "Load Failed")
     }
 
     @Test func retryAfterFailureRecovers() async throws {
         dataService.shouldFail = true
-        viewModel.loadData()
-        try await waitUntil { viewModel.hasError }
+        await viewModel.loadData().value
+        #expect(viewModel.hasError)
 
+        // El retry relanza performLoad internamente (no expone su Task): waitUntil.
         dataService.shouldFail = false
         viewModel.currentError?.retry?()
         try await waitUntil { viewModel.phase == .content }
@@ -124,9 +124,8 @@ struct IntegrationTests {
 
     // MARK: - Full Flows
 
-    @Test func loadDataThenNavigate() async throws {
-        viewModel.loadData()
-        try await waitUntil { viewModel.phase == .content }
+    @Test func loadDataThenNavigate() async {
+        await viewModel.loadData().value
 
         viewModel.navigateToDetail(id: 42)
         #expect(coordinator.mainStack.path == [.detail(id: 42)])
@@ -134,8 +133,7 @@ struct IntegrationTests {
 
     @Test func errorAlertAndNavigationCoexist() async throws {
         dataService.shouldFail = true
-        viewModel.loadData()
-        try await waitUntil { viewModel.hasError }
+        await viewModel.loadData().value
 
         viewModel.navigateToDetail(id: 100)
         #expect(viewModel.hasError)
@@ -186,7 +184,7 @@ struct IntegrationTests {
 
     // MARK: - Constructor Injection
 
-    @Test func constructorInjectionKeepsProvidedDependencies() async throws {
+    @Test func constructorInjectionKeepsProvidedDependencies() async {
         let testRouter = Coordinator<TestRoute>(root: .home)
         let testService = MockDataService()
 
@@ -194,8 +192,7 @@ struct IntegrationTests {
         #expect(vm.router === testRouter)
         #expect(vm.dataService === testService)
 
-        vm.loadData()
-        try await waitUntil { vm.phase == .content }
+        await vm.loadData().value
         #expect(vm.phase == .content)
     }
 }
