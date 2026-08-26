@@ -39,48 +39,6 @@ import Foundation
 ///         file: #file,
 ///         line: #line
 ///     )
-///     setError(.wrapped(wrapped))
-/// }
-/// ```
-/// A wrapper that preserves the original error while adding context.
-///
-/// Use this when you need to catch errors and add additional context
-/// without losing the original error information.
-///
-/// ## Example - Basic Usage
-/// ```swift
-/// do {
-///     try await loadData()
-/// } catch {
-///     throw WrappedError(underlying: error, context: "Loading user profile")
-/// }
-/// ```
-///
-/// ## Example - With Error Code
-/// ```swift
-/// do {
-///     try await service.fetch()
-/// } catch {
-///     throw WrappedError(
-///         underlying: error,
-///         context: "Fetching catalog",
-///         code: "CATALOG_FETCH_001"  // For analytics/tracking
-///     )
-/// }
-/// ```
-///
-/// ## Example - In ViewModel
-/// ```swift
-/// do {
-///     data = try await service.fetch()
-/// } catch {
-///     let wrapped = WrappedError(
-///         underlying: error,
-///         context: "Fetching catalog",
-///         code: "VM_FETCH_ERROR",
-///         file: #file,
-///         line: #line
-///     )
 ///     setError(wrapped.screenError)
 /// }
 /// ```

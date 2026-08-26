@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - NavigationLayer
 
@@ -82,9 +83,6 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
 
     // MARK: - Internal Properties
 
-    /// Whether to display the back button (internal detail).
-    @Published var backButtonDisplay: Bool = true
-
     /// Tracks the last presented modal layer to resolve priority when both are active.
     private var lastPresentedModalLayer: NavigationLayer = .main
 
@@ -100,7 +98,7 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
     public init(root: Route) {
         self.mainStack = StackState(root: root)
         recalculateIsAtRoot()
-        log("Initialized with root: \(root)")
+        log("Initialized with root", payload: "\(root)")
     }
 
     // MARK: - Router Conformance
@@ -114,7 +112,7 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
         case .fullScreenCover:
             fullScreenStack?.path.append(route)
         }
-        log("Push → \(route)")
+        log("Push →", payload: "\(route)")
     }
 
     public func pop() {
@@ -165,7 +163,7 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
                 fullScreenStack?.path.removeAll()
             }
         }
-        log("PopTo → \(route)")
+        log("PopTo →", payload: "\(route)")
     }
 
     public func present(_ route: Route, as style: PresentationStyle) {
@@ -174,12 +172,12 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
             sheetStack = StackState(root: route)
             isSheetPresented = true
             lastPresentedModalLayer = .sheet
-            log("Present sheet → \(route)")
+            log("Present sheet →", payload: "\(route)")
         case .fullScreenCover:
             fullScreenStack = StackState(root: route)
             isFullScreenPresented = true
             lastPresentedModalLayer = .fullScreenCover
-            log("Present fullScreenCover → \(route)")
+            log("Present fullScreenCover →", payload: "\(route)")
         }
     }
 
@@ -203,14 +201,14 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
     /// - Parameter route: The new root route.
     public func setRoot(_ route: Route) {
         mainStack = StackState(root: route)
-        log("Set root → \(route)")
+        log("Set root →", payload: "\(route)")
     }
 
     /// Replaces the entire main stack path with new routes.
     /// - Parameter routes: The new routes to set in the main stack path.
     public func setStack(_ routes: [Route]) {
         mainStack.path = routes
-        log("Set stack → \(routes)")
+        log("Set stack →", payload: "\(routes)")
     }
 
     // MARK: - Computed Properties
@@ -229,10 +227,20 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
         isAtRoot = mainStack.path.isEmpty && !isFullScreenPresented && !isSheetPresented
     }
 
-    private func log(_ message: String) {
+    /// Logs a navigation event.
+    ///
+    /// `operation` is static text (safe to expose); `payload` carries route values and is
+    /// logged with `privacy: .private` so user-identifying route parameters (ids, names)
+    /// are redacted outside of debugging sessions.
+    private func log(_ operation: String, payload: String? = nil) {
 #if DEBUG
-        logDebug(message, category: "Navigation")
-        navigationHistory.append(message)
+        if let payload {
+            AppFoundationLogger.navigation.debug("\(operation, privacy: .public) \(payload, privacy: .private)")
+            navigationHistory.append("\(operation) \(payload)")
+        } else {
+            AppFoundationLogger.navigation.debug("\(operation, privacy: .public)")
+            navigationHistory.append(operation)
+        }
 #endif
     }
 }

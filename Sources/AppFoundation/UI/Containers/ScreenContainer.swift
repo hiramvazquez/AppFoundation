@@ -101,7 +101,7 @@ public struct ScreenContainer<Content: View>: View {
             }
         }
         #if os(iOS)
-        .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         #endif
     }
 
@@ -214,21 +214,18 @@ public struct ScreenContainer<Content: View>: View {
 
     // MARK: - Overlay Views
 
+    /// Renders the primary loading overlay for `.fullScreen` and `.overlay` styles.
+    ///
+    /// `.inline` never reaches here (it is filtered in `primaryPhaseOverlay`) — today an
+    /// inline primary load renders nothing (bug A2), which the activity collapse fixes.
     @ViewBuilder
     private func loadingOverlayView(style: LoadingStyle) -> some View {
-        switch style {
-        case .fullScreen:
+        if style == .fullScreen {
             ZStack {
                 backgroundColor.ignoresSafeArea()
                 builtLoadingView
             }
-        case .inline:
-            VStack {
-                builtLoadingView
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .overlay:
+        } else {
             ZStack {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
@@ -404,7 +401,7 @@ public extension ScreenContainer {
         searchPlaceholder: String = "Search",
         style: NavigationBarStyle = .solid,
         navigationPlacement: NavigationPlacement = .stack,
-        onSearchSubmit: (() -> Void)? = nil,
+        onSearchSubmit: Action? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.init(
@@ -421,8 +418,6 @@ public extension ScreenContainer {
         )
     }
 }
-
-public typealias ScreenShell<Content: View> = ScreenContainer<Content>
 
 // MARK: - Default Views
 

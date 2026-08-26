@@ -111,11 +111,6 @@ public struct PhaseView<Content: View>: View {
     }
 }
 
-// MARK: - Type Aliases
-
-/// A type alias for `PhaseView` for backward compatibility and convenience.
-public typealias BackgroundDefault<Content: View> = PhaseView<Content>
-
 // MARK: - Preview
 
 #if DEBUG

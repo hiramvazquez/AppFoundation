@@ -1,47 +1,20 @@
-import Foundation
+import os
 
-/// Lightweight debug logging helpers used internally by AppFoundation.
+/// Internal logging used by AppFoundation, backed by `os.Logger`.
 ///
-/// The package intentionally stays dependency-free. In DEBUG builds these
-/// helpers print readable messages; in RELEASE builds they become no-ops.
+/// `print()` is not logging: `os.Logger` provides categories, levels, and — critically —
+/// privacy redaction. Callers interpolate any value that could identify a user (route
+/// payloads, dynamic content) with `privacy: .private`; static operation names may be
+/// interpolated with `privacy: .public`.
 enum AppFoundationLogger {
-    static func debug(_ message: @autoclosure () -> String, category: String) {
-        #if DEBUG
-        print("[DEBUG][\(category)] \(message())")
-        #endif
-    }
+    private static let subsystem = "AppFoundation"
 
-    static func info(_ message: @autoclosure () -> String, category: String) {
-        #if DEBUG
-        print("[INFO][\(category)] \(message())")
-        #endif
-    }
+    /// Navigation events (push/pop/present) from `Coordinator`.
+    static let navigation = Logger(subsystem: subsystem, category: "Navigation")
 
-    static func warning(_ message: @autoclosure () -> String, category: String) {
-        #if DEBUG
-        print("[WARN][\(category)] \(message())")
-        #endif
-    }
+    /// Dependency-injection registration/resolution diagnostics from `Container`.
+    static let di = Logger(subsystem: subsystem, category: "DI")
 
-    static func error(_ message: @autoclosure () -> String, category: String) {
-        #if DEBUG
-        print("[ERROR][\(category)] \(message())")
-        #endif
-    }
-}
-
-@inline(__always) func logDebug(_ message: @autoclosure () -> String, category: String) {
-    AppFoundationLogger.debug(message(), category: category)
-}
-
-@inline(__always) func logInfo(_ message: @autoclosure () -> String, category: String) {
-    AppFoundationLogger.info(message(), category: category)
-}
-
-@inline(__always) func logWarning(_ message: @autoclosure () -> String, category: String) {
-    AppFoundationLogger.warning(message(), category: category)
-}
-
-@inline(__always) func logError(_ message: @autoclosure () -> String, category: String) {
-    AppFoundationLogger.error(message(), category: category)
+    /// Runtime environment diagnostics from `AppEnvironment`.
+    static let environment = Logger(subsystem: subsystem, category: "Environment")
 }

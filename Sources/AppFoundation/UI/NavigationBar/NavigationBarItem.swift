@@ -24,7 +24,7 @@ import SwiftUI
 public struct NavigationBarItem: Identifiable {
     public let id = UUID()
     let content: NavigationBarItemContent
-    let action: () -> Void
+    let action: Action
 
     /// Returns true if this item is a back button (chevron.left icon).
     public var isBackButton: Bool {
@@ -45,32 +45,32 @@ public struct NavigationBarItem: Identifiable {
     // MARK: - Factory Methods
 
     /// Creates a back button with chevron icon.
-    public static func back(action: @escaping () -> Void) -> NavigationBarItem {
+    public static func back(action: @escaping Action) -> NavigationBarItem {
         NavigationBarItem(content: .systemIcon("chevron.left", badge: nil), action: action)
     }
 
     /// Creates a close button with X icon.
-    public static func close(action: @escaping () -> Void) -> NavigationBarItem {
+    public static func close(action: @escaping Action) -> NavigationBarItem {
         NavigationBarItem(content: .systemIcon("xmark", badge: nil), action: action)
     }
 
     /// Creates a button with a system SF Symbol.
-    public static func icon(_ systemName: String, badge: Int? = nil, action: @escaping () -> Void) -> NavigationBarItem {
+    public static func icon(_ systemName: String, badge: Int? = nil, action: @escaping Action) -> NavigationBarItem {
         NavigationBarItem(content: .systemIcon(systemName, badge: badge), action: action)
     }
 
     /// Creates a button with a custom image from assets.
-    public static func customIcon(_ imageName: String, badge: Int? = nil, action: @escaping () -> Void) -> NavigationBarItem {
+    public static func customIcon(_ imageName: String, badge: Int? = nil, action: @escaping Action) -> NavigationBarItem {
         NavigationBarItem(content: .icon(imageName, badge: badge), action: action)
     }
 
     /// Creates a text button.
-    public static func text(_ text: String, action: @escaping () -> Void) -> NavigationBarItem {
+    public static func text(_ text: String, action: @escaping Action) -> NavigationBarItem {
         NavigationBarItem(content: .text(text), action: action)
     }
 
     /// Creates a button with a custom view.
-    public static func custom<V: View>(_ view: V, action: @escaping () -> Void) -> NavigationBarItem {
+    public static func custom<V: View>(_ view: V, action: @escaping Action) -> NavigationBarItem {
         NavigationBarItem(content: .view(AnyView(view)), action: action)
     }
 }
@@ -107,7 +107,7 @@ public enum NavigationBarTitle {
 // MARK: - Navigation Bar Style
 
 /// Visual style for the custom navigation bar.
-public struct NavigationBarStyle {
+public struct NavigationBarStyle: Sendable {
     /// Background color or material.
     public let background: NavigationBarBackground
 
@@ -163,7 +163,7 @@ public struct NavigationBarStyle {
 }
 
 /// Background type for the navigation bar.
-public enum NavigationBarBackground {
+public enum NavigationBarBackground: Sendable {
     /// Solid color background.
     case solid(Color)
 
@@ -188,10 +188,10 @@ public struct SearchBarConfiguration {
     let showsCancelButton: Bool
 
     /// Action called when search is submitted (keyboard return).
-    let onSubmit: (() -> Void)?
+    let onSubmit: Action?
 
     /// Action called when cancel is tapped.
-    let onCancel: (() -> Void)?
+    let onCancel: Action?
 
     /// Creates a search bar configuration.
     ///
@@ -205,8 +205,8 @@ public struct SearchBarConfiguration {
         text: Binding<String>,
         placeholder: String = "Search",
         showsCancelButton: Bool = true,
-        onSubmit: (() -> Void)? = nil,
-        onCancel: (() -> Void)? = nil
+        onSubmit: Action? = nil,
+        onCancel: Action? = nil
     ) {
         self.text = text
         self.placeholder = placeholder
@@ -284,7 +284,7 @@ public struct NavigationBarConfiguration {
     public static func withBack(
         title: String = "",
         style: NavigationBarStyle = .default,
-        backAction: @escaping () -> Void
+        backAction: @escaping Action
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
             title: .text(title),
@@ -297,7 +297,7 @@ public struct NavigationBarConfiguration {
     public static func withClose(
         title: String,
         style: NavigationBarStyle = .default,
-        closeAction: @escaping () -> Void
+        closeAction: @escaping Action
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
             title: .text(title),
@@ -359,7 +359,7 @@ public struct NavigationBarConfiguration {
     public static func withBackAndAccessory<Accessory: View>(
         title: String = "",
         style: NavigationBarStyle = .default,
-        backAction: @escaping () -> Void,
+        backAction: @escaping Action,
         @ViewBuilder accessory: () -> Accessory
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
@@ -399,7 +399,7 @@ public struct NavigationBarConfiguration {
         searchText: Binding<String>,
         searchPlaceholder: String = "Search",
         style: NavigationBarStyle = .solid,
-        onSubmit: (() -> Void)? = nil
+        onSubmit: Action? = nil
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
             title: .text(title),
@@ -418,8 +418,8 @@ public struct NavigationBarConfiguration {
         searchText: Binding<String>,
         searchPlaceholder: String = "Search",
         style: NavigationBarStyle = .solid,
-        backAction: @escaping () -> Void,
-        onSubmit: (() -> Void)? = nil
+        backAction: @escaping Action,
+        onSubmit: Action? = nil
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
             title: .text(title),

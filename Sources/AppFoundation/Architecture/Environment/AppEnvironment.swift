@@ -1,4 +1,5 @@
 import Foundation
+import os
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -221,7 +222,7 @@ public struct AppEnvironment {
         let lines = debugInfo.sorted(by: { $0.key < $1.key })
             .map { "  \($0.key): \($0.value)" }
             .joined(separator: "\n")
-        logInfo("App Environment:\n\(lines)", category: "Environment")
+        AppFoundationLogger.environment.info("App Environment:\n\(lines, privacy: .private)")
     }
     #endif
 }

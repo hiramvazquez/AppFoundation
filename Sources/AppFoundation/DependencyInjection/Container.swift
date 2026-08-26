@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Thread-safe dependency container for registering and resolving instances.
 ///
@@ -77,7 +78,7 @@ public final class Container: @unchecked Sendable {
         if singletons[key] != nil {
             lock.unlock()
             #if DEBUG
-            logWarning("Re-registering singleton '\(key)'. Overwriting previous registration.", category: "DI")
+            AppFoundationLogger.di.warning("Re-registering singleton '\(key, privacy: .public)'. Overwriting previous registration.")
             #endif
             lock.lock()
         }
@@ -99,7 +100,7 @@ public final class Container: @unchecked Sendable {
         if factories[key] != nil {
             lock.unlock()
             #if DEBUG
-            logWarning("Re-registering transient '\(key)'. Overwriting previous registration.", category: "DI")
+            AppFoundationLogger.di.warning("Re-registering transient '\(key, privacy: .public)'. Overwriting previous registration.")
             #endif
             lock.lock()
         }
@@ -125,7 +126,7 @@ public final class Container: @unchecked Sendable {
 
         if scopedFactories[scopeKey]?[key] != nil {
             #if DEBUG
-            logWarning("Re-registering scoped '\(key)' in scope '\(scopeKey)'. Overwriting previous registration.", category: "DI")
+            AppFoundationLogger.di.warning("Re-registering scoped '\(key, privacy: .public)' in scope '\(scopeKey, privacy: .public)'. Overwriting previous registration.")
             #endif
         }
 
@@ -195,7 +196,7 @@ public final class Container: @unchecked Sendable {
         }
 
         #if DEBUG
-        logError("Dependency '\(key)' not registered. Use Container.register() to register this type.", category: "DI")
+        AppFoundationLogger.di.error("Dependency '\(key, privacy: .public)' not registered. Use Container.register() to register this type.")
         fatalError("Dependency '\(key)' not registered. Use Container.register() to register this type.")
         #else
         fatalError("Dependency '\(key)' not registered")
@@ -309,7 +310,7 @@ public final class Container: @unchecked Sendable {
 
         guard !activeScopes.contains(key) else {
             #if DEBUG
-            logWarning("Scope '\(key)' already exists.", category: "DI")
+            AppFoundationLogger.di.warning("Scope '\(key, privacy: .public)' already exists.")
             #endif
             return
         }

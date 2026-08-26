@@ -73,12 +73,12 @@ public struct CoordinatorView<Route: Hashable, Content: View>: View {
         NavigationStack(path: $coordinator.mainStack.path) {
             content(coordinator.mainStack.root)
                 #if os(iOS)
-                .navigationBarHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
                 #endif
                 .navigationDestination(for: Route.self) { route in
                     content(route)
                         #if os(iOS)
-                        .navigationBarHidden(true)
+                        .toolbar(.hidden, for: .navigationBar)
                         #endif
                 }
         }
@@ -93,12 +93,12 @@ public struct CoordinatorView<Route: Hashable, Content: View>: View {
                 )) {
                     content(sheetState.root)
                         #if os(iOS)
-                        .navigationBarHidden(true)
+                        .toolbar(.hidden, for: .navigationBar)
                         #endif
                         .navigationDestination(for: Route.self) { route in
                             content(route)
                                 #if os(iOS)
-                                .navigationBarHidden(true)
+                                .toolbar(.hidden, for: .navigationBar)
                                 #endif
                         }
                 }
@@ -115,12 +115,12 @@ public struct CoordinatorView<Route: Hashable, Content: View>: View {
                 )) {
                     content(fullScreenState.root)
                         #if os(iOS)
-                        .navigationBarHidden(true)
+                        .toolbar(.hidden, for: .navigationBar)
                         #endif
                         .navigationDestination(for: Route.self) { route in
                             content(route)
                                 #if os(iOS)
-                                .navigationBarHidden(true)
+                                .toolbar(.hidden, for: .navigationBar)
                                 #endif
                         }
                 }

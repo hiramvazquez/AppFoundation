@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Static facade for the global dependency container.
 ///
@@ -153,7 +154,7 @@ public enum Dependency {
             These dependencies are required but not registered.
             Please register them in your DependencyModule before using.
             """
-            logWarning(message, category: "DI")
+            AppFoundationLogger.di.warning("\(message, privacy: .public)")
             assertionFailure(message)
         }
     }
