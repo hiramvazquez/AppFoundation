@@ -39,9 +39,12 @@ struct LocalizationTests {
         }
     }
 
-    @Test func packageDefaultsReadFromTheCatalog() {
-        #expect(L10n.error == "Error")
-        #expect(L10n.ok == "OK")
-        #expect(L10n.search == "Search")
+    /// Independiente del idioma del runner (el simulador puede correr en español):
+    /// los defaults deben resolver a un valor del catálogo de CUALQUIER idioma
+    /// soportado. La completitud por idioma la fijan los dos tests de arriba.
+    @Test func packageDefaultsResolveThroughTheCatalog() {
+        #expect(["Error"].contains(L10n.error))
+        #expect(["OK"].contains(L10n.ok))
+        #expect(["Search", "Buscar"].contains(L10n.search))
     }
 }

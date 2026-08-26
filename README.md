@@ -2,33 +2,37 @@
 
 AppFoundation is a single Swift Package for new SwiftUI apps. It gives every project the same baseline for screen state, secondary activity handling, navigation, dependency injection, shell UI, and a few reusable utilities.
 
+Requires **Swift 6.2** (tools), **iOS 17 / macOS 14**. The package builds with
+`defaultIsolation(MainActor)` (Approachable Concurrency) and warnings as errors.
+
 ## What it includes
 
 - **Architecture**
-  - `BaseViewModel`
-  - `ViewPhase`
-  - `ActivityState`
+  - `BaseViewModel` (`@Observable`)
+  - `ViewPhase` / `ActivityStyle` / `ActivityState`
   - `AlertState`
-  - `BannerState`
+  - `BannerState` (real auto-dismiss)
   - `ScreenError`
 - **Navigation**
   - `Router`
-  - `Coordinator`
+  - `Coordinator` (`@Observable`, single modal layer)
   - `CoordinatorView`
+  - `DeepLinkType` / `DeepLinkAction` (connected to `Coordinator.handle`)
 - **Dependency Injection**
-  - `Container`
-  - `DependencyModule`
-  - `DependencyAssembler`
-  - `@Inject`
+  - `Container` (immutable `Container.shared`, child containers for overrides)
+  - `DependencyModule` + `Container.register(modules:)`
+  - `@Inject` (`@MainActor`)
 - **UI**
-  - `ScreenContainer` / `ScreenShell`
+  - `ScreenContainer`
   - `CustomNavigationBar`
-  - `NavigationBarItem`
+  - `NavigationBarItem` (stable identity + semantic roles)
 - **Utilities**
-  - `Debouncer`
-  - `Throttler`
-  - `WrappedError`
+  - `Debouncer` / `Throttler` (injectable `Clock`)
+  - `WrappedError` (`AppErrorConvertible`)
   - `AppEnvironment`
+
+All user-visible default strings ship localized (EN + ES); visible-copy parameters
+accept `LocalizedStringResource`, so string literals localize through your app's catalog.
 
 ## Design rules
 
@@ -37,6 +41,9 @@ AppFoundation is a single Swift Package for new SwiftUI apps. It gives every pro
 - `@Inject` only for edges where constructor injection is awkward.
 - View models depend on `Router`, not on the concrete coordinator whenever possible.
 - Primary screen state and secondary work are different concerns.
+- Cancellation is part of the contract: `performLoad`/`performActivity` return their
+  `Task`, a new load cancels the in-flight one, and a cancelled load never surfaces
+  as an error.
 
 ## Primary phase vs secondary activity
 
@@ -44,17 +51,35 @@ AppFoundation intentionally separates:
 
 - `phase`: the main screen state
   - `.idle`
-  - `.loading`
+  - `.loading(ActivityStyle)` — `.fullScreen`, `.inline`, or `.overlay`
   - `.content`
   - `.empty`
   - `.error(ScreenError)`
 - `activity`: transient work while content remains visible
   - `.none`
-  - `.loading(.inline)`
-  - `.loading(.overlay)`
+  - `.loading(ActivityStyle)`
+
+There is ONE activity presentation system (`ActivityStyle`) shared by both, and every
+style renders something — `.inline` shows an inline indicator while content stays visible.
 
 Use `phase` for initial loads or full-screen failures.
 Use `activity` for refresh, submit, pagination, sync, or background work that should not replace the content.
+
+## Errors: `AppErrorConvertible` is the source of user-facing messages
+
+Conform your domain errors to `AppErrorConvertible` and `performLoad`/`performActivity`
+surface *your* title and message; raw `localizedDescription` is only the last-resort
+fallback for foreign errors. `WrappedError` already conforms.
+
+```swift
+enum ProfileError: Error, AppErrorConvertible {
+    case notFound
+
+    var screenError: ScreenError {
+        ScreenError(title: "Profile unavailable", message: "Try again later.")
+    }
+}
+```
 
 ## Installation
 
@@ -87,9 +112,17 @@ struct ProfileModule: DependencyModule {
     }
 }
 
-DependencyAssembler.shared.register([
+Container.shared.register(modules: [
     ProfileModule()
 ])
+```
+
+`Container.shared` is a `static let` and can never be swapped. Tests and previews use
+child containers, which shadow the parent without mutating it:
+
+```swift
+let container = Container(parent: .shared)
+container.register(MockProfileRepository(), lifecycle: .singleton, as: ProfileRepository.self)
 ```
 
 ### 2. Define routes
@@ -105,7 +138,7 @@ enum AppRoute: Hashable {
 ### 3. Create the coordinator
 
 ```swift
-@StateObject private var coordinator = Coordinator<AppRoute>(root: .home)
+@State private var coordinator = Coordinator<AppRoute>(root: .home)
 
 var body: some View {
     CoordinatorView(coordinator: coordinator) { route in
@@ -124,7 +157,36 @@ var body: some View {
 }
 ```
 
-### 4. Build a feature view model
+The coordinator models **one modal layer**: presenting while a modal is visible replaces
+it (documented policy). Need modal-over-modal? Give the presented destination its own
+`Coordinator` + `CoordinatorView`.
+
+### 4. Deep links
+
+```swift
+enum AppDeepLink: DeepLinkType {
+    case profile(id: String)
+
+    static func parse(_ url: URL) -> AppDeepLink? {
+        let components = url.pathComponents
+        guard let index = components.firstIndex(of: "profile"), components.count > index + 1 else {
+            return nil
+        }
+        return .profile(id: components[index + 1])
+    }
+}
+
+// e.g. in your root view:
+.onOpenURL { url in
+    coordinator.handle(url, as: AppDeepLink.self) { link in
+        switch link {
+        case .profile(let id): .setStack([.profile, .profileDetails(id: id)])
+        }
+    }
+}
+```
+
+### 5. Build a feature view model
 
 ```swift
 import AppFoundation
@@ -133,9 +195,8 @@ struct Profile {
     let name: String
 }
 
-@MainActor
 final class ProfileViewModel: BaseViewModel {
-    @Published private(set) var profile: Profile?
+    private(set) var profile: Profile?
 
     private let repository: ProfileRepository
     private let router: any Router<AppRoute>
@@ -151,7 +212,7 @@ final class ProfileViewModel: BaseViewModel {
 
     func onAppear() {
         performLoad(successTransition: .preserveCurrentPhase) {
-            let profile = try await repository.fetchProfile()
+            let profile = try await self.repository.fetchProfile()
             self.profile = profile
             self.setContent()
         }
@@ -159,7 +220,7 @@ final class ProfileViewModel: BaseViewModel {
 
     func refresh() {
         performActivity(style: .overlay) {
-            let profile = try await repository.fetchProfile()
+            let profile = try await self.repository.fetchProfile()
             self.profile = profile
             self.showBanner(.success("Profile updated"))
         }
@@ -171,11 +232,14 @@ final class ProfileViewModel: BaseViewModel {
 }
 ```
 
-### 5. Render with `ScreenContainer`
+`BaseViewModel` is `@Observable`: stored properties in subclasses are tracked
+automatically — no `@Published`, no `ObservableObject`.
+
+### 6. Render with `ScreenContainer`
 
 ```swift
 struct ProfileView: View {
-    @StateObject var viewModel: ProfileViewModel
+    let viewModel: ProfileViewModel
 
     var body: some View {
         ScreenContainer(
@@ -206,6 +270,9 @@ struct ProfileView: View {
     }
 }
 ```
+
+Alerts present through the native `.alert` by default; banners auto-dismiss after their
+duration and are announced to VoiceOver.
 
 ## `BaseViewModel` guidance
 
@@ -240,6 +307,15 @@ performActivity(style: .inline) {
 }
 ```
 
+### Deterministic tests
+
+Both helpers return their `Task` — await it instead of sleeping:
+
+```swift
+await viewModel.performLoad { try await repository.fetch() }.value
+#expect(viewModel.phase == .content)
+```
+
 ## Dependency injection guidance
 
 Preferred:
@@ -256,13 +332,18 @@ Use `@Inject` only when constructor injection would create more friction than va
 
 ```swift
 final class AnalyticsAdapter {
-    @Inject private var environment: AppEnvironment
+    @Inject private var analytics: AnalyticsService
 }
 ```
+
+`@Inject` is `@MainActor` and requires the type to be registered (it traps otherwise —
+absence is not modelled). For `nonisolated` code, call `Container.shared.resolve()` /
+`tryResolve()` explicitly.
 
 ## Notes
 
 - `ScreenContainer` is the public shell type.
-- `ScreenShell` is kept as an alias for readability.
-- `load(...)` still exists for backwards compatibility, but `performLoad(...)` is the preferred API.
-- `performActivity(...)` is the preferred path for refresh, submit, and background work.
+- `performLoad(...)` / `performActivity(...)` are the single async entry points
+  (the legacy `load(...)` wrapper is gone).
+- `Debouncer` and `Throttler` accept an injectable `Clock` for deterministic tests;
+  the convenience initializers default to `ContinuousClock`.
