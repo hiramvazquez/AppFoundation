@@ -42,7 +42,7 @@ import Foundation
 ///     setError(wrapped.screenError)
 /// }
 /// ```
-public struct WrappedError: Error, Sendable, CustomStringConvertible {
+public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible {
     /// The original error that was caught.
     public let underlying: Error
 
@@ -149,7 +149,7 @@ public struct WrappedError: Error, Sendable, CustomStringConvertible {
 
 // MARK: - AppErrorConvertible
 
-extension WrappedError: AppErrorConvertible {
+nonisolated extension WrappedError: AppErrorConvertible {
     /// Converts this wrapped error to a screen error for UI display.
     public var screenError: ScreenError {
         ScreenError(
@@ -161,7 +161,7 @@ extension WrappedError: AppErrorConvertible {
 
 // MARK: - Equatable
 
-extension WrappedError: Equatable {
+nonisolated extension WrappedError: Equatable {
     public static func == (lhs: WrappedError, rhs: WrappedError) -> Bool {
         lhs.context == rhs.context &&
         lhs.code == rhs.code &&
@@ -171,7 +171,7 @@ extension WrappedError: Equatable {
 
 // MARK: - LocalizedError
 
-extension WrappedError: LocalizedError {
+nonisolated extension WrappedError: LocalizedError {
     public var errorDescription: String? {
         message
     }
@@ -187,7 +187,7 @@ extension WrappedError: LocalizedError {
 
 // MARK: - Convenience Extensions
 
-public extension Error {
+public nonisolated extension Error {
     /// Wraps this error with additional context.
     ///
     /// - Parameters:

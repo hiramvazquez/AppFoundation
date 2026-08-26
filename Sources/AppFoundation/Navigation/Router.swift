@@ -54,7 +54,7 @@ public protocol Router<Route>: AnyObject {
 // MARK: - PresentationStyle
 
 /// Defines how a route should be presented modally.
-public enum PresentationStyle: Equatable, Sendable {
+public nonisolated enum PresentationStyle: Equatable, Sendable {
     /// Present as a sheet (modal with partial overlay).
     case sheet
 

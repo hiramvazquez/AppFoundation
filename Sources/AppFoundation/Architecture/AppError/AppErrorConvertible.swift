@@ -51,7 +51,7 @@ import Foundation
 ///     }
 /// }
 /// ```
-public protocol AppErrorConvertible: Error {
+public nonisolated protocol AppErrorConvertible: Error {
     /// Converts this error to a user-facing `ScreenError`.
     ///
     /// Implement this to provide user-friendly error messaging for your domain errors.

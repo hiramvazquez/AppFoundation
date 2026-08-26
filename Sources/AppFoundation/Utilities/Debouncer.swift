@@ -1,7 +1,7 @@
 import Foundation
 
 /// Determines when the debounced operation should execute.
-public enum DebouncerEdge: Sendable {
+public nonisolated enum DebouncerEdge: Sendable {
     /// Execute after the delay period passes with no new calls (default).
     /// The LAST call within the period will be executed.
     ///

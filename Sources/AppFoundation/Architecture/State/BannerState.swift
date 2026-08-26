@@ -34,7 +34,7 @@ import Foundation
 /// )
 /// showBanner(banner)
 /// ```
-public struct BannerState: Equatable, Sendable, Identifiable {
+public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     /// Unique identifier for this banner instance.
     public let id: UUID
 

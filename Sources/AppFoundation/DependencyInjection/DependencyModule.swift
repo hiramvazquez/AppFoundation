@@ -3,11 +3,15 @@ import Foundation
 /// Modules that register dependencies with a container.
 ///
 /// Implement `DependencyModule` to create reusable bundles of related dependencies.
-/// Each module encapsulates the registration logic for a specific feature or layer.
+/// Each module encapsulates the registration logic for a specific feature or layer;
+/// `Container.register(modules:)` assembles them in order.
+///
+/// Modules are `@MainActor`: registration happens at app startup on the main actor,
+/// which is also what makes factories for main-actor types valid (see the concurrency
+/// contract in `Container`).
 ///
 /// ## Example
 /// ```swift
-/// @MainActor
 /// final class NetworkModule: DependencyModule {
 ///     func register(in container: Container) {
 ///         container.register(APIClient(), lifecycle: .singleton)
@@ -15,13 +19,8 @@ import Foundation
 ///     }
 /// }
 ///
-/// @MainActor
-/// final class RepositoryModule: DependencyModule {
-///     func register(in container: Container) {
-///         let client: APIClient = container.resolve()
-///         container.register(UserRepository(client: client), lifecycle: .singleton)
-///     }
-/// }
+/// // At startup:
+/// Container.shared.register(modules: [NetworkModule(), RepositoryModule()])
 /// ```
 @MainActor
 public protocol DependencyModule {
@@ -31,48 +30,16 @@ public protocol DependencyModule {
     func register(in container: Container)
 }
 
-// MARK: - Backward Compatibility Extension
-
-public extension DependencyModule {
-    /// Registers dependencies into the shared container.
+public extension Container {
+    /// Registers the provided modules into this container, in order.
     ///
-    /// This convenience method uses `Container.shared` by default.
-    /// Prefer `register(in container:)` for better testability.
-    func register() {
-        register(in: .shared)
-    }
-}
-
-// MARK: - Dependency Assembler
-
-/// Assembles and registers groups of dependency modules.
-///
-/// `DependencyAssembler` orchestrates the registration of multiple modules,
-/// allowing you to modularize your dependency configuration across features.
-///
-/// ## Example
-/// ```swift
-/// func setupDependencies() {
-///     DependencyAssembler.shared.register([
-///         NetworkModule(),
-///         RepositoryModule(),
-///         ViewModelModule(),
-///     ])
-/// }
-/// ```
-@MainActor
-public final class DependencyAssembler {
-    /// The shared global assembler instance.
-    public static let shared = DependencyAssembler()
-
-    private init() {}
-
-    /// Registers the provided modules with a container.
+    /// This replaces the old `DependencyAssembler` singleton: an assembler with no state
+    /// was ceremony around a loop, and the container is already the single registration
+    /// entry point.
     ///
-    /// - Parameters:
-    ///   - modules: Array of modules to register.
-    ///   - container: The container to register into. Defaults to `Container.shared`.
-    public func register(_ modules: [DependencyModule], in container: Container = .shared) {
-        modules.forEach { $0.register(in: container) }
+    /// - Parameter modules: Modules to register, applied in array order.
+    @MainActor
+    func register(modules: [DependencyModule]) {
+        modules.forEach { $0.register(in: self) }
     }
 }

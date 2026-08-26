@@ -1,589 +1,233 @@
-import XCTest
-import Combine
+import Testing
+import Foundation
 @testable import AppFoundation
 
-@MainActor
-final class BaseViewModelTests: XCTestCase {
-    var viewModel: BaseViewModel!
-    var cancellables: Set<AnyCancellable>!
+@Suite("BaseViewModel")
+struct BaseViewModelTests {
+    let viewModel = BaseViewModel()
 
-    override func setUp() {
-        super.setUp()
-        viewModel = BaseViewModel()
-        cancellables = []
+    // MARK: - Initial State
+
+    @Test func initialState() {
+        #expect(viewModel.phase == .idle)
+        #expect(viewModel.loadingStyle == .fullScreen)
+        #expect(viewModel.activity == ActivityState.none)
+        #expect(viewModel.alert == nil)
+        #expect(viewModel.banner == nil)
     }
 
-    override func tearDown() {
-        viewModel = nil
-        cancellables = nil
-        super.tearDown()
+    // MARK: - Phase Transitions
+
+    @Test(arguments: [LoadingStyle.fullScreen, .inline, .overlay])
+    func setLoadingAppliesStyle(style: LoadingStyle) {
+        viewModel.setLoading(style)
+        #expect(viewModel.phase == .loading)
+        #expect(viewModel.loadingStyle == style)
     }
 
-    // MARK: - Initial State Tests
-
-    func testInitialPhaseIsIdle() {
-        XCTAssertEqual(viewModel.phase, .idle)
-    }
-
-    func testInitialLoadingStyleIsFullScreen() {
-        XCTAssertEqual(viewModel.loadingStyle, .fullScreen)
-    }
-
-    func testInitialAlertIsNil() {
-        XCTAssertNil(viewModel.alert)
-    }
-
-    func testInitialBannerIsNil() {
-        XCTAssertNil(viewModel.banner)
-    }
-
-    // MARK: - Phase Transition Tests
-
-    func testSetLoading_DefaultStyle() {
-        // When
+    @Test func setLoadingDefaultsToFullScreen() {
         viewModel.setLoading()
-
-        // Then
-        XCTAssertEqual(viewModel.phase, .loading)
-        XCTAssertEqual(viewModel.loadingStyle, .fullScreen)
+        #expect(viewModel.phase == .loading)
+        #expect(viewModel.loadingStyle == .fullScreen)
     }
 
-    func testSetLoading_InlineStyle() {
-        // When
-        viewModel.setLoading(.inline)
-
-        // Then
-        XCTAssertEqual(viewModel.phase, .loading)
-        XCTAssertEqual(viewModel.loadingStyle, .inline)
-    }
-
-    func testSetLoading_OverlayStyle() {
-        // When
-        viewModel.setLoading(.overlay)
-
-        // Then
-        XCTAssertEqual(viewModel.phase, .loading)
-        XCTAssertEqual(viewModel.loadingStyle, .overlay)
-    }
-
-    func testSetContent() {
-        // When
+    @Test func setContent() {
         viewModel.setContent()
-
-        // Then
-        XCTAssertEqual(viewModel.phase, .content)
+        #expect(viewModel.phase == .content)
     }
 
-    func testSetEmpty() {
-        // When
+    @Test func setEmpty() {
         viewModel.setEmpty()
-
-        // Then
-        XCTAssertEqual(viewModel.phase, .empty)
+        #expect(viewModel.phase == .empty)
     }
 
-    func testSetError_WithScreenError() {
-        // Given
+    @Test func setErrorWithScreenError() {
         let error = ScreenError(title: "Test Error", message: "Something went wrong")
-
-        // When
         viewModel.setError(error)
-
-        // Then
-        XCTAssertTrue(viewModel.hasError)
-        XCTAssertEqual(viewModel.currentError, error)
+        #expect(viewModel.hasError)
+        #expect(viewModel.currentError == error)
     }
 
-    func testSetError_WithTitleAndMessage() {
-        // When
+    @Test func setErrorWithTitleAndMessage() {
         viewModel.setError(title: "Network Error", message: "Failed to connect")
-
-        // Then
-        XCTAssertTrue(viewModel.hasError)
-        XCTAssertEqual(viewModel.currentError?.title, "Network Error")
-        XCTAssertEqual(viewModel.currentError?.message, "Failed to connect")
+        #expect(viewModel.currentError?.title == "Network Error")
+        #expect(viewModel.currentError?.message == "Failed to connect")
     }
 
-    func testSetError_WithRetryAction() {
-        // Given
+    @Test func setErrorWithRetryAction() {
         var retryWasCalled = false
-        let retryAction: Action = { retryWasCalled = true }
-
-        // When
-        viewModel.setError(title: "Error", message: "Retry me", retry: retryAction)
-
-        // Then
-        XCTAssertTrue(viewModel.hasError)
+        viewModel.setError(title: "Error", message: "Retry me", retry: { retryWasCalled = true })
         viewModel.currentError?.retry?()
-        XCTAssertTrue(retryWasCalled)
+        #expect(retryWasCalled)
     }
 
-    func testSetIdle() {
-        // Given
+    @Test func setIdleResetsPhase() {
         viewModel.setContent()
-        XCTAssertEqual(viewModel.phase, .content)
-
-        // When
         viewModel.setIdle()
-
-        // Then
-        XCTAssertEqual(viewModel.phase, .idle)
+        #expect(viewModel.phase == .idle)
     }
 
-    // MARK: - Alert Tests
-
-    func testShowAlert() {
-        // Given
-        let alert = AlertState.info(title: "Info", message: "This is info")
-
-        // When
-        viewModel.showAlert(alert)
-
-        // Then
-        XCTAssertNotNil(viewModel.alert)
-        XCTAssertEqual(viewModel.alert?.title, "Info")
+    @Test func multipleStateTransitions() {
+        viewModel.setLoading()
+        #expect(viewModel.phase == .loading)
+        viewModel.setContent()
+        #expect(viewModel.phase == .content)
+        viewModel.setEmpty()
+        #expect(viewModel.phase == .empty)
+        viewModel.setError(ScreenError(title: "E", message: "M"))
+        #expect(viewModel.hasError)
+        viewModel.setIdle()
+        #expect(viewModel.phase == .idle)
     }
 
-    func testDismissAlert() {
-        // Given
-        let alert = AlertState.info(title: "Info", message: "This is info")
-        viewModel.showAlert(alert)
-        XCTAssertNotNil(viewModel.alert)
+    // MARK: - Secondary Activity
 
-        // When
+    @Test func startAndStopActivity() {
+        viewModel.startActivity(.overlay)
+        #expect(viewModel.activity == .loading(.overlay))
+        #expect(viewModel.isPerformingActivity)
+
+        viewModel.stopActivity()
+        #expect(viewModel.activity == ActivityState.none)
+        #expect(!viewModel.isPerformingActivity)
+    }
+
+    // MARK: - Alerts
+
+    @Test func showAndDismissAlert() {
+        viewModel.showAlert(.info(title: "Info", message: "This is info"))
+        #expect(viewModel.alert?.title == "Info")
+
         viewModel.dismissAlert()
-
-        // Then
-        XCTAssertNil(viewModel.alert)
+        #expect(viewModel.alert == nil)
     }
 
-    func testShowAlertConfirmation() {
-        // Given
+    @Test func confirmationAlertRunsConfirmAction() {
         var confirmWasCalled = false
-        let alert = AlertState.confirmation(
-            title: "Confirm?",
-            message: "Are you sure?",
-            confirm: "Yes",
-            cancel: "No",
+        viewModel.showAlert(.confirmation(
+            title: "Confirm?", message: "Are you sure?",
+            confirm: "Yes", cancel: "No",
             onConfirm: { confirmWasCalled = true }
-        )
-
-        // When
-        viewModel.showAlert(alert)
+        ))
         viewModel.alert?.primaryButton.action()
-
-        // Then
-        XCTAssertTrue(confirmWasCalled)
+        #expect(confirmWasCalled)
     }
 
-    func testShowAlertDestructive() {
-        // Given
-        var deleteWasCalled = false
-        let alert = AlertState.destructive(
-            title: "Delete?",
-            message: "Cannot undo",
-            confirm: "Delete",
-            cancel: "Cancel",
-            onConfirm: { deleteWasCalled = true }
-        )
-
-        // When
-        viewModel.showAlert(alert)
-
-        // Then
-        XCTAssertEqual(viewModel.alert?.primaryButton.role, .destructive)
+    @Test func destructiveAlertHasDestructiveRole() {
+        viewModel.showAlert(.destructive(
+            title: "Delete?", message: "Cannot undo",
+            confirm: "Delete", cancel: "Cancel",
+            onConfirm: {}
+        ))
+        #expect(viewModel.alert?.primaryButton.role == .destructive)
     }
 
-    // MARK: - Banner Tests
-
-    func testShowBanner() {
-        // Given
-        let banner = BannerState.success("Saved!")
-
-        // When
-        viewModel.showBanner(banner)
-
-        // Then
-        XCTAssertNotNil(viewModel.banner)
-        XCTAssertEqual(viewModel.banner?.message, "Saved!")
-        XCTAssertEqual(viewModel.banner?.style, .success)
+    @Test func replaceAlertWithNewAlert() {
+        viewModel.showAlert(.info(title: "Alert 1", message: "Message 1"))
+        let firstID = viewModel.alert?.id
+        viewModel.showAlert(.info(title: "Alert 2", message: "Message 2"))
+        #expect(viewModel.alert?.id != firstID)
+        #expect(viewModel.alert?.title == "Alert 2")
     }
 
-    func testShowBannerError() {
-        // When
-        viewModel.showBanner(BannerState.error("Failed!"))
+    // MARK: - Banners
 
-        // Then
-        XCTAssertEqual(viewModel.banner?.style, .error)
+    @Test func showBannerStyles() {
+        viewModel.showBanner(.success("Saved!"))
+        #expect(viewModel.banner?.message == "Saved!")
+        #expect(viewModel.banner?.style == .success)
+
+        viewModel.showBanner(.error("Failed!"))
+        #expect(viewModel.banner?.style == .error)
+
+        viewModel.showBanner(.info("Info"))
+        #expect(viewModel.banner?.style == .info)
+
+        viewModel.showBanner(.warning("Warning"))
+        #expect(viewModel.banner?.style == .warning)
     }
 
-    func testShowBannerInfo() {
-        // When
-        viewModel.showBanner(BannerState.info("Info"))
-
-        // Then
-        XCTAssertEqual(viewModel.banner?.style, .info)
-    }
-
-    func testShowBannerWarning() {
-        // When
-        viewModel.showBanner(BannerState.warning("Warning"))
-
-        // Then
-        XCTAssertEqual(viewModel.banner?.style, .warning)
-    }
-
-    func testDismissBanner() {
-        // Given
-        viewModel.showBanner(BannerState.success("Saved!"))
-        XCTAssertNotNil(viewModel.banner)
-
-        // When
+    @Test func dismissBanner() {
+        viewModel.showBanner(.success("Saved!"))
         viewModel.dismissBanner()
-
-        // Then
-        XCTAssertNil(viewModel.banner)
+        #expect(viewModel.banner == nil)
     }
 
-    // MARK: - Load Helper Tests
+    @Test func replaceBannerWithNewBanner() {
+        viewModel.showBanner(.success("Banner 1"))
+        let firstID = viewModel.banner?.id
+        viewModel.showBanner(.error("Banner 2"))
+        #expect(viewModel.banner?.id != firstID)
+        #expect(viewModel.banner?.message == "Banner 2")
+    }
 
-    func testLoadSuccess() {
-        // Given
-        let expectation = XCTestExpectation(description: "Load completes")
+    @Test func alertAndBannerCanBothDisplay() {
+        viewModel.showAlert(.info(title: "Alert", message: "Alert msg"))
+        viewModel.showBanner(.success("Banner msg"))
+        #expect(viewModel.alert != nil)
+        #expect(viewModel.banner != nil)
+    }
+
+    // MARK: - performLoad
+
+    @Test func loadSuccessSetsContent() async throws {
         var workWasExecuted = false
-
-        // When
-        viewModel.load {
+        viewModel.performLoad {
             workWasExecuted = true
         }
-
-        // Then - wait for async work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertTrue(workWasExecuted)
-            XCTAssertEqual(self.viewModel.phase, .content)
-            expectation.fulfill()
-        }
-
-        wait(for: [expectation], timeout: 1.0)
+        try await waitUntil { viewModel.phase == .content }
+        #expect(workWasExecuted)
+        #expect(viewModel.phase == .content)
     }
 
-    func testLoadFailure() {
-        // Given
-        let expectation = XCTestExpectation(description: "Load fails")
-
-        // When
-        viewModel.load {
-            throw NSError(domain: "Test", code: -1, userInfo: [NSLocalizedDescriptionKey: "Test error"])
+    @Test func loadFailureSetsErrorWithDefaultTitle() async throws {
+        viewModel.performLoad {
+            throw TestError("boom")
         }
-
-        // Then
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertTrue(self.viewModel.hasError)
-            XCTAssertEqual(self.viewModel.currentError?.title, "Error")
-            expectation.fulfill()
-        }
-
-        wait(for: [expectation], timeout: 1.0)
+        try await waitUntil { viewModel.hasError }
+        #expect(viewModel.currentError?.title == "Error")
     }
 
-    func testLoadWithCustomErrorTitle() {
-        // Given
-        let expectation = XCTestExpectation(description: "Load with custom title")
-
-        // When
-        viewModel.load(errorTitle: "Network Error") {
-            throw NSError(domain: "Test", code: -1)
+    @Test func loadFailureUsesCustomErrorTitle() async throws {
+        viewModel.performLoad(errorTitle: "Network Error") {
+            throw TestError()
         }
-
-        // Then
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.viewModel.currentError?.title, "Network Error")
-            expectation.fulfill()
-        }
-
-        wait(for: [expectation], timeout: 1.0)
+        try await waitUntil { viewModel.hasError }
+        #expect(viewModel.currentError?.title == "Network Error")
     }
 
-    func testLoadWithLoadingStyle() {
-        // Given
-        let expectation = XCTestExpectation(description: "Load with custom style")
-
-        // When
-        viewModel.load(style: .inline) {
-            // empty work
-        }
-
-        // Then
-        XCTAssertEqual(viewModel.loadingStyle, .inline)
-        XCTAssertEqual(viewModel.phase, .loading)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertEqual(self.viewModel.phase, .content)
-            expectation.fulfill()
-        }
-
-        wait(for: [expectation], timeout: 1.0)
+    @Test func loadAppliesLoadingStyleImmediately() async throws {
+        viewModel.performLoad(style: .inline) {}
+        #expect(viewModel.loadingStyle == .inline)
+        #expect(viewModel.phase == .loading)
+        try await waitUntil { viewModel.phase == .content }
     }
 
-    func testLoadErrorHasRetryAction() {
-        // Given
-        let expectation = XCTestExpectation(description: "Error has retry")
-
-        // When
-        viewModel.load {
-            throw NSError(domain: "Test", code: -1)
+    @Test func loadErrorProvidesRetryAction() async throws {
+        viewModel.performLoad {
+            throw TestError()
         }
-
-        // Then
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            XCTAssertNotNil(self.viewModel.currentError?.retry)
-            expectation.fulfill()
-        }
-
-        wait(for: [expectation], timeout: 1.0)
+        try await waitUntil { viewModel.hasError }
+        #expect(viewModel.currentError?.retry != nil)
     }
 
-    // MARK: - Computed Property Tests
+    // MARK: - Computed Helpers
 
-    func testIsLoading_True() {
-        // When
+    @Test func computedHelpersReflectPhase() {
+        #expect(viewModel.isIdle)
+
         viewModel.setLoading()
-
-        // Then
-        XCTAssertTrue(viewModel.isLoading)
-    }
-
-    func testIsLoading_False() {
-        // When
-        viewModel.setContent()
-
-        // Then
-        XCTAssertFalse(viewModel.isLoading)
-    }
-
-    func testIsContent_True() {
-        // When
-        viewModel.setContent()
-
-        // Then
-        XCTAssertTrue(viewModel.isContent)
-    }
-
-    func testIsContent_False() {
-        // When
-        viewModel.setLoading()
-
-        // Then
-        XCTAssertFalse(viewModel.isContent)
-    }
-
-    func testIsEmpty_True() {
-        // When
-        viewModel.setEmpty()
-
-        // Then
-        XCTAssertTrue(viewModel.isEmpty)
-    }
-
-    func testIsEmpty_False() {
-        // When
-        viewModel.setLoading()
-
-        // Then
-        XCTAssertFalse(viewModel.isEmpty)
-    }
-
-    func testHasError_True() {
-        // When
-        viewModel.setError(title: "Error", message: "Test")
-
-        // Then
-        XCTAssertTrue(viewModel.hasError)
-    }
-
-    func testHasError_False() {
-        // When
-        viewModel.setLoading()
-
-        // Then
-        XCTAssertFalse(viewModel.hasError)
-    }
-
-    func testIsIdle_True() {
-        // When (initial state is idle)
-
-        // Then
-        XCTAssertTrue(viewModel.isIdle)
-    }
-
-    func testIsIdle_False() {
-        // When
-        viewModel.setLoading()
-
-        // Then
-        XCTAssertFalse(viewModel.isIdle)
-    }
-
-    func testCurrentError_WhenError() {
-        // Given
-        let error = ScreenError(title: "Test", message: "Message")
-
-        // When
-        viewModel.setError(error)
-
-        // Then
-        XCTAssertEqual(viewModel.currentError, error)
-    }
-
-    func testCurrentError_WhenNotError() {
-        // When
-        viewModel.setContent()
-
-        // Then
-        XCTAssertNil(viewModel.currentError)
-    }
-
-    // MARK: - Multiple State Transitions Tests
-
-    func testMultipleStateTransitions() {
-        // Given
-        XCTAssertEqual(viewModel.phase, .idle)
-
-        // When
-        viewModel.setLoading()
-        XCTAssertEqual(viewModel.phase, .loading)
+        #expect(viewModel.isLoading && !viewModel.isContent && !viewModel.isEmpty && !viewModel.hasError && !viewModel.isIdle)
 
         viewModel.setContent()
-        XCTAssertEqual(viewModel.phase, .content)
+        #expect(viewModel.isContent && !viewModel.isLoading)
+        #expect(viewModel.currentError == nil)
 
         viewModel.setEmpty()
-        XCTAssertEqual(viewModel.phase, .empty)
+        #expect(viewModel.isEmpty)
 
-        let error = ScreenError(title: "E", message: "M")
-        viewModel.setError(error)
-        XCTAssertTrue(viewModel.hasError)
-
-        viewModel.setIdle()
-        XCTAssertEqual(viewModel.phase, .idle)
-    }
-
-    func testAlertAndBannerCanBothDisplay() {
-        // Given
-        let alert = AlertState.info(title: "Alert", message: "Alert msg")
-        let banner = BannerState.success("Banner msg")
-
-        // When
-        viewModel.showAlert(alert)
-        viewModel.showBanner(banner)
-
-        // Then
-        XCTAssertNotNil(viewModel.alert)
-        XCTAssertNotNil(viewModel.banner)
-    }
-
-    func testReplaceAlertWithNewAlert() {
-        // Given
-        let alert1 = AlertState.info(title: "Alert 1", message: "Message 1")
-        let alert2 = AlertState.info(title: "Alert 2", message: "Message 2")
-
-        // When
-        viewModel.showAlert(alert1)
-        let firstID = viewModel.alert?.id
-        viewModel.showAlert(alert2)
-        let secondID = viewModel.alert?.id
-
-        // Then
-        XCTAssertNotEqual(firstID, secondID)
-        XCTAssertEqual(viewModel.alert?.title, "Alert 2")
-    }
-
-    func testReplaceBannerWithNewBanner() {
-        // Given
-        let banner1 = BannerState.success("Banner 1")
-        let banner2 = BannerState.error("Banner 2")
-
-        // When
-        viewModel.showBanner(banner1)
-        let firstID = viewModel.banner?.id
-        viewModel.showBanner(banner2)
-        let secondID = viewModel.banner?.id
-
-        // Then
-        XCTAssertNotEqual(firstID, secondID)
-        XCTAssertEqual(viewModel.banner?.message, "Banner 2")
-    }
-
-    // MARK: - Published Properties Tests
-
-    func testPhasePublishesChanges() {
-        // Given
-        let expectation = XCTestExpectation(description: "Phase publishes")
-        var phaseValues: [ViewPhase] = []
-
-        viewModel.$phase
-            .dropFirst() // Skip initial value
-            .sink { phase in
-                phaseValues.append(phase)
-                if phaseValues.count == 1 {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        // When
-        viewModel.setLoading()
-
-        // Then
-        wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(phaseValues.count, 1)
-        XCTAssertEqual(phaseValues[0], .loading)
-    }
-
-    func testAlertPublishesChanges() {
-        // Given
-        let expectation = XCTestExpectation(description: "Alert publishes")
-        var alertValues: [AlertState?] = []
-
-        viewModel.$alert
-            .dropFirst()
-            .sink { alert in
-                alertValues.append(alert)
-                if alertValues.count == 1 {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        // When
-        let alert = AlertState.info(title: "Test", message: "Test")
-        viewModel.showAlert(alert)
-
-        // Then
-        wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(alertValues.count, 1)
-    }
-
-    func testBannerPublishesChanges() {
-        // Given
-        let expectation = XCTestExpectation(description: "Banner publishes")
-        var bannerValues: [BannerState?] = []
-
-        viewModel.$banner
-            .dropFirst()
-            .sink { banner in
-                bannerValues.append(banner)
-                if bannerValues.count == 1 {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        // When
-        let banner = BannerState.success("Test")
-        viewModel.showBanner(banner)
-
-        // Then
-        wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(bannerValues.count, 1)
+        viewModel.setError(ScreenError(title: "T", message: "M"))
+        #expect(viewModel.hasError)
+        #expect(viewModel.currentError == ScreenError(title: "T", message: "M"))
     }
 }

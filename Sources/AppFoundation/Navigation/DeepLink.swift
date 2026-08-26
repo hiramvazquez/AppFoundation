@@ -19,7 +19,7 @@ import Foundation
 ///     case game(gameId: String)
 /// }
 /// ```
-public protocol DeepLinkType {
+public nonisolated protocol DeepLinkType {
     /// Parse a URL into a deep link case
     static func parse(_ url: URL) -> Self?
 }

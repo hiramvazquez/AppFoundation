@@ -324,7 +324,7 @@ struct NavigationSearchBar: View {
                     .onSubmit {
                         configuration.onSubmit?()
                     }
-                    .onChange(of: textFieldFocused) { newValue in
+                    .onChange(of: textFieldFocused) { _, newValue in
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isFocused = newValue
                         }

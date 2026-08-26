@@ -22,7 +22,7 @@ import UIKit
 ///     ? "https://api.myapp.com"
 ///     : "https://staging-api.myapp.com"
 /// ```
-public struct AppEnvironment {
+public nonisolated struct AppEnvironment {
 
     // MARK: - Environment Detection
 

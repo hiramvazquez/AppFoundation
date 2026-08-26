@@ -12,7 +12,7 @@ import Foundation
 /// defer { stopActivity() }
 /// try await repository.refresh()
 /// ```
-public enum ActivityState: Equatable, Sendable {
+public nonisolated enum ActivityState: Equatable, Sendable {
     /// No secondary work is running.
     case none
 
@@ -21,7 +21,7 @@ public enum ActivityState: Equatable, Sendable {
 }
 
 /// Defines how secondary activity should be shown while content remains visible.
-public enum ActivityStyle: Equatable, Sendable {
+public nonisolated enum ActivityStyle: Equatable, Sendable {
     /// Small inline indicator inside the screen layout.
     case inline
 

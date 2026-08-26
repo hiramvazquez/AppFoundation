@@ -37,7 +37,7 @@ import Foundation
 ///     }
 /// }
 /// ```
-public enum ViewPhase: Equatable, Sendable {
+public nonisolated enum ViewPhase: Equatable, Sendable {
     /// Initial state; no loading in progress.
     case idle
 
@@ -74,7 +74,7 @@ public enum ViewPhase: Equatable, Sendable {
 ///     retry: { [weak self] in Task { await self?.loadData() } }
 /// )
 /// ```
-public struct ScreenError: Equatable, Sendable {
+public nonisolated struct ScreenError: Equatable, Sendable {
     /// The title displayed at the top of the error screen.
     public let title: String
 
@@ -131,7 +131,7 @@ public struct ScreenError: Equatable, Sendable {
 ///     // ...
 /// }
 /// ```
-public enum LoadingStyle: Equatable, Sendable {
+public nonisolated enum LoadingStyle: Equatable, Sendable {
     /// Loading overlay covers the entire screen and blocks interaction.
     case fullScreen
 

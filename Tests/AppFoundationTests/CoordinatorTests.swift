@@ -1,10 +1,8 @@
-import XCTest
+import Testing
 @testable import AppFoundation
 
-@MainActor
-final class CoordinatorTests: XCTestCase {
-    // MARK: - Test Routes
-
+@Suite("Coordinator")
+struct CoordinatorTests {
     enum TestRoute: Hashable {
         case home
         case profile
@@ -12,543 +10,256 @@ final class CoordinatorTests: XCTestCase {
         case detail(id: Int)
     }
 
-    // MARK: - Setup & Teardown
+    let coordinator = Coordinator<TestRoute>(root: .home)
 
-    var coordinator: Coordinator<TestRoute>!
+    // MARK: - Initialization
 
-    override func setUp() {
-        super.setUp()
-        coordinator = Coordinator(root: .home)
+    @Test func initWithRoot() {
+        #expect(coordinator.mainStack.root == .home)
+        #expect(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.isAtRoot)
     }
 
-    override func tearDown() {
-        coordinator = nil
-        super.tearDown()
-    }
+    // MARK: - Push
 
-    // MARK: - Initialization Tests
-
-    func testInitWithRoot() {
-        // Given/When
-        let coordinator = Coordinator<TestRoute>(root: .home)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.root, .home)
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
-        XCTAssertTrue(coordinator.isAtRoot)
-    }
-
-    // MARK: - Push Tests
-
-    func testPush_OnMainLayer() {
-        // When
+    @Test func pushOnMainLayer() {
         coordinator.push(.profile)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile])
-        XCTAssertFalse(coordinator.isAtRoot)
+        #expect(coordinator.mainStack.path == [.profile])
+        #expect(!coordinator.isAtRoot)
     }
 
-    func testPush_Multiple_OnMainLayer() {
-        // When
+    @Test func pushMultipleOnMainLayer() {
         coordinator.push(.profile)
         coordinator.push(.settings)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile, .settings])
+        #expect(coordinator.mainStack.path == [.profile, .settings])
     }
 
-    func testPush_WithDetail() {
-        // When
+    @Test func pushRouteWithPayload() {
         coordinator.push(.detail(id: 123))
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.detail(id: 123)])
+        #expect(coordinator.mainStack.path == [.detail(id: 123)])
     }
 
-    func testPush_OnSheet() {
-        // Given
+    @Test func pushGoesToActiveSheetLayer() {
         coordinator.present(.settings, as: .sheet)
-
-        // When
         coordinator.push(.profile)
-
-        // Then
-        XCTAssertEqual(coordinator.sheetStack?.path, [.profile])
-        XCTAssertEqual(coordinator.mainStack.path, [])
+        #expect(coordinator.sheetStack?.path == [.profile])
+        #expect(coordinator.mainStack.path.isEmpty)
     }
 
-    func testPush_OnFullScreenCover() {
-        // Given
+    @Test func pushGoesToActiveFullScreenLayer() {
         coordinator.present(.settings, as: .fullScreenCover)
-
-        // When
         coordinator.push(.profile)
-
-        // Then
-        XCTAssertEqual(coordinator.fullScreenStack?.path, [.profile])
-        XCTAssertEqual(coordinator.mainStack.path, [])
+        #expect(coordinator.fullScreenStack?.path == [.profile])
+        #expect(coordinator.mainStack.path.isEmpty)
     }
 
-    // MARK: - Pop Tests
+    // MARK: - Pop
 
-    func testPop_FromMainStack() {
-        // Given
+    @Test func popFromMainStack() {
         coordinator.push(.profile)
         coordinator.push(.settings)
-
-        // When
         coordinator.pop()
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile])
+        #expect(coordinator.mainStack.path == [.profile])
     }
 
-    func testPop_EmptyStack_DoesNothing() {
-        // When
+    @Test func popOnEmptyStackDoesNothing() {
         coordinator.pop()
-
-        // Then
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
-        XCTAssertEqual(coordinator.mainStack.root, .home)
+        #expect(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.mainStack.root == .home)
     }
 
-    func testPop_FromSheet() {
-        // Given
+    @Test func popFromSheet() {
         coordinator.present(.settings, as: .sheet)
         coordinator.push(.profile)
-
-        // When
         coordinator.pop()
-
-        // Then
-        XCTAssertTrue(coordinator.sheetStack?.path.isEmpty ?? false)
+        #expect(coordinator.sheetStack?.path.isEmpty == true)
     }
 
-    // MARK: - PopToRoot Tests
+    // MARK: - PopToRoot
 
-    func testPopToRoot_ClearsMainStack() {
-        // Given
+    @Test func popToRootClearsMainStack() {
         coordinator.push(.profile)
         coordinator.push(.settings)
-
-        // When
         coordinator.popToRoot()
-
-        // Then
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
-        XCTAssertEqual(coordinator.mainStack.root, .home)
-        XCTAssertTrue(coordinator.isAtRoot)
+        #expect(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.isAtRoot)
     }
 
-    func testPopToRoot_AlreadyAtRoot() {
-        // When
-        coordinator.popToRoot()
-
-        // Then
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
-        XCTAssertTrue(coordinator.isAtRoot)
-    }
-
-    func testPopToRoot_OnSheet() {
-        // Given
+    @Test func popToRootOnSheet() {
         coordinator.present(.settings, as: .sheet)
         coordinator.push(.profile)
-
-        // When
         coordinator.popToRoot()
-
-        // Then
-        XCTAssertTrue(coordinator.sheetStack?.path.isEmpty ?? false)
+        #expect(coordinator.sheetStack?.path.isEmpty == true)
     }
 
-    // MARK: - PopTo Tests
+    // MARK: - PopTo
 
-    func testPopTo_ExistingRoute() {
-        // Given
+    @Test func popToExistingRoute() {
         coordinator.push(.profile)
         coordinator.push(.settings)
         coordinator.push(.detail(id: 1))
-
-        // When
         coordinator.popTo(.profile)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile])
+        #expect(coordinator.mainStack.path == [.profile])
     }
 
-    func testPopTo_NonExistingRoute_DoesNothing() {
-        // Given
+    @Test func popToNonExistingRouteDoesNothing() {
         coordinator.push(.profile)
-
-        // When
         coordinator.popTo(.settings)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile])
+        #expect(coordinator.mainStack.path == [.profile])
     }
 
-    func testPopTo_Root() {
-        // Given
+    @Test func popToRootRoute() {
         coordinator.push(.profile)
         coordinator.push(.settings)
-
-        // When
         coordinator.popTo(.home)
-
-        // Then
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.mainStack.path.isEmpty)
     }
 
-    // MARK: - Present Sheet Tests
+    // MARK: - Present / Dismiss
 
-    func testPresentSheet() {
-        // When
+    @Test func presentSheet() {
         coordinator.present(.settings, as: .sheet)
-
-        // Then
-        XCTAssertTrue(coordinator.isSheetPresented)
-        XCTAssertEqual(coordinator.sheetStack?.root, .settings)
-        XCTAssertFalse(coordinator.isAtRoot)
+        #expect(coordinator.isSheetPresented)
+        #expect(coordinator.sheetStack?.root == .settings)
+        #expect(!coordinator.isAtRoot)
     }
 
-    func testPresentSheet_MultipleRoutes() {
-        // Given
+    @Test func presentSheetReplacesPreviousSheet() {
         coordinator.present(.settings, as: .sheet)
-
-        // When
-        coordinator.push(.profile)
-
-        // Then
-        XCTAssertEqual(coordinator.sheetStack?.path, [.profile])
-        XCTAssertEqual(coordinator.sheetStack?.root, .settings)
-    }
-
-    func testPresentSheet_ReplacePreviousSheet() {
-        // Given
-        coordinator.present(.settings, as: .sheet)
-
-        // When
         coordinator.present(.profile, as: .sheet)
-
-        // Then
-        XCTAssertTrue(coordinator.isSheetPresented)
-        XCTAssertEqual(coordinator.sheetStack?.root, .profile)
-        XCTAssertTrue(coordinator.sheetStack?.path.isEmpty ?? true)
+        #expect(coordinator.isSheetPresented)
+        #expect(coordinator.sheetStack?.root == .profile)
+        #expect(coordinator.sheetStack?.path.isEmpty == true)
     }
 
-    // MARK: - Present FullScreenCover Tests
-
-    func testPresentFullScreenCover() {
-        // When
+    @Test func presentFullScreenCover() {
         coordinator.present(.settings, as: .fullScreenCover)
-
-        // Then
-        XCTAssertTrue(coordinator.isFullScreenPresented)
-        XCTAssertEqual(coordinator.fullScreenStack?.root, .settings)
-        XCTAssertFalse(coordinator.isAtRoot)
+        #expect(coordinator.isFullScreenPresented)
+        #expect(coordinator.fullScreenStack?.root == .settings)
+        #expect(!coordinator.isAtRoot)
     }
 
-    func testPresentFullScreenCover_DoesNotAffectSheet() {
-        // When
-        coordinator.present(.settings, as: .fullScreenCover)
-
-        // Then
-        XCTAssertTrue(coordinator.isFullScreenPresented)
-        XCTAssertFalse(coordinator.isSheetPresented)
-    }
-
-    // MARK: - Dismiss Tests
-
-    func testDismissSheet() {
-        // Given
+    @Test func dismissSheet() {
         coordinator.present(.settings, as: .sheet)
-        XCTAssertTrue(coordinator.isSheetPresented)
-
-        // When
         coordinator.dismiss()
-
-        // Then
-        XCTAssertFalse(coordinator.isSheetPresented)
-        XCTAssertNil(coordinator.sheetStack)
-        XCTAssertTrue(coordinator.isAtRoot)
+        #expect(!coordinator.isSheetPresented)
+        #expect(coordinator.sheetStack == nil)
+        #expect(coordinator.isAtRoot)
     }
 
-    func testDismissFullScreenCover() {
-        // Given
+    @Test func dismissFullScreenCover() {
         coordinator.present(.settings, as: .fullScreenCover)
-        XCTAssertTrue(coordinator.isFullScreenPresented)
-
-        // When
         coordinator.dismiss()
-
-        // Then
-        XCTAssertFalse(coordinator.isFullScreenPresented)
-        XCTAssertNil(coordinator.fullScreenStack)
-        XCTAssertTrue(coordinator.isAtRoot)
+        #expect(!coordinator.isFullScreenPresented)
+        #expect(coordinator.fullScreenStack == nil)
+        #expect(coordinator.isAtRoot)
     }
 
-    func testDismiss_DismissesOnlyTopMostModal() {
-        // Given
-        coordinator.present(.settings, as: .fullScreenCover)
-        coordinator.present(.profile, as: .sheet)
-
-        // When
+    @Test func dismissOnMainLayerDoesNothing() {
         coordinator.dismiss()
-
-        // Then
-        XCTAssertFalse(coordinator.isSheetPresented)
-        XCTAssertTrue(coordinator.isFullScreenPresented)
+        #expect(coordinator.isAtRoot)
     }
 
-    func testDismiss_OnMainLayer_DoesNothing() {
-        // When
-        coordinator.dismiss()
+    // MARK: - SetRoot / SetStack
 
-        // Then
-        XCTAssertTrue(coordinator.isAtRoot)
-    }
-
-    // MARK: - SetRoot Tests
-
-    func testSetRoot() {
-        // Given
+    @Test func setRootClearsStacks() {
         coordinator.push(.profile)
         coordinator.push(.settings)
-
-        // When
         coordinator.setRoot(.home)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.root, .home)
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
-        XCTAssertTrue(coordinator.isAtRoot)
+        #expect(coordinator.mainStack.root == .home)
+        #expect(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.isAtRoot)
     }
 
-    func testSetRoot_ChangesRoute() {
-        // When
+    @Test func setRootChangesRoute() {
         coordinator.setRoot(.profile)
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.root, .profile)
+        #expect(coordinator.mainStack.root == .profile)
     }
 
-    // MARK: - SetStack Tests
-
-    func testSetStack() {
-        // When
+    @Test func setStackReplacesPath() {
         coordinator.setStack([.profile, .settings, .detail(id: 1)])
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile, .settings, .detail(id: 1)])
+        #expect(coordinator.mainStack.path == [.profile, .settings, .detail(id: 1)])
     }
 
-    func testSetStack_EmptyArray() {
-        // Given
+    @Test func setStackWithEmptyArrayClearsPath() {
         coordinator.push(.profile)
-
-        // When
         coordinator.setStack([])
-
-        // Then
-        XCTAssertTrue(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.mainStack.path.isEmpty)
     }
 
-    // MARK: - ActiveLayer Tests
+    // MARK: - ActiveLayer
 
-    func testActiveLayer_Main() {
-        // When/Then
-        XCTAssertEqual(coordinator.activeLayer, .main)
-    }
+    @Test func activeLayerTracksPresentation() {
+        #expect(coordinator.activeLayer == .main)
 
-    func testActiveLayer_Sheet() {
-        // When
         coordinator.present(.settings, as: .sheet)
+        #expect(coordinator.activeLayer == .sheet)
 
-        // Then
-        XCTAssertEqual(coordinator.activeLayer, .sheet)
-    }
-
-    func testActiveLayer_FullScreenCover() {
-        // When
-        coordinator.present(.settings, as: .fullScreenCover)
-
-        // Then
-        XCTAssertEqual(coordinator.activeLayer, .fullScreenCover)
-    }
-
-    func testActiveLayer_FullScreenPriority() {
-        // Given
-        coordinator.present(.settings, as: .sheet)
-
-        // When
-        coordinator.present(.profile, as: .fullScreenCover)
-
-        // Then
-        XCTAssertEqual(coordinator.activeLayer, .fullScreenCover)
-    }
-
-    // MARK: - IsAtRoot Tests
-
-    func testIsAtRoot_Initial() {
-        // When/Then
-        XCTAssertTrue(coordinator.isAtRoot)
-    }
-
-    func testIsAtRoot_AfterPush() {
-        // When
-        coordinator.push(.profile)
-
-        // Then
-        XCTAssertFalse(coordinator.isAtRoot)
-    }
-
-    func testIsAtRoot_AfterPresent() {
-        // When
-        coordinator.present(.settings, as: .sheet)
-
-        // Then
-        XCTAssertFalse(coordinator.isAtRoot)
-    }
-
-    func testIsAtRoot_AfterDismiss() {
-        // Given
-        coordinator.present(.settings, as: .sheet)
-
-        // When
         coordinator.dismiss()
-
-        // Then
-        XCTAssertTrue(coordinator.isAtRoot)
+        coordinator.present(.settings, as: .fullScreenCover)
+        #expect(coordinator.activeLayer == .fullScreenCover)
     }
 
-    // MARK: - Router Protocol Conformance Tests
+    // MARK: - IsAtRoot
 
-    func testRouterProtocolConformance_CanBeUsedAsAnyRouter() {
-        // Given
-        let router: any Router<TestRoute> = coordinator
+    @Test func isAtRootLifecycle() {
+        #expect(coordinator.isAtRoot)
 
-        // When
-        router.push(.profile)
-        router.push(.settings)
+        coordinator.push(.profile)
+        #expect(!coordinator.isAtRoot)
 
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile, .settings])
+        coordinator.popToRoot()
+        #expect(coordinator.isAtRoot)
+
+        coordinator.present(.profile, as: .sheet)
+        #expect(!coordinator.isAtRoot)
+
+        coordinator.dismiss()
+        #expect(coordinator.isAtRoot)
     }
 
-    func testRouterProtocol_PushPopWorkCorrectly() {
-        // Given
-        let router: any Router<TestRoute> = coordinator
+    // MARK: - Router Protocol Conformance
 
-        // When
+    @Test func coordinatorWorksThroughRouterProtocol() {
+        let router: any Router<TestRoute> = coordinator
         router.push(.profile)
         router.push(.settings)
         router.pop()
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile])
+        #expect(coordinator.mainStack.path == [.profile])
     }
 
-    // MARK: - Complex Navigation Scenarios
+    // MARK: - Complex Scenarios
 
-    func testComplexScenario_MainToSheetWithNavigation() {
-        // Given/When
+    @Test func mainToSheetWithNavigation() {
         coordinator.push(.profile)
         coordinator.present(.settings, as: .sheet)
         coordinator.push(.detail(id: 1))
 
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile])
-        XCTAssertEqual(coordinator.sheetStack?.path, [.detail(id: 1)])
-        XCTAssertEqual(coordinator.activeLayer, .sheet)
+        #expect(coordinator.mainStack.path == [.profile])
+        #expect(coordinator.sheetStack?.path == [.detail(id: 1)])
+        #expect(coordinator.activeLayer == .sheet)
     }
 
-    func testComplexScenario_FullScreenThenSheet() {
-        // When
+    @Test func fullScreenThenSheet() {
         coordinator.present(.settings, as: .fullScreenCover)
         coordinator.push(.profile)
-
-        // Dismiss fullscreen and present sheet
         coordinator.dismiss()
         coordinator.present(.detail(id: 1), as: .sheet)
 
-        // Then
-        XCTAssertFalse(coordinator.isFullScreenPresented)
-        XCTAssertTrue(coordinator.isSheetPresented)
-        XCTAssertEqual(coordinator.activeLayer, .sheet)
+        #expect(!coordinator.isFullScreenPresented)
+        #expect(coordinator.isSheetPresented)
+        #expect(coordinator.activeLayer == .sheet)
     }
 
-    func testComplexScenario_DeepStackNavigation() {
-        // When
+    @Test func deepStackNavigationWithPopTo() {
         coordinator.push(.profile)
         coordinator.push(.settings)
         coordinator.push(.detail(id: 1))
         coordinator.push(.detail(id: 2))
         coordinator.push(.detail(id: 3))
+        #expect(coordinator.mainStack.path.count == 5)
 
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path.count, 5)
-
-        // When - pop to middle
         coordinator.popTo(.detail(id: 1))
-
-        // Then
-        XCTAssertEqual(coordinator.mainStack.path, [.profile, .settings, .detail(id: 1)])
-    }
-
-    func testComplexScenario_NavigationStackTracking() {
-        // When
-        coordinator.push(.profile)
-        XCTAssertFalse(coordinator.isAtRoot)
-
-        coordinator.push(.settings)
-        XCTAssertEqual(coordinator.mainStack.path.count, 2)
-
-        coordinator.popToRoot()
-        XCTAssertTrue(coordinator.isAtRoot)
-
-        // When - Navigate via modal
-        coordinator.present(.profile, as: .sheet)
-        XCTAssertFalse(coordinator.isAtRoot)
-
-        coordinator.dismiss()
-        XCTAssertTrue(coordinator.isAtRoot)
-    }
-
-    // MARK: - Published Properties Tests
-
-    func testIsAtRootPublishes() {
-        // Given
-        var isAtRootValues: [Bool] = []
-        let cancellable = coordinator.$isAtRoot.sink { value in
-            isAtRootValues.append(value)
-        }
-
-        // When
-        coordinator.push(.profile)
-
-        // Then
-        XCTAssertGreaterThanOrEqual(isAtRootValues.count, 2)
-        XCTAssertTrue(isAtRootValues[0]) // Initial
-        XCTAssertFalse(isAtRootValues[1]) // After push
-
-        cancellable.cancel()
-    }
-
-    func testSheetStatePublishes() {
-        // Given
-        var isSheetPresentedValues: [Bool] = []
-        let cancellable = coordinator.$isSheetPresented.sink { value in
-            isSheetPresentedValues.append(value)
-        }
-
-        // When
-        coordinator.present(.settings, as: .sheet)
-
-        // Then
-        XCTAssertGreaterThanOrEqual(isSheetPresentedValues.count, 2)
-        XCTAssertEqual(isSheetPresentedValues.last, true)
-
-        cancellable.cancel()
+        #expect(coordinator.mainStack.path == [.profile, .settings, .detail(id: 1)])
     }
 }

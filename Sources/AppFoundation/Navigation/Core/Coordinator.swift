@@ -4,7 +4,7 @@ import os
 // MARK: - NavigationLayer
 
 /// Represents which navigation layer is currently active.
-public enum NavigationLayer: Equatable, Sendable {
+public nonisolated enum NavigationLayer: Equatable, Sendable {
     /// The main navigation stack.
     case main
 
@@ -20,7 +20,7 @@ public enum NavigationLayer: Equatable, Sendable {
 /// Represents the state of a navigation stack.
 ///
 /// A stack consists of a root view and a path of additional routes that have been pushed.
-public struct StackState<Route: Hashable>: Equatable {
+public nonisolated struct StackState<Route: Hashable>: Equatable {
     /// The root route of this stack.
     public var root: Route
 

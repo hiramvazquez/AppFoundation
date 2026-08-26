@@ -45,7 +45,7 @@ import Foundation
 /// )
 /// showAlert(alert)
 /// ```
-public struct AlertState: Equatable, Sendable, Identifiable {
+public nonisolated struct AlertState: Equatable, Sendable, Identifiable {
     /// Unique identifier for this alert instance.
     ///
     /// Used to track and dismiss alerts in the UI.

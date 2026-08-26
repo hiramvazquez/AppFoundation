@@ -6,7 +6,7 @@ import os
 /// privacy redaction. Callers interpolate any value that could identify a user (route
 /// payloads, dynamic content) with `privacy: .private`; static operation names may be
 /// interpolated with `privacy: .public`.
-enum AppFoundationLogger {
+nonisolated enum AppFoundationLogger {
     private static let subsystem = "AppFoundation"
 
     /// Navigation events (push/pop/present) from `Coordinator`.
