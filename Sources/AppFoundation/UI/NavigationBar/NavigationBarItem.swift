@@ -14,25 +14,43 @@ import SwiftUI
 ///
 /// Use this to define buttons for the left and right sides of the navigation bar.
 ///
+/// ## Identity (A10)
+///
+/// Items have a STABLE identity derived from their role and content (`"back"`,
+/// `"system:bell"`, `"text:Save"`, ...) so `ForEach` diffing and animations survive
+/// re-renders — a `UUID()` per render made every item "new" every time. If one bar
+/// hosts two items that would derive the same id, disambiguate with the `id:` parameter.
+///
 /// ## Example
 /// ```swift
 /// NavigationBarItem.back { coordinator.pop() }
-/// NavigationBarItem.close { coordinator.dismissModal() }
+/// NavigationBarItem.close { coordinator.dismiss() }
 /// NavigationBarItem.icon("bell", badge: 3) { showNotifications() }
 /// NavigationBarItem.text("Save") { saveDocument() }
 /// ```
 public struct NavigationBarItem: Identifiable {
-    public let id = UUID()
+    /// Semantic role of the item (A11): behavior/styling keys off this, never off
+    /// matching an icon name like `"chevron.left"`.
+    public nonisolated enum Role: Equatable, Sendable {
+        /// Navigates back in the current stack (animated chevron treatment).
+        case back
+        /// Dismisses the current modal context.
+        case close
+        /// A regular action item.
+        case plain
+    }
+
+    /// Stable identity (A10) — derived from role/content, or explicitly provided.
+    public let id: String
+
+    /// The semantic role of this item.
+    public let role: Role
+
     let content: NavigationBarItemContent
     let action: Action
 
-    /// Returns true if this item is a back button (chevron.left icon).
-    public var isBackButton: Bool {
-        if case .systemIcon(let name, _) = content {
-            return name == "chevron.left"
-        }
-        return false
-    }
+    /// Returns true if this item is a back button.
+    public var isBackButton: Bool { role == .back }
 
     /// The visual content of the navigation bar item.
     public enum NavigationBarItemContent {
@@ -45,33 +63,36 @@ public struct NavigationBarItem: Identifiable {
     // MARK: - Factory Methods
 
     /// Creates a back button with chevron icon.
-    public static func back(action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(content: .systemIcon("chevron.left", badge: nil), action: action)
+    public static func back(id: String = "back", action: @escaping Action) -> NavigationBarItem {
+        NavigationBarItem(id: id, role: .back, content: .systemIcon("chevron.left", badge: nil), action: action)
     }
 
     /// Creates a close button with X icon.
-    public static func close(action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(content: .systemIcon("xmark", badge: nil), action: action)
+    public static func close(id: String = "close", action: @escaping Action) -> NavigationBarItem {
+        NavigationBarItem(id: id, role: .close, content: .systemIcon("xmark", badge: nil), action: action)
     }
 
     /// Creates a button with a system SF Symbol.
-    public static func icon(_ systemName: String, badge: Int? = nil, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(content: .systemIcon(systemName, badge: badge), action: action)
+    public static func icon(_ systemName: String, badge: Int? = nil, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
+        NavigationBarItem(id: id ?? "system:\(systemName)", role: .plain, content: .systemIcon(systemName, badge: badge), action: action)
     }
 
     /// Creates a button with a custom image from assets.
-    public static func customIcon(_ imageName: String, badge: Int? = nil, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(content: .icon(imageName, badge: badge), action: action)
+    public static func customIcon(_ imageName: String, badge: Int? = nil, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
+        NavigationBarItem(id: id ?? "icon:\(imageName)", role: .plain, content: .icon(imageName, badge: badge), action: action)
     }
 
     /// Creates a text button.
-    public static func text(_ text: String, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(content: .text(text), action: action)
+    public static func text(_ text: String, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
+        NavigationBarItem(id: id ?? "text:\(text)", role: .plain, content: .text(text), action: action)
     }
 
     /// Creates a button with a custom view.
-    public static func custom<V: View>(_ view: V, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(content: .view(AnyView(view)), action: action)
+    ///
+    /// Custom views cannot derive a content-based id — pass `id:` when a bar hosts
+    /// more than one custom item.
+    public static func custom<V: View>(_ view: V, id: String = "custom", action: @escaping Action) -> NavigationBarItem {
+        NavigationBarItem(id: id, role: .plain, content: .view(AnyView(view)), action: action)
     }
 }
 

@@ -38,8 +38,7 @@ import SwiftUI
 public struct CustomNavigationBar: View {
     private let configuration: NavigationBarConfiguration
     @State private var isSearchFocused = false
-    @State private var backButtonHasAppeared = false
-    @State private var backButtonIsDisappearing = false
+    @State private var backButtonVisible = false
 
     public init(configuration: NavigationBarConfiguration) {
         self.configuration = configuration
@@ -110,23 +109,17 @@ public struct CustomNavigationBar: View {
         HStack(spacing: 12) {
             ForEach(configuration.leftItems) { item in
                 if item.isBackButton {
-                    // Back button with animated appear/disappear
-                    Button {
-                        // Animate out, then execute action
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            backButtonIsDisappearing = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            item.action()
-                        }
-                    } label: {
+                    // Back button: fades in alongside the push transition (C10 — no
+                    // guessed GCD delays), and the action fires IMMEDIATELY — the pop
+                    // animation is the system's job, not an artificial 0.15s wait.
+                    Button(action: item.action) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(configuration.style.tintColor)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(NavigationBarButtonStyle())
-                    .opacity(backButtonOpacity)
+                    .opacity(backButtonVisible ? 1 : 0)
                 } else {
                     NavigationBarItemView(
                         item: item,
@@ -136,21 +129,11 @@ public struct CustomNavigationBar: View {
             }
         }
         .onAppear {
-            guard hasBackButton, !backButtonHasAppeared else { return }
-            // Delay to let the push animation complete first
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    backButtonHasAppeared = true
-                }
+            guard hasBackButton, !backButtonVisible else { return }
+            withAnimation(.easeOut(duration: 0.25)) {
+                backButtonVisible = true
             }
         }
-    }
-
-    private var backButtonOpacity: Double {
-        if backButtonIsDisappearing {
-            return 0
-        }
-        return backButtonHasAppeared ? 1 : 0
     }
 
     @ViewBuilder
@@ -219,7 +202,7 @@ struct NavigationBarItemView: View {
     private var itemContent: some View {
         switch item.content {
         case .systemIcon(let name, let badge):
-            iconWithBadge(systemName: name, badge: badge)
+            iconWithBadge(systemName: name, badge: badge, emphasized: item.role == .back)
 
         case .icon(let name, let badge):
             customIconWithBadge(name: name, badge: badge)
@@ -236,11 +219,11 @@ struct NavigationBarItemView: View {
     }
 
     @ViewBuilder
-    private func iconWithBadge(systemName: String, badge: Int?) -> some View {
-        let isBack = systemName == "chevron.left"
+    private func iconWithBadge(systemName: String, badge: Int?, emphasized: Bool) -> some View {
+        // A11: emphasis keys off the item's ROLE, not off the icon being "chevron.left".
         ZStack(alignment: .topTrailing) {
             Image(systemName: systemName).renderingMode(.template)
-                .font(.system(size: isBack ? 20 : 17, weight: .semibold))
+                .font(.system(size: emphasized ? 20 : 17, weight: .semibold))
                 .foregroundColor(tintColor)
                 .frame(width: 44, height: 44)
 
