@@ -58,17 +58,17 @@ public struct PhaseView<Content: View>: View {
             backgroundColor
                 .ignoresSafeArea()
 
-            switch phase {
-            case .idle, .content:
+            if !ScreenPresentationLogic.hidesContent(phase) {
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
 
-            case .loading:
-                if let builder = loadingViewBuilder {
-                    builder()
-                } else {
-                    DefaultLoadingView()
-                }
+            switch ScreenPresentationLogic.phaseOverlay(for: phase) {
+            case .none:
+                EmptyView()
+
+            case .loading(let style):
+                loadingOverlay(style: style)
 
             case .empty:
                 if let builder = emptyViewBuilder {
@@ -84,6 +84,31 @@ public struct PhaseView<Content: View>: View {
                     DefaultErrorView(error: error)
                 }
             }
+        }
+        .animation(.default, value: phase)
+    }
+
+    /// Every loading style renders something — `.inline` keeps content visible with an
+    /// inline indicator on top (A2 is impossible here by construction).
+    @ViewBuilder
+    private func loadingOverlay(style: ActivityStyle) -> some View {
+        switch style {
+        case .fullScreen, .overlay:
+            if let builder = loadingViewBuilder {
+                builder()
+            } else {
+                DefaultLoadingView()
+            }
+        case .inline:
+            VStack {
+                if let builder = loadingViewBuilder {
+                    builder()
+                } else {
+                    DefaultInlineActivityView()
+                }
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -133,7 +158,7 @@ struct PhaseView_Previews: PreviewProvider {
             .previewDisplayName("Content")
 
             // Loading state
-            PhaseView(phase: .constant(.loading)) {
+            PhaseView(phase: .constant(.loading(.fullScreen))) {
                 Text("Hidden content")
             }
             .previewDisplayName("Loading")

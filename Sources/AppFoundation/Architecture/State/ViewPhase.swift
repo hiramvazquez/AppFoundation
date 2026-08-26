@@ -2,38 +2,23 @@ import Foundation
 
 /// Represents the current phase of a view's lifecycle and data loading state.
 ///
-/// `ViewPhase` replaces the old generic `ViewState<Alert, Error>` with a simpler,
-/// non-generic model that's easier to use and reason about. All errors are
-/// represented as `ScreenError` and all UI feedback goes through the ViewModel.
+/// All errors are represented as `ScreenError` and all UI feedback goes through the
+/// ViewModel. The `.loading` phase carries its own `ActivityStyle` — there is ONE
+/// activity presentation system shared by the primary phase and secondary activity.
 ///
 /// ## States
 /// - **idle**: Initial state, no operation in progress
-/// - **loading**: Data is being fetched or processed
+/// - **loading(style)**: Data is being fetched; `style` says how to present it
 /// - **content**: Data is available and ready to display
 /// - **empty**: Operation succeeded but returned no data
 /// - **error**: An error occurred; use the retry action to recover
 ///
 /// ## Example
 /// ```swift
-/// @Published var phase: ViewPhase = .idle
-///
-/// func loadData() async {
-///     phase = .loading
-///     do {
-///         let data = try await fetchData()
-///         if data.isEmpty {
-///             phase = .empty
-///         } else {
-///             phase = .content
-///         }
-///     } catch {
-///         phase = .error(
-///             ScreenError(
-///                 title: "Failed to Load",
-///                 message: error.localizedDescription,
-///                 retry: { [weak self] in Task { await self?.loadData() } }
-///            )
-///         )
+/// func loadData() {
+///     performLoad {
+///         let data = try await repository.fetch()
+///         if data.isEmpty { self.setEmpty() }
 ///     }
 /// }
 /// ```
@@ -41,8 +26,8 @@ public nonisolated enum ViewPhase: Equatable, Sendable {
     /// Initial state; no loading in progress.
     case idle
 
-    /// Data is being loaded or an operation is in progress.
-    case loading
+    /// Data is being loaded or an operation is in progress, presented with the given style.
+    case loading(ActivityStyle)
 
     /// Data is available and ready to display.
     case content
@@ -108,36 +93,3 @@ public nonisolated struct ScreenError: Equatable, Sendable {
     }
 }
 
-/// Defines how a loading indicator should be presented to the user.
-///
-/// Used to control the appearance and behavior of loading UI during asynchronous operations.
-///
-/// ## Styles
-/// - **fullScreen**: Loading overlay covers the entire screen (opaque or semi-transparent)
-/// - **inline**: Loading indicator embedded within the content area
-/// - **overlay**: Semi-transparent overlay with spinner; allows user interaction below
-///
-/// ## Example
-/// ```swift
-/// // Show a full-screen spinner during initial load
-/// func loadData() {
-///     setLoading(.fullScreen)
-///     // ...
-/// }
-///
-/// // Show inline spinner during pagination
-/// func loadMore() {
-///     setLoading(.inline)
-///     // ...
-/// }
-/// ```
-public nonisolated enum LoadingStyle: Equatable, Sendable {
-    /// Loading overlay covers the entire screen and blocks interaction.
-    case fullScreen
-
-    /// Loading indicator is embedded inline within the content area.
-    case inline
-
-    /// Semi-transparent overlay with spinner; allows interaction with content below.
-    case overlay
-}

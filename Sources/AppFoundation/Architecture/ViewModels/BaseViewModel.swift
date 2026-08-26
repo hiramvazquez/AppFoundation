@@ -1,7 +1,8 @@
-import Combine
+import Foundation
+import Observation
 
 /// Controls how `performLoad` should finish after the async work succeeds.
-public enum LoadSuccessTransition: Equatable, Sendable {
+public nonisolated enum LoadSuccessTransition: Equatable, Sendable {
     /// Transition to `.content` automatically.
     case setContent
 
@@ -17,36 +18,58 @@ public enum LoadSuccessTransition: Equatable, Sendable {
 /// content is modelled through `activity`.
 ///
 /// Use this split as a rule of thumb:
-/// - `phase`: controls what the screen fundamentally is right now (idle / loading / content / empty / error)
+/// - `phase`: what the screen fundamentally is right now (idle / loading / content / empty / error)
 /// - `activity`: work that can happen while content stays visible (refresh, submit, sync, pagination)
 /// - `alert`: blocking user decision
-/// - `banner`: non-blocking feedback
+/// - `banner`: non-blocking feedback (auto-dismisses according to its duration)
+///
+/// ## Cancellation is part of the contract
+///
+/// `performLoad` and `performActivity` return their `Task` and retain it: starting a new
+/// load cancels the in-flight one, and `deinit` cancels whatever is still running. Work
+/// closures should stay cooperative (`Task.checkCancellation()` at progress points) for
+/// cancellation to actually interrupt long operations. A cancelled load is never surfaced
+/// as a screen error.
 @MainActor
-open class BaseViewModel: ObservableObject {
-    /// The current screen phase.
-    @Published public var phase: ViewPhase = .idle
-
-    /// How the primary loading phase should be displayed.
-    @Published public var loadingStyle: LoadingStyle = .fullScreen
+@Observable
+open class BaseViewModel {
+    /// The current screen phase. `.loading` carries how it should be presented.
+    public var phase: ViewPhase = .idle
 
     /// Secondary work that should not replace the current content.
-    @Published public var activity: ActivityState = .none
+    public var activity: ActivityState = .none
 
     /// Current alert to display, if any.
-    @Published public var alert: AlertState? = nil
+    public var alert: AlertState? = nil
 
     /// Current banner/toast notification to display, if any.
-    @Published public var banner: BannerState? = nil
+    public var banner: BannerState? = nil
+
+    /// The in-flight primary load, if any. Superseded loads are cancelled.
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+
+    /// The in-flight secondary activity, if any. Superseded activities are cancelled.
+    @ObservationIgnored private var activityTask: Task<Void, Never>?
+
+    /// Pending banner auto-dismiss, if any.
+    @ObservationIgnored private var bannerDismissTask: Task<Void, Never>?
 
     /// Initializes a new base view model.
     public init() {}
 
+    deinit {
+        // `Task` is Sendable, so reading these stored properties from the nonisolated
+        // deinit is legal — and nothing else can observe the object anymore.
+        loadTask?.cancel()
+        activityTask?.cancel()
+        bannerDismissTask?.cancel()
+    }
+
     // MARK: - Phase Transitions
 
     /// Transitions the screen to a primary loading phase.
-    open func setLoading(_ style: LoadingStyle = .fullScreen) {
-        loadingStyle = style
-        phase = .loading
+    open func setLoading(_ style: ActivityStyle = .fullScreen) {
+        phase = .loading(style)
     }
 
     /// Transitions the screen to the content phase.
@@ -105,12 +128,27 @@ open class BaseViewModel: ObservableObject {
     // MARK: - Banner Management
 
     /// Displays a non-blocking banner.
+    ///
+    /// A banner with `duration: .seconds(n)` auto-dismisses after `n` seconds (A3).
+    /// Showing a new banner cancels the previous banner's pending dismissal.
     open func showBanner(_ banner: BannerState) {
+        bannerDismissTask?.cancel()
         self.banner = banner
+
+        guard case .seconds(let interval) = banner.duration else { return }
+        let bannerID = banner.id
+        bannerDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(interval))
+            guard !Task.isCancelled else { return }
+            guard let self, self.banner?.id == bannerID else { return }
+            self.banner = nil
+        }
     }
 
-    /// Dismisses the current banner.
+    /// Dismisses the current banner and cancels any pending auto-dismiss.
     open func dismissBanner() {
+        bannerDismissTask?.cancel()
+        bannerDismissTask = nil
         banner = nil
     }
 
@@ -118,71 +156,90 @@ open class BaseViewModel: ObservableObject {
 
     /// Runs a primary load operation.
     ///
-    /// This is best for initial screen loads where the primary screen phase should switch to loading.
-    /// Use `successTransition: .preserveCurrentPhase` when the work decides the resulting phase itself.
+    /// Best for initial screen loads where the primary screen phase should switch to
+    /// loading. Use `successTransition: .preserveCurrentPhase` when the work decides the
+    /// resulting phase itself (e.g. `.empty` vs `.content`).
+    ///
+    /// Re-entrancy (C8): starting a new load cancels the in-flight one; the superseded
+    /// task never mutates screen state after cancellation. Cancellation is not failure —
+    /// a cancelled load leaves no error phase behind.
+    ///
+    /// Errors are converted to `ScreenError` through `AppErrorConvertible` when the
+    /// thrown error conforms (A1); `localizedDescription` is only the last-resort
+    /// fallback for foreign errors.
+    ///
+    /// - Returns: The load `Task`. Await it in tests for deterministic sequencing, or
+    ///   discard it — the view model retains and manages it either way.
+    @discardableResult
     open func performLoad(
-        style: LoadingStyle = .fullScreen,
+        style: ActivityStyle = .fullScreen,
         errorTitle: String = "Error",
         successTransition: LoadSuccessTransition = .setContent,
         _ work: @escaping () async throws -> Void
-    ) {
+    ) -> Task<Void, Never> {
+        loadTask?.cancel()
         setLoading(style)
 
-        Task {
+        let task = Task { [weak self] in
             do {
                 try await work()
+                guard !Task.isCancelled, let self else { return }
                 if successTransition == .setContent {
-                    setContent()
+                    self.setContent()
                 }
+            } catch is CancellationError {
+                // Superseded or torn down: never surface cancellation as an error.
             } catch {
-                setError(
-                    title: errorTitle,
-                    message: error.localizedDescription,
-                    retry: { [weak self] in
-                        self?.performLoad(
-                            style: style,
-                            errorTitle: errorTitle,
-                            successTransition: successTransition,
-                            work
-                        )
-                    }
-                )
+                guard !Task.isCancelled, let self else { return }
+                let retry: Action = { [weak self] in
+                    self?.performLoad(
+                        style: style,
+                        errorTitle: errorTitle,
+                        successTransition: successTransition,
+                        work
+                    )
+                }
+                self.setError(Self.screenError(from: error, fallbackTitle: errorTitle, retry: retry))
             }
         }
-    }
-
-    /// Backwards-compatible convenience wrapper for the old API.
-    open func load(
-        style: LoadingStyle = .fullScreen,
-        errorTitle: String = "Error",
-        _ work: @escaping () async throws -> Void
-    ) {
-        performLoad(style: style, errorTitle: errorTitle, successTransition: .setContent, work)
+        loadTask = task
+        return task
     }
 
     /// Runs secondary work while keeping the current screen content visible.
     ///
-    /// This is ideal for refresh, pagination, form submit, and background sync work.
+    /// Ideal for refresh, pagination, form submit, and background sync work. Starting a
+    /// new activity cancels the in-flight one; a cancelled activity never mutates state.
+    ///
+    /// - Returns: The activity `Task`. Await it in tests for deterministic sequencing.
+    @discardableResult
     open func performActivity(
         style: ActivityStyle = .overlay,
         errorHandling: ActivityErrorHandling = .banner,
         _ work: @escaping () async throws -> Void
-    ) {
+    ) -> Task<Void, Never> {
+        activityTask?.cancel()
         startActivity(style)
 
-        Task {
+        let task = Task { [weak self] in
             do {
                 try await work()
-                stopActivity()
+                guard !Task.isCancelled, let self else { return }
+                self.stopActivity()
+            } catch is CancellationError {
+                // Superseded activity: the newer one owns the state now.
             } catch {
-                stopActivity()
-                handleActivityError(error, strategy: errorHandling)
+                guard !Task.isCancelled, let self else { return }
+                self.stopActivity()
+                self.handleActivityError(error, strategy: errorHandling)
             }
         }
+        activityTask = task
+        return task
     }
 
     /// Defines how secondary activity errors should be surfaced.
-    public enum ActivityErrorHandling: Equatable, Sendable {
+    public nonisolated enum ActivityErrorHandling: Equatable, Sendable {
         /// Show the error as a banner.
         case banner
 
@@ -194,15 +251,37 @@ open class BaseViewModel: ObservableObject {
     }
 
     /// Handles the presentation of an error emitted during a secondary activity.
+    ///
+    /// Consults `AppErrorConvertible` (A1) so domain errors surface their user-facing
+    /// message in banners and alerts too.
     open func handleActivityError(_ error: Error, strategy: ActivityErrorHandling) {
+        let screenError = Self.screenError(from: error, fallbackTitle: "Error", retry: nil)
         switch strategy {
         case .banner:
-            showBanner(.error(error.localizedDescription))
+            showBanner(.error(screenError.message))
         case .alert:
-            showAlert(.info(title: "Error", message: error.localizedDescription))
+            showAlert(.info(title: screenError.title, message: screenError.message))
         case .silent:
             break
         }
+    }
+
+    // MARK: - Error Mapping (A1)
+
+    /// Maps a thrown error to the user-facing `ScreenError`.
+    ///
+    /// `AppErrorConvertible` (which `WrappedError` adopts) is THE source of user-facing
+    /// messages; raw `localizedDescription` is only the fallback for foreign errors.
+    nonisolated static func screenError(
+        from error: Error,
+        fallbackTitle: String,
+        retry: Action?
+    ) -> ScreenError {
+        if let convertible = error as? AppErrorConvertible {
+            let base = convertible.screenError
+            return ScreenError(title: base.title, message: base.message, retry: retry ?? base.retry)
+        }
+        return ScreenError(title: fallbackTitle, message: error.localizedDescription, retry: retry)
     }
 
     // MARK: - Computed Helpers

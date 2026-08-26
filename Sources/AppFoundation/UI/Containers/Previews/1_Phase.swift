@@ -29,8 +29,7 @@ struct ScreenContainer_Phase_Previews: PreviewProvider {
 
             // 3 · Loading fullScreen
             ScreenContainer(
-                phase: .constant(.loading),
-                loadingStyle: .constant(.fullScreen),
+                phase: .constant(.loading(.fullScreen)),
                 navigation: .title("Loading", style: .solid)
             ) {
                 PreviewSampleList()
@@ -39,8 +38,7 @@ struct ScreenContainer_Phase_Previews: PreviewProvider {
 
             // 4 · Loading inline
             ScreenContainer(
-                phase: .constant(.loading),
-                loadingStyle: .constant(.inline),
+                phase: .constant(.loading(.inline)),
                 navigation: .title("Loading", style: .solid)
             ) {
                 PreviewSampleList()
@@ -49,8 +47,7 @@ struct ScreenContainer_Phase_Previews: PreviewProvider {
 
             // 5 · Loading overlay
             ScreenContainer(
-                phase: .constant(.loading),
-                loadingStyle: .constant(.overlay),
+                phase: .constant(.loading(.overlay)),
                 navigation: .title("Loading", style: .solid)
             ) {
                 PreviewSampleList()

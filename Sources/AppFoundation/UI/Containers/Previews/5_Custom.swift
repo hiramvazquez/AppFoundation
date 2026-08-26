@@ -5,7 +5,7 @@ import SwiftUI
 struct ScreenContainer_CustomLoading_Previews: PreviewProvider {
     static var previews: some View {
         ScreenContainer(
-            phase: .constant(.loading),
+            phase: .constant(.loading(.fullScreen)),
             navigation: .title("Custom loading", style: .solid)
         ) {
             PreviewSampleList()

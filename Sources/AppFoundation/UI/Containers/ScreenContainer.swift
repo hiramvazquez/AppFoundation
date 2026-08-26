@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import SwiftUI
+import Accessibility
 
 /// Defines where the custom navigation bar is rendered relative to screen content.
 public enum NavigationPlacement {
@@ -9,16 +10,70 @@ public enum NavigationPlacement {
     case overlay
 }
 
+// MARK: - Presentation Logic
+
+/// Pure presentation decisions for `ScreenContainer`, extracted so the activity system
+/// is testable without snapshots: every phase/activity combination maps to an explicit,
+/// renderable outcome — there is no invisible state (A2).
+nonisolated enum ScreenPresentationLogic {
+    /// What the primary phase renders above (or instead of) content.
+    enum PhaseOverlay: Equatable {
+        case none
+        case loading(ActivityStyle)
+        case error(ScreenError)
+        case empty
+    }
+
+    /// Maps the primary phase to its overlay. Every `.loading` style produces a
+    /// visible overlay — including `.inline`.
+    static func phaseOverlay(for phase: ViewPhase) -> PhaseOverlay {
+        switch phase {
+        case .idle, .content:
+            return .none
+        case .loading(let style):
+            return .loading(style)
+        case .error(let error):
+            return .error(error)
+        case .empty:
+            return .empty
+        }
+    }
+
+    /// Whether the content area is hidden by the current primary phase.
+    /// Only phases that fully replace content hide it.
+    static func hidesContent(_ phase: ViewPhase) -> Bool {
+        switch phase {
+        case .error, .empty:
+            return true
+        case .loading(let style):
+            return style == .fullScreen
+        case .idle, .content:
+            return false
+        }
+    }
+
+    /// The activity indicator style to render for secondary activity, if any.
+    static func activityIndicator(for activity: ActivityState) -> ActivityStyle? {
+        if case .loading(let style) = activity { return style }
+        return nil
+    }
+}
+
+// MARK: - ScreenContainer
+
 /// A screen shell with navigation chrome, screen-phase rendering, and feedback overlays.
 ///
 /// `ScreenContainer` intentionally keeps a small public API while internally separating:
 /// - base shell layout
 /// - primary screen phase rendering (`phase`)
 /// - transient activity overlays (`activity`)
-/// - user feedback overlays (`alert`, `banner`)
+/// - user feedback (`alert` via the native alert presentation, `banner` as an overlay)
+///
+/// Observation: the view-model initializer derives its bindings through `Bindable`, so
+/// reads go straight to the `@Observable` view model during body evaluation and updates
+/// are tracked automatically (A4 — no hand-rolled closures over an unobserved object).
 public struct ScreenContainer<Content: View>: View {
     @Binding private var phase: ViewPhase
-    @Binding private var loadingStyle: LoadingStyle
     @Binding private var activity: ActivityState
     @Binding private var alert: AlertState?
     @Binding private var banner: BannerState?
@@ -44,11 +99,11 @@ public struct ScreenContainer<Content: View>: View {
         backgroundColor: Color = .platformBackground,
         @ViewBuilder content: @escaping () -> Content
     ) {
-        self._phase = .init(get: { viewModel.phase }, set: { viewModel.phase = $0 })
-        self._loadingStyle = .init(get: { viewModel.loadingStyle }, set: { viewModel.loadingStyle = $0 })
-        self._activity = .init(get: { viewModel.activity }, set: { viewModel.activity = $0 })
-        self._alert = .init(get: { viewModel.alert }, set: { viewModel.alert = $0 })
-        self._banner = .init(get: { viewModel.banner }, set: { viewModel.banner = $0 })
+        let bindable = Bindable(viewModel)
+        self._phase = bindable.phase
+        self._activity = bindable.activity
+        self._alert = bindable.alert
+        self._banner = bindable.banner
         self.navigation = navigation
         self.navigationPlacement = navigationPlacement
         self.content = content
@@ -58,7 +113,6 @@ public struct ScreenContainer<Content: View>: View {
     /// Creates a screen container using explicit bindings.
     public init(
         phase: Binding<ViewPhase>,
-        loadingStyle: Binding<LoadingStyle> = .constant(.fullScreen),
         activity: Binding<ActivityState> = .constant(.none),
         alert: Binding<AlertState?> = .constant(nil),
         banner: Binding<BannerState?> = .constant(nil),
@@ -68,7 +122,6 @@ public struct ScreenContainer<Content: View>: View {
         @ViewBuilder content: @escaping () -> Content
     ) {
         self._phase = phase
-        self._loadingStyle = loadingStyle
         self._activity = activity
         self._alert = alert
         self._banner = banner
@@ -81,7 +134,7 @@ public struct ScreenContainer<Content: View>: View {
     // MARK: - Body
 
     public var body: some View {
-        ZStack {
+        let core = ZStack {
             backgroundColor.ignoresSafeArea()
 
             mainContentView
@@ -90,19 +143,76 @@ public struct ScreenContainer<Content: View>: View {
 
             activityOverlay
 
-            if alert != nil {
-                alertOverlayView
-                    .transition(.opacity)
-            }
-
             if banner != nil {
                 bannerOverlayView
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        // Transiciones dirigidas por transacción (A15): los cambios de estado animan sin
+        // que cada mutación tenga que envolverse en withAnimation en el ViewModel.
+        .animation(.default, value: phase)
+        .animation(.default, value: activity)
+        .animation(.default, value: banner)
+        .onChange(of: banner) { _, newBanner in
+            guard let newBanner else { return }
+            // Accessibility: banners are transient — VoiceOver users hear them arrive.
+            AccessibilityNotification.Announcement(newBanner.message).post()
+        }
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #endif
+
+        Group {
+            if alertViewBuilder != nil {
+                core.overlay {
+                    if alert != nil {
+                        alertOverlayView
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.default, value: alert)
+            } else {
+                // A15: alerts use the native presentation by default.
+                core.alert(
+                    alert?.title ?? "",
+                    isPresented: isAlertPresented,
+                    presenting: alert
+                ) { alertState in
+                    alertButtons(for: alertState)
+                } message: { alertState in
+                    Text(alertState.message)
+                }
+            }
+        }
+    }
+
+    private var isAlertPresented: Binding<Bool> {
+        Binding(
+            get: { alert != nil },
+            set: { isPresented in
+                if !isPresented { alert = nil }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func alertButtons(for alertState: AlertState) -> some View {
+        if let secondary = alertState.secondaryButton {
+            Button(secondary.title, role: buttonRole(for: secondary.role)) {
+                secondary.action()
+            }
+        }
+        Button(alertState.primaryButton.title, role: buttonRole(for: alertState.primaryButton.role)) {
+            alertState.primaryButton.action()
+        }
+    }
+
+    private func buttonRole(for role: AlertState.Button.Role) -> ButtonRole? {
+        switch role {
+        case .default: return nil
+        case .cancel: return .cancel
+        case .destructive: return .destructive
+        }
     }
 
     // MARK: - Main Content
@@ -137,10 +247,11 @@ public struct ScreenContainer<Content: View>: View {
 
     @ViewBuilder
     private var contentAreaView: some View {
+        let hidden = ScreenPresentationLogic.hidesContent(phase)
         content()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .opacity(shouldHideContentForPrimaryPhase ? 0 : 1)
-            .accessibilityHidden(shouldHideContentForPrimaryPhase)
+            .opacity(hidden ? 0 : 1)
+            .accessibilityHidden(hidden)
     }
 
     @ViewBuilder
@@ -155,29 +266,16 @@ public struct ScreenContainer<Content: View>: View {
         }
     }
 
-    private var shouldHideContentForPrimaryPhase: Bool {
-        switch phase {
-        case .error, .empty:
-            return true
-        case .loading:
-            return loadingStyle == .fullScreen
-        case .idle, .content:
-            return false
-        }
-    }
-
     // MARK: - Phase and Activity Rendering
 
     @ViewBuilder
     private var primaryPhaseOverlay: some View {
-        switch phase {
-        case .idle, .content:
+        switch ScreenPresentationLogic.phaseOverlay(for: phase) {
+        case .none:
             EmptyView()
-        case .loading:
-            if loadingStyle != .inline {
-                loadingOverlayView(style: loadingStyle)
-                    .transition(.opacity)
-            }
+        case .loading(let style):
+            activityView(style: style)
+                .transition(.opacity)
         case .error(let error):
             errorOverlayView(error: error)
                 .transition(.opacity)
@@ -189,48 +287,34 @@ public struct ScreenContainer<Content: View>: View {
 
     @ViewBuilder
     private var activityOverlay: some View {
-        switch activity {
-        case .none:
-            EmptyView()
-        case .loading(let style):
-            switch style {
-            case .inline:
-                VStack {
-                    DefaultInlineActivityView()
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if let style = ScreenPresentationLogic.activityIndicator(for: activity) {
+            activityView(style: style)
                 .transition(.opacity)
-            case .overlay:
-                ZStack {
-                    Color.black.opacity(0.18)
-                        .ignoresSafeArea()
-                    DefaultLoadingView()
-                }
-                .transition(.opacity)
-            }
         }
     }
 
-    // MARK: - Overlay Views
-
-    /// Renders the primary loading overlay for `.fullScreen` and `.overlay` styles.
-    ///
-    /// `.inline` never reaches here (it is filtered in `primaryPhaseOverlay`) — today an
-    /// inline primary load renders nothing (bug A2), which the activity collapse fixes.
+    /// The ONE activity renderer, shared by the primary loading phase and secondary
+    /// activity. Every style renders something (A2 is dead by construction).
     @ViewBuilder
-    private func loadingOverlayView(style: LoadingStyle) -> some View {
-        if style == .fullScreen {
+    private func activityView(style: ActivityStyle) -> some View {
+        switch style {
+        case .fullScreen:
             ZStack {
                 backgroundColor.ignoresSafeArea()
                 builtLoadingView
             }
-        } else {
+        case .overlay:
             ZStack {
-                Color.black.opacity(0.3)
+                Color.black.opacity(0.25)
                     .ignoresSafeArea()
                 builtLoadingView
             }
+        case .inline:
+            VStack {
+                builtInlineActivityView
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -242,6 +326,17 @@ public struct ScreenContainer<Content: View>: View {
             DefaultLoadingView()
         }
     }
+
+    @ViewBuilder
+    private var builtInlineActivityView: some View {
+        if let builder = loadingViewBuilder {
+            builder()
+        } else {
+            DefaultInlineActivityView()
+        }
+    }
+
+    // MARK: - Overlay Views
 
     @ViewBuilder
     private func errorOverlayView(error: ScreenError) -> some View {
@@ -293,6 +388,8 @@ public struct ScreenContainer<Content: View>: View {
         }
     }
 
+    /// Custom alert overlay — only used when `alertView(builder:)` was provided;
+    /// the default path presents alerts natively.
     @ViewBuilder
     private var alertOverlayView: some View {
         ZStack {
@@ -300,14 +397,8 @@ public struct ScreenContainer<Content: View>: View {
                 .ignoresSafeArea()
                 .onTapGesture { }
 
-            if let alertState = alert {
-                if let builder = alertViewBuilder {
-                    builder(alertState)
-                } else {
-                    DefaultAlertView(alert: alertState) {
-                        self.alert = nil
-                    }
-                }
+            if let alertState = alert, let builder = alertViewBuilder {
+                builder(alertState)
             }
         }
     }
@@ -349,6 +440,7 @@ public struct ScreenContainer<Content: View>: View {
         return copy
     }
 
+    /// Replaces the native alert presentation with a fully custom overlay.
     public func alertView<V: View>(@ViewBuilder builder: @escaping (AlertState) -> V) -> Self {
         var copy = self
         copy.alertViewBuilder = { AnyView(builder($0)) }
@@ -484,42 +576,6 @@ struct DefaultEmptyView: View {
                 .padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
-}
-
-struct DefaultAlertView: View {
-    let alert: AlertState
-    let dismiss: () -> Void
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Text(alert.title)
-                .font(.headline)
-            Text(alert.message)
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                if let secondary = alert.secondaryButton {
-                    Button(secondary.title) {
-                        secondary.action()
-                        dismiss()
-                    }
-                    .buttonStyle(.bordered)
-                }
-
-                Button(alert.primaryButton.title) {
-                    alert.primaryButton.action()
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(24)
-        .frame(maxWidth: 360)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .padding()
     }
 }

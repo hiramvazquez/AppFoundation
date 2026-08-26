@@ -10,7 +10,6 @@ struct BaseViewModelTests {
 
     @Test func initialState() {
         #expect(viewModel.phase == .idle)
-        #expect(viewModel.loadingStyle == .fullScreen)
         #expect(viewModel.activity == ActivityState.none)
         #expect(viewModel.alert == nil)
         #expect(viewModel.banner == nil)
@@ -18,17 +17,16 @@ struct BaseViewModelTests {
 
     // MARK: - Phase Transitions
 
-    @Test(arguments: [LoadingStyle.fullScreen, .inline, .overlay])
-    func setLoadingAppliesStyle(style: LoadingStyle) {
+    @Test(arguments: [ActivityStyle.fullScreen, .inline, .overlay])
+    func setLoadingAppliesStyle(style: ActivityStyle) {
         viewModel.setLoading(style)
-        #expect(viewModel.phase == .loading)
-        #expect(viewModel.loadingStyle == style)
+        #expect(viewModel.phase == .loading(style))
+        #expect(viewModel.isLoading)
     }
 
     @Test func setLoadingDefaultsToFullScreen() {
         viewModel.setLoading()
-        #expect(viewModel.phase == .loading)
-        #expect(viewModel.loadingStyle == .fullScreen)
+        #expect(viewModel.phase == .loading(.fullScreen))
     }
 
     @Test func setContent() {
@@ -69,7 +67,7 @@ struct BaseViewModelTests {
 
     @Test func multipleStateTransitions() {
         viewModel.setLoading()
-        #expect(viewModel.phase == .loading)
+        #expect(viewModel.phase == .loading(.fullScreen))
         viewModel.setContent()
         #expect(viewModel.phase == .content)
         viewModel.setEmpty()
@@ -197,10 +195,10 @@ struct BaseViewModelTests {
     }
 
     @Test func loadAppliesLoadingStyleImmediately() async throws {
-        viewModel.performLoad(style: .inline) {}
-        #expect(viewModel.loadingStyle == .inline)
-        #expect(viewModel.phase == .loading)
-        try await waitUntil { viewModel.phase == .content }
+        let task = viewModel.performLoad(style: .inline) {}
+        #expect(viewModel.phase == .loading(.inline))
+        await task.value
+        #expect(viewModel.phase == .content)
     }
 
     @Test func loadErrorProvidesRetryAction() async throws {
@@ -229,5 +227,163 @@ struct BaseViewModelTests {
         viewModel.setError(ScreenError(title: "T", message: "M"))
         #expect(viewModel.hasError)
         #expect(viewModel.currentError == ScreenError(title: "T", message: "M"))
+    }
+}
+
+// MARK: - Fase 3: tests rojos primero (A3 auto-dismiss, A1 AppErrorConvertible)
+
+nonisolated struct DomainTestError: Error, AppErrorConvertible {
+    var screenError: ScreenError {
+        ScreenError(title: "Domain", message: "Friendly message")
+    }
+}
+
+@Suite("BaseViewModel — Fase 3 (bugs de auditoría)")
+struct BaseViewModelAuditBugTests {
+    let viewModel = BaseViewModel()
+
+    /// A3: la duration del banner debe producir un auto-dismiss REAL.
+    @Test func bannerAutoDismissesAfterItsDuration() async throws {
+        viewModel.showBanner(BannerState(message: "Bye", style: .info, duration: .seconds(0.05)))
+        #expect(viewModel.banner != nil)
+        try await waitUntil { viewModel.banner == nil }
+        #expect(viewModel.banner == nil)
+    }
+
+    /// A3: un banner .indefinite NO se auto-descarta.
+    @Test func indefiniteBannerStaysUntilDismissed() async throws {
+        viewModel.showBanner(BannerState(message: "Stay", style: .info, duration: .indefinite))
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(viewModel.banner != nil)
+        viewModel.dismissBanner()
+        #expect(viewModel.banner == nil)
+    }
+
+    /// A1: performLoad debe consultar AppErrorConvertible para el error de pantalla,
+    /// no volcar localizedDescription crudo.
+    @Test func loadFailureConsultsAppErrorConvertible() async throws {
+        viewModel.performLoad {
+            throw DomainTestError()
+        }
+        try await waitUntil { viewModel.hasError }
+        #expect(viewModel.currentError?.title == "Domain")
+        #expect(viewModel.currentError?.message == "Friendly message")
+    }
+}
+
+// MARK: - Fase 3: cancelación, re-entrancy y performActivity (deterministas)
+
+@Suite("BaseViewModel — cancelación y actividad")
+struct BaseViewModelCancellationTests {
+    let viewModel = BaseViewModel()
+
+    /// C8: una carga nueva cancela la carga en vuelo, y la superada no pisa el estado.
+    @Test func newLoadCancelsInFlightLoad() async {
+        let first = viewModel.performLoad {
+            try await Task.sleep(for: .seconds(10))
+        }
+        let second = viewModel.performLoad {}
+
+        await second.value
+        // La primera termina rápido porque su sleep fue cancelado — no en 10s.
+        await first.value
+
+        #expect(viewModel.phase == .content)
+    }
+
+    /// La cancelación no es fallo: jamás debe aparecer como error de pantalla.
+    @Test func cancelledLoadDoesNotSurfaceError() async {
+        let task = viewModel.performLoad {
+            try await Task.sleep(for: .seconds(10))
+        }
+        task.cancel()
+        await task.value
+
+        #expect(!viewModel.hasError)
+    }
+
+    /// preserveCurrentPhase: el trabajo decide la fase resultante.
+    @Test func preserveCurrentPhaseKeepsWorkDecision() async {
+        let task = viewModel.performLoad(successTransition: .preserveCurrentPhase) {
+            self.viewModel.setEmpty()
+        }
+        await task.value
+        #expect(viewModel.phase == .empty)
+    }
+
+    @Test func preserveCurrentPhaseWithoutExplicitPhaseStaysLoading() async {
+        let task = viewModel.performLoad(style: .overlay, successTransition: .preserveCurrentPhase) {}
+        await task.value
+        #expect(viewModel.phase == .loading(.overlay))
+    }
+
+    // MARK: - performActivity
+
+    @Test func activitySuccessStartsAndStops() async {
+        let task = viewModel.performActivity(style: .inline) {}
+        #expect(viewModel.activity == .loading(.inline))
+        await task.value
+        #expect(viewModel.activity == ActivityState.none)
+        #expect(viewModel.phase == .idle)  // activity never touches the primary phase
+    }
+
+    @Test func activityFailureSurfacesBannerByDefault() async {
+        let task = viewModel.performActivity {
+            throw DomainTestError()
+        }
+        await task.value
+        #expect(viewModel.activity == ActivityState.none)
+        // A1 también aplica a actividades: el mensaje sale de AppErrorConvertible.
+        #expect(viewModel.banner?.message == "Friendly message")
+        #expect(viewModel.banner?.style == .error)
+    }
+
+    @Test func activityFailureAsAlertUsesConvertibleTitleAndMessage() async {
+        let task = viewModel.performActivity(errorHandling: .alert) {
+            throw DomainTestError()
+        }
+        await task.value
+        #expect(viewModel.alert?.title == "Domain")
+        #expect(viewModel.alert?.message == "Friendly message")
+    }
+
+    @Test func activityFailureSilentShowsNothing() async {
+        let task = viewModel.performActivity(errorHandling: .silent) {
+            throw TestError()
+        }
+        await task.value
+        #expect(viewModel.banner == nil)
+        #expect(viewModel.alert == nil)
+        #expect(viewModel.activity == ActivityState.none)
+    }
+
+    /// Re-entrancy de actividad: la nueva cancela la anterior sin pisar su estado.
+    @Test func newActivityCancelsInFlightActivity() async {
+        let first = viewModel.performActivity(style: .overlay) {
+            try await Task.sleep(for: .seconds(10))
+        }
+        let second = viewModel.performActivity(style: .inline) {}
+
+        await second.value
+        await first.value
+
+        #expect(viewModel.activity == ActivityState.none)
+        #expect(viewModel.banner == nil)  // la cancelación no produce banner de error
+    }
+
+    /// El retry del error reintenta la carga con los mismos parámetros.
+    @Test func retryFromLoadErrorRetriesLoad() async throws {
+        var attempts = 0
+        let task = viewModel.performLoad {
+            attempts += 1
+            if attempts == 1 { throw TestError("first") }
+        }
+        await task.value
+        #expect(viewModel.hasError)
+
+        viewModel.currentError?.retry?()
+        try await waitUntil { viewModel.phase == .content }
+        #expect(attempts == 2)
+        #expect(viewModel.phase == .content)
     }
 }

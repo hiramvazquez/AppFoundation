@@ -30,7 +30,15 @@ struct ViewPhaseTests {
     }
 
     @Test func distinctPhasesAreNotEqual() {
-        let phases: [ViewPhase] = [.idle, .loading, .content, .empty, .error(ScreenError(title: "E", message: "M"))]
+        let phases: [ViewPhase] = [
+            .idle,
+            .loading(.fullScreen),
+            .loading(.inline),
+            .loading(.overlay),
+            .content,
+            .empty,
+            .error(ScreenError(title: "E", message: "M"))
+        ]
         for (i, lhs) in phases.enumerated() {
             for (j, rhs) in phases.enumerated() where i != j {
                 #expect(lhs != rhs)
