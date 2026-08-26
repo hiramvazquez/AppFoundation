@@ -3,23 +3,20 @@ import SwiftUI
 
 // MARK: - CoordinatorView
 
-/// A SwiftUI view that renders navigation stacks managed by a `Coordinator`.
+/// A SwiftUI view that renders navigation state managed by a `Coordinator`.
 ///
-/// `CoordinatorView` creates a navigation hierarchy with three layers:
-/// - Main stack: Standard push navigation
-/// - Sheet: Modal sheet presentation
-/// - Full screen cover: Opaque modal presentation
+/// `CoordinatorView` renders the main `NavigationStack` plus the coordinator's single
+/// modal layer (sheet or full screen cover). All bindings read the coordinator's LIVE
+/// state (A6) — nothing is captured from a stale snapshot — and an interactive dismissal
+/// (swipe-down) clears the modal state through `dismiss()` so it never goes stale (A7).
 ///
-/// The view automatically synchronizes with the coordinator's state and renders
-/// the appropriate routes using a provided content builder.
-///
-/// Use `@ObservedObject` when the coordinator is owned externally (e.g., by a DI container),
-/// and `@StateObject` only when you own the coordinator within the view.
+/// On macOS, full screen covers are presented as sheets (there is no
+/// `fullScreenCover` on macOS; a sheet is window-modal there anyway).
 ///
 /// ## Example
 /// ```swift
 /// struct ContentView: View {
-///     @StateObject var coordinator = Coordinator<AppRoute>(root: .home)
+///     @State private var coordinator = Coordinator<AppRoute>(root: .home)
 ///
 ///     var body: some View {
 ///         CoordinatorView(coordinator: coordinator) { route in
@@ -36,7 +33,7 @@ import SwiftUI
 public struct CoordinatorView<Route: Hashable, Content: View>: View {
     // MARK: - Properties
 
-    @ObservedObject private var coordinator: Coordinator<Route>
+    private let coordinator: Coordinator<Route>
     private let content: (Route) -> Content
 
     // MARK: - Initialization
@@ -56,76 +53,81 @@ public struct CoordinatorView<Route: Hashable, Content: View>: View {
     // MARK: - Body
 
     public var body: some View {
-        mainNavigationStack
-            .sheet(isPresented: $coordinator.isSheetPresented) {
-                sheetNavigationStack
-            }
-            #if os(iOS)
-            .fullScreenCover(isPresented: $coordinator.isFullScreenPresented) {
-                fullScreenNavigationStack
-            }
-            #endif
+        NavigationStack(path: Bindable(coordinator).mainStack.path) {
+            routeView(coordinator.mainStack.root)
+        }
+        #if os(iOS)
+        .sheet(isPresented: modalPresentedBinding(for: .sheet)) {
+            modalNavigationStack
+        }
+        .fullScreenCover(isPresented: modalPresentedBinding(for: .fullScreenCover)) {
+            modalNavigationStack
+        }
+        #else
+        .sheet(isPresented: anyModalPresentedBinding) {
+            modalNavigationStack
+        }
+        #endif
     }
 
     // MARK: - Private Views
 
-    private var mainNavigationStack: some View {
-        NavigationStack(path: $coordinator.mainStack.path) {
-            content(coordinator.mainStack.root)
-                #if os(iOS)
-                .toolbar(.hidden, for: .navigationBar)
-                #endif
-                .navigationDestination(for: Route.self) { route in
-                    content(route)
-                        #if os(iOS)
-                        .toolbar(.hidden, for: .navigationBar)
-                        #endif
-                }
-        }
+    @ViewBuilder
+    private func routeView(_ route: Route) -> some View {
+        content(route)
+            #if os(iOS)
+            .toolbar(.hidden, for: .navigationBar)
+            #endif
+            .navigationDestination(for: Route.self) { route in
+                content(route)
+                    #if os(iOS)
+                    .toolbar(.hidden, for: .navigationBar)
+                    #endif
+            }
     }
 
-    private var sheetNavigationStack: some View {
-        Group {
-            if let sheetState = coordinator.sheetStack {
-                NavigationStack(path: Binding(
-                    get: { sheetState.path },
-                    set: { coordinator.sheetStack?.path = $0 }
-                )) {
-                    content(sheetState.root)
-                        #if os(iOS)
-                        .toolbar(.hidden, for: .navigationBar)
-                        #endif
-                        .navigationDestination(for: Route.self) { route in
-                            content(route)
-                                #if os(iOS)
-                                .toolbar(.hidden, for: .navigationBar)
-                                #endif
-                        }
-                }
+    @ViewBuilder
+    private var modalNavigationStack: some View {
+        if let root = coordinator.modal?.stack.root {
+            NavigationStack(path: modalPathBinding) {
+                routeView(root)
             }
         }
     }
 
-    private var fullScreenNavigationStack: some View {
-        Group {
-            if let fullScreenState = coordinator.fullScreenStack {
-                NavigationStack(path: Binding(
-                    get: { fullScreenState.path },
-                    set: { coordinator.fullScreenStack?.path = $0 }
-                )) {
-                    content(fullScreenState.root)
-                        #if os(iOS)
-                        .toolbar(.hidden, for: .navigationBar)
-                        #endif
-                        .navigationDestination(for: Route.self) { route in
-                            content(route)
-                                #if os(iOS)
-                                .toolbar(.hidden, for: .navigationBar)
-                                #endif
-                        }
+    // MARK: - Live Bindings (A6/A7)
+
+    /// Binds the modal's path against the coordinator's CURRENT state — no snapshot.
+    private var modalPathBinding: Binding<[Route]> {
+        Binding(
+            get: { coordinator.modal?.stack.path ?? [] },
+            set: { coordinator.modal?.stack.path = $0 }
+        )
+    }
+
+    /// Presents when the modal has the given style; setting `false` (interactive
+    /// dismissal included) clears the modal state through `dismiss()` (A7).
+    private func modalPresentedBinding(for style: PresentationStyle) -> Binding<Bool> {
+        Binding(
+            get: { coordinator.modal?.style == style },
+            set: { isPresented in
+                if !isPresented, coordinator.modal?.style == style {
+                    coordinator.dismiss()
                 }
             }
-        }
+        )
+    }
+
+    /// macOS: any modal renders as a sheet.
+    private var anyModalPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { coordinator.modal != nil },
+            set: { isPresented in
+                if !isPresented {
+                    coordinator.dismiss()
+                }
+            }
+        )
     }
 }
 

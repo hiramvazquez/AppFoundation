@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import os
 
 // MARK: - NavigationLayer
@@ -37,15 +38,40 @@ public nonisolated struct StackState<Route: Hashable>: Equatable {
     }
 }
 
+// MARK: - ModalState
+
+/// The single modal layer a host can present (A5).
+///
+/// The coordinator models exactly what SwiftUI can render: at most ONE modal per host.
+/// The style says how it is presented; the stack is the modal's own navigation.
+public nonisolated struct ModalState<Route: Hashable>: Equatable {
+    /// How the modal is presented.
+    public var style: PresentationStyle
+
+    /// The modal's own navigation stack.
+    public var stack: StackState<Route>
+
+    /// Creates a modal state with a fresh stack rooted at `root`.
+    public init(style: PresentationStyle, root: Route) {
+        self.style = style
+        self.stack = StackState(root: root)
+    }
+}
+
 // MARK: - Coordinator
 
 /// Manages navigation flows using SwiftUI's `NavigationStack`.
 ///
-/// `Coordinator` is the primary implementation of the `Router` protocol.
-/// It manages three independent navigation stacks:
-/// - Main stack for standard push navigation
-/// - Sheet stack for modal sheet presentations
-/// - Full screen cover stack for opaque modal presentations
+/// `Coordinator` is the primary implementation of the `Router` protocol. It manages:
+/// - the main stack for standard push navigation
+/// - a single modal layer (`modal`) presented as sheet or full screen cover
+///
+/// ## Modal policy (A5 — documented and tested)
+///
+/// The state only models what SwiftUI can render: **one modal layer per host**.
+/// Presenting while a modal is already visible **replaces** it (the previous modal and
+/// its pushed path are discarded). If you need modal-over-modal, present a route whose
+/// destination owns its own `Coordinator` and `CoordinatorView`.
 ///
 /// The coordinator is designed to be owned by a dependency injection container
 /// or app state manager, and injected into views and view models via the `Router` protocol.
@@ -60,34 +86,54 @@ public nonisolated struct StackState<Route: Hashable>: Equatable {
 /// }
 /// ```
 @MainActor
-public final class Coordinator<Route: Hashable>: ObservableObject, Router {
-    // MARK: - Published Properties
+@Observable
+public final class Coordinator<Route: Hashable>: Router {
+    // MARK: - Observable State
 
     /// The state of the main navigation stack.
-    @Published public var mainStack: StackState<Route> { didSet { recalculateIsAtRoot() } }
+    public var mainStack: StackState<Route>
 
-    /// The state of the sheet presentation stack, if one is active.
-    @Published public var sheetStack: StackState<Route>? { didSet { recalculateIsAtRoot() } }
+    /// The single modal layer, if one is presented (A5).
+    ///
+    /// Writable so `CoordinatorView` can bind the modal's live path (A6); use
+    /// `present(_:as:)` / `dismiss()` to change what is presented.
+    public var modal: ModalState<Route>?
 
-    /// The state of the full screen cover stack, if one is active.
-    @Published public var fullScreenStack: StackState<Route>? { didSet { recalculateIsAtRoot() } }
+    // MARK: - Derived State
+
+    /// Whether the coordinator is at the root view (no pushed routes, no modal).
+    public var isAtRoot: Bool {
+        mainStack.path.isEmpty && modal == nil
+    }
+
+    /// The currently active navigation layer.
+    public var activeLayer: NavigationLayer {
+        switch modal?.style {
+        case nil: return .main
+        case .sheet: return .sheet
+        case .fullScreenCover: return .fullScreenCover
+        }
+    }
 
     /// Whether a sheet is currently presented.
-    @Published public var isSheetPresented: Bool = false { didSet { recalculateIsAtRoot() } }
+    public var isSheetPresented: Bool { modal?.style == .sheet }
 
     /// Whether a full screen cover is currently presented.
-    @Published public var isFullScreenPresented: Bool = false { didSet { recalculateIsAtRoot() } }
+    public var isFullScreenPresented: Bool { modal?.style == .fullScreenCover }
 
-    /// Whether the coordinator is at the root view (no navigation stack, no modals).
-    @Published public private(set) var isAtRoot: Bool = true
+    /// The modal stack when presented as a sheet, `nil` otherwise.
+    public var sheetStack: StackState<Route>? {
+        modal?.style == .sheet ? modal?.stack : nil
+    }
 
-    // MARK: - Internal Properties
-
-    /// Tracks the last presented modal layer to resolve priority when both are active.
-    private var lastPresentedModalLayer: NavigationLayer = .main
+    /// The modal stack when presented as a full screen cover, `nil` otherwise.
+    public var fullScreenStack: StackState<Route>? {
+        modal?.style == .fullScreenCover ? modal?.stack : nil
+    }
 
 #if DEBUG
     /// Navigation history for debugging (only in DEBUG builds).
+    @ObservationIgnored
     public private(set) var navigationHistory: [String] = []
 #endif
 
@@ -97,109 +143,75 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
     /// - Parameter root: The root route of the main navigation stack.
     public init(root: Route) {
         self.mainStack = StackState(root: root)
-        recalculateIsAtRoot()
         log("Initialized with root", payload: "\(root)")
     }
 
     // MARK: - Router Conformance
 
     public func push(_ route: Route) {
-        switch activeLayer {
-        case .main:
+        if modal != nil {
+            modal?.stack.path.append(route)
+        } else {
             mainStack.path.append(route)
-        case .sheet:
-            sheetStack?.path.append(route)
-        case .fullScreenCover:
-            fullScreenStack?.path.append(route)
         }
         log("Push →", payload: "\(route)")
     }
 
     public func pop() {
-        switch activeLayer {
-        case .main:
+        if modal != nil {
+            guard modal?.stack.path.isEmpty == false else { return }
+            modal?.stack.path.removeLast()
+        } else {
             guard !mainStack.path.isEmpty else { return }
             mainStack.path.removeLast()
-        case .sheet:
-            guard !(sheetStack?.path.isEmpty ?? true) else { return }
-            sheetStack?.path.removeLast()
-        case .fullScreenCover:
-            guard !(fullScreenStack?.path.isEmpty ?? true) else { return }
-            fullScreenStack?.path.removeLast()
         }
         log("Pop")
     }
 
     public func popToRoot() {
-        switch activeLayer {
-        case .main:
+        if modal != nil {
+            modal?.stack.path.removeAll()
+        } else {
             mainStack.path.removeAll()
-        case .sheet:
-            sheetStack?.path.removeAll()
-        case .fullScreenCover:
-            fullScreenStack?.path.removeAll()
         }
         log("PopToRoot")
     }
 
     public func popTo(_ route: Route) {
-        switch activeLayer {
-        case .main:
-            if let index = mainStack.path.lastIndex(of: route) {
-                mainStack.path.removeLast(mainStack.path.count - index - 1)
-            } else if mainStack.root == route {
-                mainStack.path.removeAll()
-            }
-        case .sheet:
-            if let index = sheetStack?.path.lastIndex(of: route) {
-                sheetStack?.path.removeLast((sheetStack?.path.count ?? 0) - index - 1)
-            } else if sheetStack?.root == route {
-                sheetStack?.path.removeAll()
-            }
-        case .fullScreenCover:
-            if let index = fullScreenStack?.path.lastIndex(of: route) {
-                fullScreenStack?.path.removeLast((fullScreenStack?.path.count ?? 0) - index - 1)
-            } else if fullScreenStack?.root == route {
-                fullScreenStack?.path.removeAll()
-            }
+        if modal != nil {
+            guard var stack = modal?.stack else { return }
+            Self.popStack(&stack, to: route)
+            modal?.stack = stack
+        } else {
+            Self.popStack(&mainStack, to: route)
         }
         log("PopTo →", payload: "\(route)")
     }
 
+    /// Presents `route` modally. If a modal is already presented, it is REPLACED —
+    /// the previous modal and everything pushed on it are discarded (A5 policy).
     public func present(_ route: Route, as style: PresentationStyle) {
-        switch style {
-        case .sheet:
-            sheetStack = StackState(root: route)
-            isSheetPresented = true
-            lastPresentedModalLayer = .sheet
-            log("Present sheet →", payload: "\(route)")
-        case .fullScreenCover:
-            fullScreenStack = StackState(root: route)
-            isFullScreenPresented = true
-            lastPresentedModalLayer = .fullScreenCover
-            log("Present fullScreenCover →", payload: "\(route)")
+        if modal != nil {
+            log("Present replaces existing modal")
         }
+        modal = ModalState(style: style, root: route)
+        log("Present \(style == .sheet ? "sheet" : "fullScreenCover") →", payload: "\(route)")
     }
 
+    /// Dismisses the active modal, discarding its stack (A7: state never goes stale).
     public func dismiss() {
-        switch activeLayer {
-        case .fullScreenCover:
-            isFullScreenPresented = false
-            fullScreenStack = nil
-        case .sheet:
-            isSheetPresented = false
-            sheetStack = nil
-        case .main:
-            break
-        }
+        guard modal != nil else { return }
+        modal = nil
         log("Dismiss modal")
     }
 
     // MARK: - Coordinator-Specific Methods
 
-    /// Sets the root route and clears all navigation stacks.
+    /// Sets a new root route, clearing the main path AND dismissing any modal —
+    /// after `setRoot` the coordinator is fully at root.
     /// - Parameter route: The new root route.
     public func setRoot(_ route: Route) {
+        modal = nil
         mainStack = StackState(root: route)
         log("Set root →", payload: "\(route)")
     }
@@ -211,20 +223,14 @@ public final class Coordinator<Route: Hashable>: ObservableObject, Router {
         log("Set stack →", payload: "\(routes)")
     }
 
-    // MARK: - Computed Properties
-
-    /// The currently active navigation layer.
-    public var activeLayer: NavigationLayer {
-        if isSheetPresented && isFullScreenPresented { return lastPresentedModalLayer }
-        if isSheetPresented { return .sheet }
-        if isFullScreenPresented { return .fullScreenCover }
-        return .main
-    }
-
     // MARK: - Private Helpers
 
-    private func recalculateIsAtRoot() {
-        isAtRoot = mainStack.path.isEmpty && !isFullScreenPresented && !isSheetPresented
+    private nonisolated static func popStack(_ stack: inout StackState<Route>, to route: Route) {
+        if let index = stack.path.lastIndex(of: route) {
+            stack.path.removeLast(stack.path.count - index - 1)
+        } else if stack.root == route {
+            stack.path.removeAll()
+        }
     }
 
     /// Logs a navigation event.

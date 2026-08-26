@@ -263,3 +263,75 @@ struct CoordinatorTests {
         #expect(coordinator.mainStack.path == [.profile, .settings, .detail(id: 1)])
     }
 }
+
+// MARK: - Fase 3.5: política de UNA capa modal (A5/A6/A7)
+
+@Suite("Coordinator — capa modal única")
+struct CoordinatorModalPolicyTests {
+    enum TestRoute: Hashable {
+        case home, profile, settings
+        case detail(id: Int)
+    }
+
+    let coordinator = Coordinator<TestRoute>(root: .home)
+
+    /// A5: presentar sobre un modal existente lo REEMPLAZA (política documentada).
+    @Test func presentOverSheetReplacesWithFullScreenCover() {
+        coordinator.present(.settings, as: .sheet)
+        coordinator.push(.profile)
+
+        coordinator.present(.detail(id: 1), as: .fullScreenCover)
+
+        #expect(coordinator.isFullScreenPresented)
+        #expect(!coordinator.isSheetPresented)
+        #expect(coordinator.sheetStack == nil)
+        #expect(coordinator.fullScreenStack?.root == .detail(id: 1))
+        #expect(coordinator.fullScreenStack?.path.isEmpty == true)
+        #expect(coordinator.activeLayer == .fullScreenCover)
+    }
+
+    @Test func presentOverFullScreenCoverReplacesWithSheet() {
+        coordinator.present(.settings, as: .fullScreenCover)
+        coordinator.present(.profile, as: .sheet)
+
+        #expect(coordinator.isSheetPresented)
+        #expect(!coordinator.isFullScreenPresented)
+        #expect(coordinator.modal?.stack.root == .profile)
+        #expect(coordinator.activeLayer == .sheet)
+    }
+
+    /// El estado nunca modela lo que SwiftUI no puede renderizar: jamás dos modales.
+    @Test func modalStateIsAlwaysSingleLayer() {
+        coordinator.present(.settings, as: .sheet)
+        coordinator.present(.profile, as: .fullScreenCover)
+        coordinator.present(.detail(id: 2), as: .sheet)
+
+        #expect(coordinator.modal != nil)
+        #expect((coordinator.isSheetPresented ? 1 : 0) + (coordinator.isFullScreenPresented ? 1 : 0) == 1)
+    }
+
+    /// A7: dismiss descarta el stack del modal — nada queda rancio para el siguiente.
+    @Test func dismissDiscardsModalPath() {
+        coordinator.present(.settings, as: .sheet)
+        coordinator.push(.profile)
+        coordinator.push(.detail(id: 3))
+
+        coordinator.dismiss()
+        #expect(coordinator.modal == nil)
+
+        coordinator.present(.settings, as: .sheet)
+        #expect(coordinator.modal?.stack.path.isEmpty == true)
+    }
+
+    /// setRoot resetea de verdad: main limpio Y modal fuera.
+    @Test func setRootDismissesModal() {
+        coordinator.push(.profile)
+        coordinator.present(.settings, as: .sheet)
+
+        coordinator.setRoot(.home)
+
+        #expect(coordinator.modal == nil)
+        #expect(coordinator.mainStack.path.isEmpty)
+        #expect(coordinator.isAtRoot)
+    }
+}
