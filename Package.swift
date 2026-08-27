@@ -6,17 +6,35 @@ import PackageDescription
 // concurrencia se introduce a propósito. El modo de lenguaje 6 ya subsume
 // DisableOutwardActorInference, GlobalActorIsolatedTypesUsability e InferSendableFromCaptures;
 // los dos upcoming de abajo son los que el modo 6 NO subsume todavía.
-let swiftSettings: [SwiftSetting] = [
+// El rigor es una propiedad de COMO SE DESARROLLA el paquete, no del artefacto que
+// se publica. Xcode compila las dependencias remotas con `-suppress-warnings` (los
+// warnings de una libreria de terceros no son accionables para quien la consume), y
+// eso choca de frente con `-warnings-as-errors`:
+//
+//     error: Conflicting options '-warnings-as-errors' and '-suppress-warnings'
+//
+// El build del consumidor no fallaba en local solo porque una ruta local se trata
+// como codigo propio. Al publicar por URL, el mismo manifiesto rompio la app que lo
+// consume — un paquete no debe imponer su nivel 0 a terceros.
+//
+// Por eso el modo estricto se activa por entorno: aqui dentro (y en el CI del propio
+// paquete) esta encendido; para quien lo consume, ausente.
+let modoEstricto = Context.environment["SWIFT_STRICT_WARNINGS"] != nil
+
+var swiftSettings: [SwiftSetting] = [
     .defaultIsolation(MainActor.self),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+]
+
+if modoEstricto {
     // Modo estricto (nivel 0): el compilador es el primer reviewer.
-    .treatAllWarnings(as: .error),
+    swiftSettings.append(.treatAllWarnings(as: .error))
     // Excepción puntual: Bundle.appStoreReceiptURL está deprecado en iOS 18 sin reemplazo
     // síncrono (ver AppEnvironment.isTestFlight). La deprecación queda visible como warning,
     // no bloquea el build.
-    .treatWarning("DeprecatedDeclaration", as: .warning)
-]
+    swiftSettings.append(.treatWarning("DeprecatedDeclaration", as: .warning))
+}
 
 let package = Package(
     name: "AppFoundation",
