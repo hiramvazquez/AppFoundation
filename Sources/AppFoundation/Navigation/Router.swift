@@ -13,8 +13,8 @@ import Foundation
 ///
 /// ## Example
 /// ```swift
-/// @MainActor
-/// class MyViewModel: ObservableObject {
+/// @Observable
+/// final class MyViewModel {
 ///     let router: any Router<AppRoute>
 ///
 ///     func navigateToDetail() {

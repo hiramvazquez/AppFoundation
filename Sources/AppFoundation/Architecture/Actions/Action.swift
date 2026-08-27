@@ -7,7 +7,8 @@ import Foundation
 ///
 /// ## Example
 /// ```swift
-/// class MyViewModel: ObservableObject {
+/// @Observable
+/// final class MyViewModel {
 ///     func performAction(onCompleted: Action) {
 ///         // Do some work...
 ///         onCompleted()
