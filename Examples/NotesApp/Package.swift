@@ -25,8 +25,8 @@ let package = Package(
     ],
     dependencies: [
         // Solo en este monorepo: `path:` al paquete hermano. Un consumidor real usa:
-        //   .package(url: "https://github.com/<org>/AppFoundation", from: "1.0.0"),
-        .package(path: "../../../AppFoundation")
+        //   .package(url: "https://github.com/hiramvazquez/AppFoundation", from: "1.0.0"),
+        .package(path: "../..")
     ],
     targets: [
         .target(
