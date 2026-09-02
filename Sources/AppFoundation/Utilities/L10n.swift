@@ -4,30 +4,30 @@ import Foundation
 ///
 /// Every user-visible default string the package ships lives in
 /// `Resources/Localizable.xcstrings` (EN + ES) and is read through here or through
-/// `Text(_, bundle: .module)` at the point of use.
+/// `Text(_, bundle: ResourceBundle.current)` at the point of use.
 nonisolated enum L10n {
     /// The package's resource bundle (exposed for tests via @testable).
-    static var bundle: Bundle { .module }
+    static var bundle: Bundle { ResourceBundle.current }
 
     /// "Error" — default error title.
-    static var error: String { String(localized: "Error", bundle: .module) }
+    static var error: String { String(localized: "Error", bundle: ResourceBundle.current) }
 
     /// "OK" — default dismiss button title.
-    static var ok: String { String(localized: "OK", bundle: .module) }
+    static var ok: String { String(localized: "OK", bundle: ResourceBundle.current) }
 
     /// "Search" — default search placeholder.
-    static var search: String { String(localized: "Search", bundle: .module) }
+    static var search: String { String(localized: "Search", bundle: ResourceBundle.current) }
 
     /// "Back" — accessibility label of the custom bar's back button.
-    static var back: String { String(localized: "Back", bundle: .module) }
+    static var back: String { String(localized: "Back", bundle: ResourceBundle.current) }
 
     /// "Close" — accessibility label of the custom bar's close button.
-    static var close: String { String(localized: "Close", bundle: .module) }
+    static var close: String { String(localized: "Close", bundle: ResourceBundle.current) }
 
     /// "Something went wrong. Please try again." — generic fallback message for errors
     /// that `DefaultErrorPresenter` can't otherwise present (not `AppErrorConvertible`,
     /// not `LocalizedError`). Never the raw `localizedDescription` of a foreign error.
     static var genericErrorMessage: String {
-        String(localized: "Something went wrong. Please try again.", bundle: .module)
+        String(localized: "Something went wrong. Please try again.", bundle: ResourceBundle.current)
     }
 }
