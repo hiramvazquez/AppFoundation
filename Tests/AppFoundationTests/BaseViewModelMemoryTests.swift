@@ -27,7 +27,8 @@ struct BaseViewModelMemoryTests {
             #expect(vm.currentError?.retry != nil)
         }()
 
-        try await waitUntil { weakVM == nil }
+        // `vm` was the only strong owner (`weakVM` doesn't count) — ARC releases it
+        // synchronously the moment the closure above returns, no polling needed.
         #expect(weakVM == nil)
     }
 
@@ -61,7 +62,8 @@ struct BaseViewModelMemoryTests {
         await task.value
 
         #expect(recorder.events == ["cancelled"])
-        try await waitUntil { weakVM == nil }
+        // The load's own `Task` body — the only other strong owner, via `guard let self`
+        // — has already returned by the time `task.value` resumes: no polling needed.
         #expect(weakVM == nil)
     }
 
@@ -78,7 +80,6 @@ struct BaseViewModelMemoryTests {
             #expect(vm.isContent)
         }()
 
-        try await waitUntil { weakVM == nil }
         #expect(weakVM == nil)
     }
 
@@ -101,7 +102,6 @@ struct BaseViewModelMemoryTests {
 
         // El retry sigue siendo válido (captura el VM DÉBILMENTE) — invocarlo tras la
         // liberación del VM es un no-op seguro, nunca un crash ni una resurrección.
-        try await waitUntil { weakVM == nil }
         #expect(weakVM == nil)
         capturedRetry?()
         #expect(weakVM == nil)

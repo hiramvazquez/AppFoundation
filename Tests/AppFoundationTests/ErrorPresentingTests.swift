@@ -81,44 +81,14 @@ struct DefaultErrorPresenterTests {
 
 // MARK: - Precedence: instance > static > default
 
-/// `.serialized`: estos tests mutan `BaseViewModel.errorPresenter`, un `static var`
-/// global — con ejecución paralela entre tests del propio suite se pisarían entre sí.
-/// Ningún otro fichero de test toca `errorPresenter`/`cancellationRecognizer`, así que
-/// serializar este suite basta (no hay contaminación cruzada con otros suites).
-@Suite("ErrorPresenting — precedencia en BaseViewModel", .serialized)
+/// Every test here injects its presenter through the initializer (DC-AF-3,
+/// `AUDITORIA-2026-09-02-doblecheck.md` §3) — none mutates the global
+/// `BaseViewModel.errorPresenter`, so nothing here can race with a parallel suite. The one
+/// test that genuinely needs to touch the static (because it's the thing being tested)
+/// lives in `ErrorPresenterStaticDefaultTests` below.
+@Suite("ErrorPresenting — precedencia por instancia en BaseViewModel")
 struct ErrorPresenterPrecedenceTests {
-    /// Restaura el estático al valor por defecto tras cada test — es un `static var`
-    /// global y otros tests (en el mismo proceso) asumen `DefaultErrorPresenter`.
-    private func resetStaticPresenter() {
-        BaseViewModel.errorPresenter = DefaultErrorPresenter()
-    }
-
-    @Test func defaultIsUsedWhenNothingIsConfigured() async throws {
-        defer { resetStaticPresenter() }
-        resetStaticPresenter()
-
-        let vm = BaseViewModel()
-        let task = vm.performLoad { _ in throw MarkedError() }
-        await task.value
-
-        #expect(vm.currentError?.message == L10n.genericErrorMessage)
-    }
-
-    @Test func staticPresenterOverridesDefault() async throws {
-        defer { resetStaticPresenter() }
-        BaseViewModel.errorPresenter = MockPresenter(name: "static-presenter")
-
-        let vm = BaseViewModel()
-        let task = vm.performLoad { _ in throw MarkedError() }
-        await task.value
-
-        #expect(vm.currentError?.title == "static-presenter")
-    }
-
-    @Test func instancePresenterOverridesStatic() async throws {
-        defer { resetStaticPresenter() }
-        BaseViewModel.errorPresenter = MockPresenter(name: "static-presenter")
-
+    @Test func instancePresenterOverridesWhateverIsStatic() async throws {
         let vm = BaseViewModel(errorPresenter: MockPresenter(name: "instance-presenter"))
         let task = vm.performLoad { _ in throw MarkedError() }
         await task.value
@@ -127,8 +97,6 @@ struct ErrorPresenterPrecedenceTests {
     }
 
     @Test func instancePresenterAppliesToActivityErrorsToo() async throws {
-        defer { resetStaticPresenter() }
-
         let vm = BaseViewModel(errorPresenter: MockPresenter(name: "instance-presenter"))
         let task = vm.performActivity(errorHandling: .alert) { _ in throw MarkedError() }
         await task.value
@@ -140,12 +108,13 @@ struct ErrorPresenterPrecedenceTests {
     /// `AppErrorConvertible` ni `LocalizedError`, produce
     /// `ScreenError(title: L10n.error, message: L10n.genericErrorMessage)` — nunca la
     /// cadena de `localizedDescription` que Foundation compone para un tipo Swift ajeno.
+    /// Exercised through an explicit instance override (`DefaultErrorPresenter()`) instead
+    /// of the static default — the presenter's behavior is identical either way, and this
+    /// keeps the assertion independent of `BaseViewModel.errorPresenter`'s current value.
     @Test func plainDomainEnumProducesGenericLocalizedScreenError() async throws {
         enum Foo: Error { case bar }
-        defer { resetStaticPresenter() }
-        resetStaticPresenter()
 
-        let vm = BaseViewModel()
+        let vm = BaseViewModel(errorPresenter: DefaultErrorPresenter())
         let task = vm.performLoad { _ in throw Foo.bar }
         await task.value
 
@@ -154,12 +123,41 @@ struct ErrorPresenterPrecedenceTests {
     }
 }
 
+/// `.serialized`: the only test left anywhere in `AppFoundation/Tests` that mutates
+/// `BaseViewModel.errorPresenter`, a global `static var` — kept because it's the one thing
+/// that genuinely needs the static: the fallback chain when nothing is injected per
+/// instance, and the static overriding the built-in default. Every other precedence test
+/// (`ErrorPresenterPrecedenceTests` above) uses per-instance injection instead, precisely
+/// to avoid this test's residual flake risk (DC-AF-3): a parallel suite reading
+/// `BaseViewModel.errorPresenter` while this one is mutating it. `.serialized` only
+/// protects this suite's own (single) test from other tests within it — it can't protect
+/// against unrelated suites running concurrently, which is why every other precedence test
+/// no longer needs the static at all.
+@Suite("ErrorPresenting — estático por defecto en BaseViewModel", .serialized)
+struct ErrorPresenterStaticDefaultTests {
+    @Test func staticErrorPresenterDefaultsAndCanBeOverridden() async throws {
+        let original = BaseViewModel.errorPresenter
+        defer { BaseViewModel.errorPresenter = original }
+
+        // Nothing injected per instance, static explicitly at its documented default.
+        BaseViewModel.errorPresenter = DefaultErrorPresenter()
+        let defaultVM = BaseViewModel()
+        let defaultTask = defaultVM.performLoad { _ in throw MarkedError() }
+        await defaultTask.value
+        #expect(defaultVM.currentError?.message == L10n.genericErrorMessage)
+
+        // The static overrides the built-in default when nothing is injected per instance.
+        BaseViewModel.errorPresenter = MockPresenter(name: "static-presenter")
+        let staticVM = BaseViewModel()
+        let staticTask = staticVM.performLoad { _ in throw MarkedError() }
+        await staticTask.value
+        #expect(staticVM.currentError?.title == "static-presenter")
+    }
+}
+
 // MARK: - CancellationRecognizing
 
-/// `.serialized`: `customCancellationRecognizerIsConsulted` mutates
-/// `BaseViewModel.cancellationRecognizer`, a global `static var` other tests in this
-/// suite read the default of.
-@Suite("CancellationRecognizing", .serialized)
+@Suite("CancellationRecognizing")
 struct CancellationRecognizingTests {
     let recognizer = DefaultCancellationRecognizer()
 
@@ -189,17 +187,16 @@ struct CancellationRecognizingTests {
         #expect(!vm.hasError)
     }
 
+    /// DC-AF-3: injected per instance, never through the `static var` — a custom
+    /// recognizer configured for one test can't leak into a suite running in parallel.
     @Test func customCancellationRecognizerIsConsulted() async {
         struct AppCancellationRecognizer: CancellationRecognizing {
             func isCancellation(_ error: any Error) -> Bool {
                 (error as? MarkedError) != nil
             }
         }
-        let previous = BaseViewModel.cancellationRecognizer
-        BaseViewModel.cancellationRecognizer = AppCancellationRecognizer()
-        defer { BaseViewModel.cancellationRecognizer = previous }
 
-        let vm = BaseViewModel()
+        let vm = BaseViewModel(cancellationRecognizer: AppCancellationRecognizer())
         let task = vm.performLoad { _ in throw MarkedError() }
         await task.value
 

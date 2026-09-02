@@ -182,7 +182,7 @@ struct BaseViewModelTests {
         viewModel.performLoad { _ in
             workWasExecuted = true
         }
-        try await waitUntil { viewModel.phase == .content }
+        await viewModel.inFlightLoad?.value
         #expect(workWasExecuted)
         #expect(viewModel.phase == .content)
     }
@@ -191,7 +191,7 @@ struct BaseViewModelTests {
         viewModel.performLoad { _ in
             throw TestError("boom")
         }
-        try await waitUntil { viewModel.hasError }
+        await viewModel.inFlightLoad?.value
         #expect(viewModel.currentError?.title == "Error")
     }
 
@@ -199,7 +199,7 @@ struct BaseViewModelTests {
         viewModel.performLoad(errorTitle: "Network Error") { _ in
             throw TestError()
         }
-        try await waitUntil { viewModel.hasError }
+        await viewModel.inFlightLoad?.value
         #expect(viewModel.currentError?.title == "Network Error")
     }
 
@@ -214,7 +214,7 @@ struct BaseViewModelTests {
         viewModel.performLoad { _ in
             throw TestError()
         }
-        try await waitUntil { viewModel.hasError }
+        await viewModel.inFlightLoad?.value
         #expect(viewModel.currentError?.retry != nil)
     }
 
@@ -254,11 +254,14 @@ nonisolated struct DomainTestError: Error, AppErrorConvertible {
 struct BaseViewModelAuditBugTests {
     let viewModel = BaseViewModel()
 
-    /// A3: la duration del banner debe producir un auto-dismiss REAL.
+    /// A3: la duration del banner debe producir un auto-dismiss REAL. `BaseViewModel`
+    /// doesn't expose the banner-dismiss `Task` (only `inFlightLoad`/`inFlightActivity`),
+    /// so this specifically exercises the default static `ContinuousClock()` for real —
+    /// one of the explicit real-clock exceptions listed in PRD-AF-06's report (DC-AF-2).
     @Test func bannerAutoDismissesAfterItsDuration() async throws {
         viewModel.showBanner(BannerState(message: "Bye", style: .info, duration: .milliseconds(50)))
         #expect(viewModel.banner != nil)
-        try await waitUntil { viewModel.banner == nil }
+        try await Task.sleep(for: .milliseconds(200))  // comfortably past the 50ms duration
         #expect(viewModel.banner == nil)
     }
 
@@ -277,7 +280,7 @@ struct BaseViewModelAuditBugTests {
         viewModel.performLoad { _ in
             throw DomainTestError()
         }
-        try await waitUntil { viewModel.hasError }
+        await viewModel.inFlightLoad?.value
         #expect(viewModel.currentError?.title == "Domain")
         #expect(viewModel.currentError?.message == "Friendly message")
     }
@@ -394,8 +397,27 @@ struct BaseViewModelCancellationTests {
         #expect(viewModel.hasError)
 
         viewModel.currentError?.retry?()
-        try await waitUntil { viewModel.phase == .content }
+        await viewModel.inFlightLoad?.value
         #expect(attempts == 2)
         #expect(viewModel.phase == .content)
+    }
+}
+
+// MARK: - Fase 3: precedencia de `clock` por instancia (DC-AF-3)
+
+@Suite("BaseViewModel — precedencia de clock por instancia")
+struct BaseViewModelClockPrecedenceTests {
+    /// Proves the injected instance `clock` — not `BaseViewModel.clock`, the static
+    /// default `ContinuousClock()` — is what `showBanner` schedules its auto-dismiss
+    /// through, without waiting on real time: the dismiss task registers a sleeper on
+    /// `testClock` if and only if the instance override actually won.
+    @Test func instanceClockOverridesStaticClockForBannerDismiss() async {
+        let testClock = TestClock()
+        let vm = BaseViewModel(clock: testClock)
+
+        vm.showBanner(BannerState(message: "Bye", style: .info, duration: .seconds(5)))
+        await testClock.waitForSleepers()
+
+        #expect(testClock.sleeperCount == 1)
     }
 }

@@ -125,11 +125,11 @@ struct IntegrationTests {
     }
 
     /// AF-05: the exact call a `ScreenContainer` content closure makes (`send(.loadData)`)
-    /// — `handle(_:)` is a fire-and-forget `Void`, so the test polls observable state
-    /// instead of awaiting a `Task`, the same way a UI test would.
+    /// — `handle(_:)` is a fire-and-forget `Void`, so the test awaits the `Task`
+    /// `loadData()` stashed in `inFlightLoad` instead of polling observable state.
     @Test func handleLoadDataReachesContentThroughTheSingleEntryPoint() async throws {
         viewModel.handle(.loadData)
-        try await waitUntil { viewModel.phase == .content }
+        await viewModel.inFlightLoad?.value
         #expect(dataService.callCount == 1)
     }
 
@@ -143,10 +143,10 @@ struct IntegrationTests {
         await viewModel.loadData().value
         #expect(viewModel.hasError)
 
-        // El retry relanza performLoad internamente (no expone su Task): waitUntil.
+        // El retry relanza performLoad internamente: el nuevo Task queda en inFlightLoad.
         dataService.shouldFail = false
         viewModel.currentError?.retry?()
-        try await waitUntil { viewModel.phase == .content }
+        await viewModel.inFlightLoad?.value
         #expect(viewModel.phase == .content)
     }
 

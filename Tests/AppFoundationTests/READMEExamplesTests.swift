@@ -170,7 +170,7 @@ struct READMEProjectFlowTests {
         // The same call `ProfileView` makes through `send(.onAppear)` — no private method
         // reached through `@testable import` (AF-05).
         viewModel.handle(.onAppear)
-        try await waitUntil { viewModel.phase == .content }
+        await viewModel.inFlightLoad?.value
 
         #expect(viewModel.profile?.name == "Hiram")
     }
@@ -189,7 +189,7 @@ struct READMEProjectFlowTests {
         let viewModel = Fixtures.ProfileViewModel(repository: LiveProfileRepository(), router: coordinator)
 
         viewModel.handle(.refresh)
-        try await waitUntil { viewModel.profile != nil }
+        await viewModel.inFlightActivity?.value
 
         #expect(viewModel.profile?.name == "Hiram")
         #expect(viewModel.banner != nil)
