@@ -613,3 +613,13 @@ naming every type in the cycle. Break it by passing one side through its initial
   compiles it into `en.lproj`/`es.lproj`; the SwiftPM CLI (`swift build`/`swift
   test`) does not run that compilation step and ships the raw catalog verbatim —
   `LocalizationTests` reads whichever of the two `Bundle.module` provides.
+- If a stale `.build` from before this package moved to `.xcstrings` is still
+  around, `Bundle.module` can find leftover compiled `en.lproj`/`es.lproj`
+  directories from that earlier build sitting next to the catalog's own
+  resource bundle — a mismatch that only shows up as an unexpected string
+  lookup, never a compile error. A clean build (`rm -rf .build` or Xcode's
+  "Clean Build Folder") resolves it; it is not a bug in the catalog itself.
+
+## License
+
+MIT — see [LICENSE](../LICENSE) at the repository root.
