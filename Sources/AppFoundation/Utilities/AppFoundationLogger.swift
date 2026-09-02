@@ -14,7 +14,4 @@ nonisolated enum AppFoundationLogger {
 
     /// Dependency-injection registration/resolution diagnostics from `Container`.
     static let di = Logger(subsystem: subsystem, category: "DI")
-
-    /// Runtime environment diagnostics from `AppEnvironment`.
-    static let environment = Logger(subsystem: subsystem, category: "Environment")
 }

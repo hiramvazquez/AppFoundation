@@ -27,12 +27,13 @@ Requires **Swift 6.2** (tools), **iOS 17 / macOS 14**. The package builds with
   - `CustomNavigationBar`
   - `NavigationBarItem` (stable identity + semantic roles)
 - **Utilities**
-  - `Debouncer` / `Throttler` (injectable `Clock`)
+  - `Debouncer` / `Throttler` (`@MainActor` classes, injectable `any Clock<Duration>`)
   - `WrappedError` (`AppErrorConvertible`)
-  - `AppEnvironment`
+  - `AppEnvironment` (namespace `enum`)
 
-All user-visible default strings ship localized (EN + ES); visible-copy parameters
-accept `LocalizedStringResource`, so string literals localize through your app's catalog.
+All user-visible default strings ship localized (EN + ES) through
+`Resources/Localizable.xcstrings`, a String Catalog; visible-copy parameters accept
+`LocalizedStringResource`, so string literals localize through your app's catalog.
 
 ## Design rules
 
@@ -458,5 +459,17 @@ naming every type in the cycle. Break it by passing one side through its initial
 - `ScreenContainer` is the public shell type.
 - `performLoad(...)` / `performActivity(...)` are the single async entry points
   (the legacy `load(...)` wrapper is gone).
-- `Debouncer` and `Throttler` accept an injectable `Clock` for deterministic tests;
-  the convenience initializers default to `ContinuousClock`.
+- `Debouncer` and `Throttler` are `@MainActor final class`, not actors (audit AF-19):
+  their state is only ever touched by the caller, so `debounce`/`throttle` run
+  synchronously on the main actor — no `Task`, no `await` at the call site for
+  `debounce`, no `@Sendable` operation. The clock is `any Clock<Duration>` and
+  defaults to `ContinuousClock`; tests inject a manual clock for deterministic,
+  sleep-free assertions. `deinit` cancels any in-flight work.
+- `AppEnvironment` is a namespace `enum` (no state to instantiate) and does not
+  offer an "is this running under tests or previews" flag (audit AF-20) — inject
+  the behaviour you want in tests instead of asking the environment.
+- Default strings live in `Resources/Localizable.xcstrings` (a String Catalog, EN +
+  ES) instead of `.lproj`/`.strings` files (audit AF-21). Xcode's build system
+  compiles it into `en.lproj`/`es.lproj`; the SwiftPM CLI (`swift build`/`swift
+  test`) does not run that compilation step and ships the raw catalog verbatim —
+  `LocalizationTests` reads whichever of the two `Bundle.module` provides.

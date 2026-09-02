@@ -1,13 +1,17 @@
 import Foundation
-import os
 #if canImport(UIKit)
 import UIKit
 #endif
 
 /// Provides information about the current runtime environment.
 ///
-/// Use this struct to detect the environment your app is running in,
-/// get app metadata, and conditionally enable features based on build type.
+/// A namespace (`enum` with no cases — there is no state to instantiate): build
+/// type, distribution channel, app metadata, device and system facts.
+///
+/// What it deliberately does NOT offer (audit AF-20): a "running under tests or
+/// previews" flag. Detecting the test runner by class name or the previews
+/// environment variable is a heuristic that production code should never branch
+/// on; inject the behaviour you want in tests instead of asking the environment.
 ///
 /// ## Example - Conditional Logging
 /// ```swift
@@ -22,21 +26,9 @@ import UIKit
 ///     ? "https://api.myapp.com"
 ///     : "https://staging-api.myapp.com"
 /// ```
-public nonisolated struct AppEnvironment {
+public nonisolated enum AppEnvironment {
 
     // MARK: - Environment Detection
-
-    /// Detects if the app is running in test or preview mode.
-    ///
-    /// Returns `true` when:
-    /// - Running unit/UI tests (XCTestCase detected)
-    /// - Running in Xcode Previews
-    public static var isTestOrPreview: Bool {
-        if NSClassFromString("XCTestCase") != nil {
-            return true
-        }
-        return ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
-    }
 
     /// Detects if running under TestFlight.
     ///
@@ -175,11 +167,11 @@ public nonisolated struct AppEnvironment {
         ProcessInfo.processInfo.physicalMemory
     }
 
-    /// Amount of physical memory formatted as string (e.g., "8 GB").
+    /// Amount of physical memory formatted for display (e.g., "8 GB"), localized.
+    ///
+    /// Equivalent to `physicalMemory.formatted(.byteCount(style: .memory))`.
     public static var physicalMemoryFormatted: String {
-        let bytes = Double(physicalMemory)
-        let gigabytes = bytes / 1_073_741_824 // 1024^3
-        return String(format: "%.0f GB", gigabytes)
+        physicalMemory.formatted(.byteCount(style: .memory))
     }
 
     /// Current locale identifier (e.g., "en_US").
@@ -196,45 +188,4 @@ public nonisolated struct AppEnvironment {
     public static var preferredLanguages: [String] {
         Locale.preferredLanguages
     }
-
-    // MARK: - Debug Information
-
-    #if DEBUG
-    /// Returns a dictionary with all environment information.
-    ///
-    /// Useful for debugging and logging.
-    @MainActor
-    public static var debugInfo: [String: Any] {
-        var info: [String: Any] = [
-            "appName": appName,
-            "appVersion": appVersion,
-            "buildNumber": buildNumber,
-            "bundleIdentifier": bundleIdentifier,
-            "isDebug": isDebug,
-            "isTestFlight": isTestFlight,
-            "isSimulator": isSimulator,
-            "processorCount": processorCount,
-            "physicalMemory": physicalMemoryFormatted,
-            "locale": localeIdentifier,
-            "timezone": timezoneIdentifier
-        ]
-
-        #if canImport(UIKit)
-        info["deviceModel"] = deviceModel
-        info["systemName"] = systemName
-        info["systemVersion"] = systemVersion
-        #endif
-
-        return info
-    }
-
-    /// Prints all environment information to the console.
-    @MainActor
-    public static func printDebugInfo() {
-        let lines = debugInfo.sorted(by: { $0.key < $1.key })
-            .map { "  \($0.key): \($0.value)" }
-            .joined(separator: "\n")
-        AppFoundationLogger.environment.info("App Environment:\n\(lines, privacy: .private)")
-    }
-    #endif
 }
