@@ -166,7 +166,8 @@ let package = Package(
             capability: .command(
                 intent: .custom(
                     verb: "archlint",
-                    description: "Analiza el paquete con las reglas de arquitectura View → ViewModel → Logic → Services/Stores."
+                    description:
+                        "Analiza el paquete con las reglas de arquitectura View → ViewModel → Logic → Services/Stores."
                 )
             ),
             dependencies: ["archlint"],
@@ -181,10 +182,13 @@ let package = Package(
             capability: .command(
                 intent: .custom(
                     verb: "generate-feature",
-                    description: "Genera el cascarón de un feature (View → ViewModel → Logic → Services/Stores) desde las plantillas de AppFoundation."
+                    description:
+                        "Genera el cascarón de un feature (View → ViewModel → Logic → Services/Stores) desde las plantillas de AppFoundation."
                 ),
                 permissions: [
-                    .writeToPackageDirectory(reason: "Escribe los ficheros generados del feature bajo Sources/ y Tests/.")
+                    .writeToPackageDirectory(
+                        reason: "Escribe los ficheros generados del feature bajo Sources/ y Tests/."
+                    )
                 ]
             ),
             path: "Plugins/GenerateFeature"
@@ -196,10 +200,14 @@ let package = Package(
             capability: .command(
                 intent: .custom(
                     verb: "archinit",
-                    description: "Inicializa un proyecto consumidor: .archlint.yml, Features/, AGENTS.md y el skill de Claude Code."
+                    description:
+                        "Inicializa un proyecto consumidor: .archlint.yml, Features/, AGENTS.md y el skill de Claude Code."
                 ),
                 permissions: [
-                    .writeToPackageDirectory(reason: "Crea .archlint.yml, Features/, AGENTS.md y .claude/skills/feature.md en la raíz del proyecto.")
+                    .writeToPackageDirectory(
+                        reason:
+                            "Crea .archlint.yml, Features/, AGENTS.md y .claude/skills/feature.md en la raíz del proyecto."
+                    )
                 ]
             ),
             path: "Plugins/ArchInit"
