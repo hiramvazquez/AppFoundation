@@ -20,6 +20,25 @@ import SwiftUI
 /// `NavigationBarConfiguration`) — Swift requires the associated/stored type to be at
 /// least as visible as the declaration that holds it. It is still a plain `View`: nothing
 /// about `AnyView` leaks into any public signature.
+///
+/// ## The four remaining uses (DC-AF-5)
+///
+/// All four live in `NavigationBarItem.swift`, and all four are storage for the *custom*
+/// navigation bar — an opt-in surface (`ScreenChrome.custom`, AF-12/AF-13). With `.native`
+/// the default, most screens never touch any of these:
+///
+/// - `NavigationBarItem.NavigationBarItemContent.view`: a caller-supplied bar item view —
+///   items of different concrete `View` types share one `[NavigationBarItem]` array.
+/// - `NavigationBarTitle.custom`: a caller-supplied title view (logo, inline search field, …).
+/// - `NavigationBarConfiguration.accessoryView`: an optional view below the bar (same slot
+///   as `searchBar`, which needs no erasure because it isn't a `View` — see
+///   `SearchBarConfiguration`).
+/// - `NavigationBarConfiguration.customContent`: a full-width view replacing the entire
+///   left/title/right layout.
+///
+/// Each stores a heterogeneous, caller-determined `View` in a property/enum case whose
+/// declared type must be fixed — the same structural reason documented above. Since
+/// `.custom` is opt-in, this erasure never reaches a screen that sticks with `.native`.
 public struct ErasedView: View {
     private let box: AnyView
 
