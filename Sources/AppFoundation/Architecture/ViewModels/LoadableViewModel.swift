@@ -113,6 +113,7 @@ extension LoadableViewModel {
                 work
             )
         }
+        setLoading(style)
         await _runLoad(style: style, errorTitle: errorTitle, successTransition: successTransition, retry: retry) {
             try await work(self)
         }
@@ -125,6 +126,7 @@ extension LoadableViewModel {
         errorHandling: BaseViewModel.ActivityErrorHandling = .banner,
         _ work: @escaping @MainActor (Self) async throws -> Void
     ) async {
+        startActivity(style)
         await _runActivity(style: style, errorHandling: errorHandling) {
             try await work(self)
         }
