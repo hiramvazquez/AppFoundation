@@ -3,7 +3,7 @@ import SwiftUI
 
 /// A lightweight container view that displays content based on ViewPhase without navigation.
 ///
-/// `PhaseView` provides phase-based content switching for screens without navigation bars.
+/// `PhaseView` provides phase-based content switching for screens without navigation chrome.
 /// It handles the four main phases:
 /// - **idle**: Initial state, displays content normally
 /// - **loading**: Shows loading indicator
@@ -11,31 +11,33 @@ import SwiftUI
 /// - **empty**: Shows empty state view
 /// - **error**: Shows error view with optional retry
 ///
-/// This is a simpler alternative to `ScreenContainer` for screens that don't need custom navigation.
+/// This is a simpler alternative to `ScreenContainer` for screens that don't need
+/// navigation chrome at all (`ScreenContainer` with `chrome: .native` is usually the
+/// better fit once a screen sits in a `NavigationStack`).
+///
+/// Loading/error/empty appearances come from `Environment` (`LoadingViewStyle`,
+/// `ErrorViewStyle`, `EmptyViewStyle` — the same styles `ScreenContainer` reads), installed
+/// with `.loadingViewStyle(_:)`/`.errorViewStyle(_:)`/`.emptyViewStyle(_:)`. There is no
+/// per-instance builder closure to override them (AF-15): a style is composable and
+/// type-erasure-free at the call site, unlike a closure stored on the view.
 ///
 /// ## Example
 /// ```swift
-/// @StateObject var viewModel = MyViewModel()
+/// @State var phase: ViewPhase = .idle
 ///
-/// PhaseView(phase: $viewModel.phase) {
+/// PhaseView(phase: $phase) {
 ///     ContentView()
 /// }
-/// .loadingView {
-///     MyCustomLoadingView()
-/// }
-/// .errorView { error in
-///     MyCustomErrorView(error: error)
-/// }
+/// .errorViewStyle(MyErrorStyle())
 /// ```
 public struct PhaseView<Content: View>: View {
     @Binding private var phase: ViewPhase
     private let content: () -> Content
     private let backgroundColor: Color
 
-    // Custom overlay builders
-    private var loadingViewBuilder: (() -> AnyView)?
-    private var errorViewBuilder: ((ScreenError) -> AnyView)?
-    private var emptyViewBuilder: (() -> AnyView)?
+    @Environment(\.loadingViewStyle) private var loadingStyle
+    @Environment(\.errorViewStyle) private var errorStyle
+    @Environment(\.emptyViewStyle) private var emptyStyle
 
     /// Creates a phase view with bindings to view model state.
     ///
@@ -71,18 +73,10 @@ public struct PhaseView<Content: View>: View {
                 loadingOverlay(style: style)
 
             case .empty:
-                if let builder = emptyViewBuilder {
-                    builder()
-                } else {
-                    DefaultEmptyView()
-                }
+                emptyStyle.makeBody(configuration: EmptyConfiguration())
 
             case .error(let error):
-                if let builder = errorViewBuilder {
-                    builder(error)
-                } else {
-                    DefaultErrorView(error: error)
-                }
+                errorStyle.makeBody(configuration: ErrorConfiguration(error: error))
             }
         }
         .animation(.default, value: phase)
@@ -92,97 +86,61 @@ public struct PhaseView<Content: View>: View {
     /// inline indicator on top (A2 is impossible here by construction).
     @ViewBuilder
     private func loadingOverlay(style: ActivityStyle) -> some View {
+        let loadingBody = loadingStyle.makeBody(configuration: LoadingConfiguration(style: style))
         switch style {
         case .fullScreen, .overlay:
-            if let builder = loadingViewBuilder {
-                builder()
-            } else {
-                DefaultLoadingView()
-            }
+            loadingBody
         case .inline:
             VStack {
-                if let builder = loadingViewBuilder {
-                    builder()
-                } else {
-                    DefaultInlineActivityView()
-                }
+                loadingBody
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-
-    // MARK: - Custom View Builders
-
-    /// Sets a custom loading view.
-    public func loadingView<V: View>(@ViewBuilder builder: @escaping () -> V) -> Self {
-        var copy = self
-        copy.loadingViewBuilder = { AnyView(builder()) }
-        return copy
-    }
-
-    /// Sets a custom error view.
-    public func errorView<V: View>(@ViewBuilder builder: @escaping (ScreenError) -> V) -> Self {
-        var copy = self
-        copy.errorViewBuilder = { AnyView(builder($0)) }
-        return copy
-    }
-
-    /// Sets a custom empty state view.
-    public func emptyView<V: View>(@ViewBuilder builder: @escaping () -> V) -> Self {
-        var copy = self
-        copy.emptyViewBuilder = { AnyView(builder()) }
-        return copy
     }
 }
 
 // MARK: - Preview
 
 #if DEBUG
-struct PhaseView_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            // Content state
-            PhaseView(phase: .constant(.content)) {
-                ScrollView {
-                    VStack {
-                        ForEach(0..<20, id: \.self) { i in
-                            Text("Item \(i)")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.platformSecondaryBackground)
-                        }
-                    }
+#Preview("PhaseView · content") {
+    PhaseView(phase: .constant(.content)) {
+        ScrollView {
+            VStack {
+                ForEach(0..<20, id: \.self) { i in
+                    Text("Item \(i)")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.platformSecondaryBackground)
                 }
             }
-            .previewDisplayName("Content")
-
-            // Loading state
-            PhaseView(phase: .constant(.loading(.fullScreen))) {
-                Text("Hidden content")
-            }
-            .previewDisplayName("Loading")
-
-            // Empty state
-            PhaseView(phase: .constant(.empty)) {
-                Text("Hidden content")
-            }
-            .previewDisplayName("Empty")
-
-            // Error state
-            PhaseView(
-                phase: .constant(
-                    .error(ScreenError(
-                        title: "Network Error",
-                        message: "Unable to connect. Please try again.",
-                        retry: {}
-                    ))
-                )
-            ) {
-                Text("Hidden content")
-            }
-            .previewDisplayName("Error")
         }
+    }
+}
+
+#Preview("PhaseView · loading") {
+    PhaseView(phase: .constant(.loading(.fullScreen))) {
+        Text("Hidden content")
+    }
+}
+
+#Preview("PhaseView · empty") {
+    PhaseView(phase: .constant(.empty)) {
+        Text("Hidden content")
+    }
+}
+
+#Preview("PhaseView · error") {
+    PhaseView(
+        phase: .constant(
+            .error(ScreenError(
+                title: "Network Error",
+                message: "Unable to connect. Please try again.",
+                retry: {}
+            ))
+        )
+    ) {
+        Text("Hidden content")
     }
 }
 #endif
