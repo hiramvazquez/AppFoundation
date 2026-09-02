@@ -4,7 +4,7 @@ import PackageDescription
 // LoginApp — la variante "solo API" (`ARQUITECTURA-KIT-2026-09-02.md` §1, tabla de
 // variantes): View → ViewModel → Logic → Service, sin persistencia local. Sustituye a
 // `Examples/IntegrationExample` (`git mv`, PRD-AF-07) — sigue siendo la prueba de que
-// AppFoundation y CoreNetworking se adoptan JUNTOS sin fricción (PRD-X-02), ahora con la
+// AppFoundation y CoreNetworking se adoptan JUNTOS sin fricción, ahora con la
 // arquitectura completa de capas en vez de un único `BaseViewModel` hablando con
 // `APIServiceProtocol` directamente.
 //

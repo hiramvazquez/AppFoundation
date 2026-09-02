@@ -13,18 +13,19 @@ Swift 6.2+ (swift-tools 6.2) · iOS 17+ / macOS 14+ · sin dependencias externas
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/hiram0816/spm-pro.git", from: "1.0.0")
+    // Cada paquete se publica en su propio repositorio (subtree split); sustituye la URL por la real.
+    .package(url: "https://github.com/hiram0816/AppFoundation.git", from: "1.0.0")
 ],
 targets: [
     .target(
         name: "MiApp",
-        dependencies: [.product(name: "AppFoundation", package: "spm-pro")]
+        dependencies: [.product(name: "AppFoundation", package: "AppFoundation")]
     ),
     .testTarget(
         name: "MiAppTests",
         dependencies: [
             "MiApp",
-            .product(name: "AppFoundationTestSupport", package: "spm-pro")
+            .product(name: "AppFoundationTestSupport", package: "AppFoundation")
         ]
     )
 ]
@@ -90,4 +91,4 @@ segundos: `swift package --allow-writing-to-package-directory generate-feature L
 
 ## Licencia
 
-MIT — ver [LICENSE](../LICENSE) en la raíz del repositorio.
+MIT — ver [LICENSE](LICENSE).

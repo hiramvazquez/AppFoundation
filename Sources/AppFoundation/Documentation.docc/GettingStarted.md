@@ -30,19 +30,20 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [.library(name: "MiApp", targets: ["MiApp"])],
     dependencies: [
-        .package(url: "https://github.com/hiram0816/spm-pro.git", from: "1.0.0")
+        // Cada paquete se publica en su propio repositorio (subtree split); sustituye la URL por la real.
+    .package(url: "https://github.com/hiram0816/AppFoundation.git", from: "1.0.0")
     ],
     targets: [
         .target(
             name: "MiApp",
-            dependencies: [.product(name: "AppFoundation", package: "spm-pro")],
+            dependencies: [.product(name: "AppFoundation", package: "AppFoundation")],
             swiftSettings: swiftSettings
         ),
         .testTarget(
             name: "MiAppTests",
             dependencies: [
                 "MiApp",
-                .product(name: "AppFoundationTestSupport", package: "spm-pro")
+                .product(name: "AppFoundationTestSupport", package: "AppFoundation")
             ],
             swiftSettings: swiftSettings
         )
