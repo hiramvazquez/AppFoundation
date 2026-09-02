@@ -93,6 +93,10 @@ import AppFoundation
 
 ### 1. Register dependencies
 
+`Container` is the composition root: the one place that knows concrete types. Register
+once, at startup, on the main actor (the container is `@MainActor`, like everything that
+uses it).
+
 ```swift
 import AppFoundation
 
@@ -106,23 +110,44 @@ final class LiveProfileRepository: ProfileRepository {
     }
 }
 
+final class ProfileSyncService {
+    let repository: ProfileRepository
+    init(repository: ProfileRepository) { self.repository = repository }
+}
+
 struct ProfileModule: DependencyModule {
     func register(in container: Container) {
-        container.register(LiveProfileRepository() as ProfileRepository, lifecycle: .singleton)
+        container.register(ProfileRepository.self) { _ in LiveProfileRepository() }
+        // The factory receives the container it was registered in: resolve dependencies
+        // from it, never from a global.
+        container.register(ProfileSyncService.self) { c in
+            ProfileSyncService(repository: c.resolve())
+        }
     }
 }
 
-Container.shared.register(modules: [
-    ProfileModule()
-])
+@main
+struct MyApp: App {
+    init() {
+        Container.shared.register(modules: [ProfileModule()])
+    }
+
+    var body: some Scene {
+        WindowGroup { RootView() }
+    }
+}
 ```
+
+`register(_:lifecycle:factory:)` defaults to `.singleton` (one instance per container,
+built lazily); `.transient` builds one per resolution. An object you already hold goes in
+with `register(instance:as:)`.
 
 `Container.shared` is a `static let` and can never be swapped. Tests and previews use
 child containers, which shadow the parent without mutating it:
 
 ```swift
 let container = Container(parent: .shared)
-container.register(MockProfileRepository(), lifecycle: .singleton, as: ProfileRepository.self)
+container.register(instance: MockProfileRepository(), as: ProfileRepository.self)
 ```
 
 ### 2. Define routes
@@ -316,29 +341,117 @@ await viewModel.performLoad { try await repository.fetch() }.value
 #expect(viewModel.phase == .content)
 ```
 
-## Dependency injection guidance
+## Dependency injection
 
-Preferred:
+`Container` is `@MainActor`. There is no mutex and no unchecked `Sendable` conformance:
+the compiler guarantees that factories for main-actor types run on the main actor, and `nonisolated`
+code never resolves — it receives its dependencies through `init`. Calling `resolve()`
+from a `nonisolated` context is a compile error, not a documented convention.
+
+### Composition root
+
+Registration happens once, at startup, in `Container.shared` (see §1). Feature modules
+register abstractions and their live implementations; nothing else in the app calls
+`register`.
+
+### One child container per flow
+
+A checkout, a session, a wizard: dependencies that must outlive a screen but not the app
+are `.singleton` in a **child container owned by the flow**. No named scope to create or
+destroy — the flow ends when its container is released.
 
 ```swift
-init(repository: ProfileRepository, router: any Router<AppRoute>) {
-    self.repository = repository
-    self.router = router
-    super.init()
+final class CheckoutCart {
+    var items: [String] = []
+}
+
+final class CheckoutViewModel: BaseViewModel {
+    let cart: CheckoutCart
+    let repository: ProfileRepository
+
+    init(cart: CheckoutCart, repository: ProfileRepository) {
+        self.cart = cart
+        self.repository = repository
+        super.init()
+    }
+}
+
+func makeCheckoutContainer(parent: Container = .shared) -> Container {
+    let checkout = Container(parent: parent)
+    // Shared by every screen of the flow.
+    checkout.register(CheckoutCart.self) { _ in CheckoutCart() }
+    // One per screen; `repository` falls back to the parent.
+    checkout.register(CheckoutViewModel.self, lifecycle: .transient) { c in
+        CheckoutViewModel(cart: c.resolve(), repository: c.resolve())
+    }
+    return checkout
 }
 ```
 
-Use `@Inject` only when constructor injection would create more friction than value:
+A factory registered in a parent resolves from the parent, even when resolved through a
+child: overriding `ProfileRepository` in a test child never rebuilds a `Container.shared`
+singleton with the mock.
+
+### Which mechanism, when
+
+| You are building | Use | Why |
+|---|---|---|
+| View models, services, repositories | Constructor injection (`init`) | The dependency is in the signature; the compiler checks it; tests pass a double. |
+| Views | `Environment` (`@Entry` on `EnvironmentValues`) | Scoped to the view tree, overridable per subtree, understood by previews; a `struct View` stays a value. |
+| Leaf classes where threading a dependency costs more than it clarifies (an analytics adapter) | `@Inject` | Last resort: hides the dependency and traps at runtime if it is not registered. |
+
+`@Inject` is a class: inside a `struct View` it keeps its cached value across copies
+without being a `DynamicProperty`, so SwiftUI cannot see it. Views read their
+dependencies from the environment and the composition root injects them at the top:
+
+```swift
+protocol AnalyticsService {
+    func log(_ event: String)
+}
+
+struct NoopAnalytics: AnalyticsService {
+    func log(_ event: String) {}
+}
+
+extension EnvironmentValues {
+    @Entry var analytics: AnalyticsService = NoopAnalytics()
+}
+
+struct ProfileView: View {
+    @Environment(\.analytics) private var analytics
+
+    var body: some View {
+        Text("Profile").onAppear { analytics.log("profile_shown") }
+    }
+}
+
+// At the root, from the composition root:
+struct RootView: View {
+    var body: some View {
+        ProfileView().environment(\.analytics, Container.shared.resolve())
+    }
+}
+```
+
+`@Inject`, kept for leaf classes only:
 
 ```swift
 final class AnalyticsAdapter {
     @Inject private var analytics: AnalyticsService
+
+    func track(_ event: String) {
+        analytics.log(event)
+    }
 }
 ```
 
 `@Inject` is `@MainActor` and requires the type to be registered (it traps otherwise —
-absence is not modelled). For `nonisolated` code, call `Container.shared.resolve()` /
-`tryResolve()` explicitly.
+absence is not modelled; use `Container.tryResolve` when it is).
+
+### Cycles
+
+A factory that resolves the type it is building — A → B → A — traps with a message
+naming every type in the cycle. Break it by passing one side through its initializer.
 
 ## Notes
 
