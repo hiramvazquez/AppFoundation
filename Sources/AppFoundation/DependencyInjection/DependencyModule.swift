@@ -4,18 +4,17 @@ import Foundation
 ///
 /// Implement `DependencyModule` to create reusable bundles of related dependencies.
 /// Each module encapsulates the registration logic for a specific feature or layer;
-/// `Container.register(modules:)` assembles them in order.
+/// `Container.register(modules:)` assembles them in order at the composition root.
 ///
-/// Modules are `@MainActor`: registration happens at app startup on the main actor,
-/// which is also what makes factories for main-actor types valid (see the concurrency
-/// contract in `Container`).
+/// Modules are `@MainActor`, like `Container`: registration happens at app startup on
+/// the main actor, and the factories they register run there too.
 ///
 /// ## Example
 /// ```swift
-/// final class NetworkModule: DependencyModule {
+/// struct NetworkModule: DependencyModule {
 ///     func register(in container: Container) {
-///         container.register(APIClient(), lifecycle: .singleton)
-///         container.register(NetworkLogger(), lifecycle: .singleton)
+///         container.register(APIClient.self) { _ in APIClient() }
+///         container.register(NetworkLogger.self) { c in NetworkLogger(client: c.resolve()) }
 ///     }
 /// }
 ///
@@ -38,7 +37,6 @@ public extension Container {
     /// entry point.
     ///
     /// - Parameter modules: Modules to register, applied in array order.
-    @MainActor
     func register(modules: [DependencyModule]) {
         modules.forEach { $0.register(in: self) }
     }

@@ -2,24 +2,18 @@ import Foundation
 
 /// Determines how a dependency is stored and resolved.
 ///
-/// ## Cases
-/// - `singleton`: Single shared instance for the app lifetime. Expensive-to-create objects should be singletons.
-/// - `transient`: New instance created on every resolution. Stateful objects (ViewModels) are typically transient.
-/// - `scoped(key:)`: Shared instance within a named scope. Useful for feature flows or user sessions.
+/// There is no "scoped" lifecycle: a dependency shared by one flow (checkout, session) is a
+/// `.singleton` registered in a **child container** owned by that flow — see
+/// `Container.init(parent:)`. The flow ends when its container is released.
 public nonisolated enum Lifecycle: Equatable, Sendable {
-    /// Single shared instance for the entire app lifetime.
+    /// One instance per container, created lazily on first resolution.
     ///
-    /// Use for stateless services like networking, logging, database, or app-level preferences.
+    /// In `Container.shared` that means the app lifetime: networking, logging, storage,
+    /// app-level preferences. In a child container it means the lifetime of that flow.
     case singleton
 
     /// New instance created on every resolution.
     ///
-    /// Use for stateful objects like ViewModels that should not be shared between screens.
+    /// Use for stateful objects like view models that must not be shared between screens.
     case transient
-
-    /// Shared instance within a named scope.
-    ///
-    /// Use for dependencies that should outlive a single screen but not the entire app.
-    /// Common uses: checkout flows, user sessions, feature module state.
-    case scoped(key: String)
 }

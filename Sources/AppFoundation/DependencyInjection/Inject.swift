@@ -1,17 +1,27 @@
 import Foundation
 
-/// Property wrapper that lazily resolves a dependency from a container.
+/// Property wrapper that lazily resolves a dependency from a container. **Last resort.**
 ///
-/// `@Inject` resolves on first access and caches the result. Prefer constructor
-/// injection; use `@Inject` only when constructor injection is impractical
-/// (e.g. in Views or leaf objects).
+/// `@Inject` is a service locator: it hides the dependency from the initializer, and it
+/// traps at runtime — not at compile time — when the type is not registered. Keep it for
+/// **leaf classes** (an analytics adapter, a logger wrapper) where threading the
+/// dependency through every initializer costs more than it clarifies. Everything else
+/// takes its dependencies through `init`.
 ///
-/// ## Isolation (decided under MainActor-by-default)
+/// ## Why not in Views
 ///
-/// `Inject` is `@MainActor`: views, view models, and most app code live there, and the
-/// cached `value` needs isolation anyway. For `nonisolated` types that need a dependency
-/// off the main actor, call `Container.resolve()` explicitly — the container itself is
-/// thread-safe for `Sendable` types.
+/// `Inject` is a class. Inside a `struct View` it is copied by reference and keeps its
+/// cached value across view copies without being a `DynamicProperty` — SwiftUI cannot
+/// see it and will not update the view when it changes. Views get their dependencies from
+/// the native mechanism, `Environment` (`@Entry` on `EnvironmentValues`), which is
+/// scoped to the view tree, overridable per subtree and understood by previews. See the
+/// README's "Dependency injection" section for the side-by-side table.
+///
+/// ## Isolation
+///
+/// `Inject` is `@MainActor`, like `Container`: resolution is synchronous and happens
+/// where the wrapped object lives. A `nonisolated` type does not use `@Inject`; it
+/// receives its dependency already resolved through its initializer.
 ///
 /// ## Contract
 ///
@@ -22,11 +32,11 @@ import Foundation
 ///
 /// ## Example
 /// ```swift
-/// final class ProfileViewModel: BaseViewModel {
+/// final class AnalyticsAdapter {
 ///     @Inject private var analytics: AnalyticsService
 ///
-///     func trackEvent() {
-///         analytics.log("event_name")
+///     func track(_ event: String) {
+///         analytics.log(event)
 ///     }
 /// }
 /// ```
@@ -34,7 +44,7 @@ import Foundation
 /// ## Example - Overriding in Tests
 /// ```swift
 /// let container = Container(parent: .shared)
-/// container.register(MockAnalytics(), lifecycle: .singleton, as: AnalyticsService.self)
+/// container.register(instance: MockAnalytics(), as: AnalyticsService.self)
 /// // Inject the container into the system under test:
 /// @Inject(container: container) var analytics: AnalyticsService
 /// ```
