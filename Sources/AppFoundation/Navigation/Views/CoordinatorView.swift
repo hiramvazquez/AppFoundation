@@ -10,6 +10,10 @@ import SwiftUI
 /// state (A6) — nothing is captured from a stale snapshot — and an interactive dismissal
 /// (swipe-down) clears the modal state through `dismiss()` so it never goes stale (A7).
 ///
+/// The native navigation bar stays visible: screens own their chrome through
+/// `navigationTitle`, `toolbar` and `searchable`, and opt out of it explicitly with
+/// `ScreenContainer(chrome: .custom(...))`.
+///
 /// On macOS, full screen covers are presented as sheets (there is no
 /// `fullScreenCover` on macOS; a sheet is window-modal there anyway).
 ///
@@ -72,17 +76,14 @@ public struct CoordinatorView<Route: Hashable, Content: View>: View {
 
     // MARK: - Private Views
 
+    /// Native chrome by default (AF-12/AF-13): the coordinator never hides the
+    /// navigation bar. Each screen decides — `navigationTitle`/`toolbar`/`searchable`
+    /// on the native bar, or `ScreenContainer(chrome: .custom(...))` to opt out.
     @ViewBuilder
     private func routeView(_ route: Route) -> some View {
         content(route)
-            #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
-            #endif
             .navigationDestination(for: Route.self) { route in
                 content(route)
-                    #if os(iOS)
-                    .toolbar(.hidden, for: .navigationBar)
-                    #endif
             }
     }
 
