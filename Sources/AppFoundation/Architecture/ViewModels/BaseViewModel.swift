@@ -63,17 +63,44 @@ open class BaseViewModel {
     /// Current banner/toast notification to display, if any.
     public var banner: BannerState? = nil
 
-    /// The in-flight primary load, if any. Superseded loads are cancelled.
-    @ObservationIgnored private var loadTask: Task<Void, Never>?
+    /// The in-flight primary load `Task`, if any — read-only from outside the class.
+    /// Starting a new load cancels and replaces this; it is set back to `nil` once the
+    /// load finishes (success, failure, or cancellation), unless a newer load has already
+    /// replaced it by then.
+    ///
+    /// Await it in tests instead of polling `phase`/`hasError` — including after
+    /// `handle(_:)`, which returns `Void` and can't hand back the `Task` itself:
+    ///
+    /// ```swift
+    /// viewModel.handle(.load)
+    /// await viewModel.inFlightLoad?.value
+    /// #expect(viewModel.phase == .content)
+    /// ```
+    @ObservationIgnored public private(set) var inFlightLoad: Task<Void, Never>?
 
-    /// The in-flight secondary activity, if any. Superseded activities are cancelled.
-    @ObservationIgnored private var activityTask: Task<Void, Never>?
+    /// The in-flight secondary activity `Task`, if any. Same contract as `inFlightLoad`,
+    /// for `performActivity`/`activity(_:)` instead of `performLoad`/`load(_:)`.
+    @ObservationIgnored public private(set) var inFlightActivity: Task<Void, Never>?
+
+    /// Bumped on every `_performLoad` call; lets a completing load recognize it has since
+    /// been superseded so it doesn't clear a newer `inFlightLoad`.
+    @ObservationIgnored private var loadGeneration = 0
+
+    /// Same role as `loadGeneration`, for `inFlightActivity`.
+    @ObservationIgnored private var activityGeneration = 0
 
     /// Pending banner auto-dismiss, if any.
     @ObservationIgnored private var bannerDismissTask: Task<Void, Never>?
 
     /// Per-instance error presenter override. `nil` defers to `BaseViewModel.errorPresenter`.
     @ObservationIgnored private let instanceErrorPresenter: (any ErrorPresenting)?
+
+    /// Per-instance cancellation recognizer override. `nil` defers to
+    /// `BaseViewModel.cancellationRecognizer`.
+    @ObservationIgnored private let instanceCancellationRecognizer: (any CancellationRecognizing)?
+
+    /// Per-instance clock override. `nil` defers to `BaseViewModel.clock`.
+    @ObservationIgnored private let instanceClock: (any Clock<Duration>)?
 
     /// The error presenter used by every `BaseViewModel` instance that doesn't override
     /// one through its initializer. Configure this once at app startup:
@@ -86,7 +113,8 @@ open class BaseViewModel {
     public static var errorPresenter: any ErrorPresenting = DefaultErrorPresenter()
 
     /// Recognizes cancellation beyond typed `CancellationError` (e.g. `URLError(.cancelled)`,
-    /// or an app's own network error type). Extend it at app startup:
+    /// or an app's own network error type), for every `BaseViewModel` instance that doesn't
+    /// override one through its initializer. Extend it at app startup:
     ///
     /// ```swift
     /// BaseViewModel.cancellationRecognizer = AppCancellationRecognizer()
@@ -95,23 +123,39 @@ open class BaseViewModel {
     /// Defaults to `DefaultCancellationRecognizer()`.
     public static var cancellationRecognizer: any CancellationRecognizing = DefaultCancellationRecognizer()
 
-    /// The clock used to schedule a banner's auto-dismiss. Tests inject a manual clock to
-    /// advance time deterministically instead of sleeping for real. Defaults to `ContinuousClock()`.
+    /// The clock used to schedule a banner's auto-dismiss, for every `BaseViewModel`
+    /// instance that doesn't override one through its initializer. Tests inject a manual
+    /// clock through the initializer instead of mutating this (see `init`) — a `static var`
+    /// mutated by one test is visible to every other test running in parallel. Defaults to
+    /// `ContinuousClock()`.
     public static var clock: any Clock<Duration> = ContinuousClock()
 
     /// Initializes a new base view model.
     ///
-    /// - Parameter errorPresenter: Overrides `BaseViewModel.errorPresenter` for this
-    ///   instance only. Most view models don't need this — set the static instead.
-    public init(errorPresenter: (any ErrorPresenting)? = nil) {
+    /// - Parameters:
+    ///   - errorPresenter: Overrides `BaseViewModel.errorPresenter` for this instance only.
+    ///     Most view models don't need this — set the static instead.
+    ///   - cancellationRecognizer: Overrides `BaseViewModel.cancellationRecognizer` for this
+    ///     instance only.
+    ///   - clock: Overrides `BaseViewModel.clock` for this instance only. Tests inject a
+    ///     manual clock here to control a banner's auto-dismiss deterministically, instead
+    ///     of mutating the `static var` (DC-AF-3): an instance override can't leak into a
+    ///     different test running in parallel.
+    public init(
+        errorPresenter: (any ErrorPresenting)? = nil,
+        cancellationRecognizer: (any CancellationRecognizing)? = nil,
+        clock: (any Clock<Duration>)? = nil
+    ) {
         self.instanceErrorPresenter = errorPresenter
+        self.instanceCancellationRecognizer = cancellationRecognizer
+        self.instanceClock = clock
     }
 
     deinit {
         // `Task` is Sendable, so reading these stored properties from the nonisolated
         // deinit is legal — and nothing else can observe the object anymore.
-        loadTask?.cancel()
-        activityTask?.cancel()
+        inFlightLoad?.cancel()
+        inFlightActivity?.cancel()
         bannerDismissTask?.cancel()
     }
 
@@ -198,7 +242,7 @@ open class BaseViewModel {
 
         guard let duration = banner.duration else { return }
         let bannerID = banner.id
-        let clock = Self.clock
+        let clock = effectiveClock
         bannerDismissTask = Task { [weak self] in
             try? await clock.sleep(for: duration)
             guard !Task.isCancelled else { return }
@@ -229,8 +273,11 @@ open class BaseViewModel {
         retry: @escaping Action,
         _ work: @escaping @MainActor () async throws -> Void
     ) -> Task<Void, Never> {
-        loadTask?.cancel()
+        inFlightLoad?.cancel()
         setLoading(style)
+
+        loadGeneration &+= 1
+        let generation = loadGeneration
 
         let task = Task { [weak self] in
             guard let self else { return }
@@ -241,8 +288,13 @@ open class BaseViewModel {
                 retry: retry,
                 work
             )
+            // Only clear `inFlightLoad` if no newer load has replaced it in the meantime —
+            // otherwise this completing (superseded) task would clobber the current one.
+            if self.loadGeneration == generation {
+                self.inFlightLoad = nil
+            }
         }
-        loadTask = task
+        inFlightLoad = task
         return task
     }
 
@@ -262,7 +314,7 @@ open class BaseViewModel {
                 setContent()
             }
         } catch {
-            guard !Task.isCancelled, !Self.cancellationRecognizer.isCancellation(error) else { return }
+            guard !Task.isCancelled, !recognizer.isCancellation(error) else { return }
             let fallbackTitle = errorTitle.map { String(localized: $0) } ?? L10n.error
             setError(presenter.screenError(for: error, fallbackTitle: fallbackTitle, retry: retry))
         }
@@ -275,14 +327,21 @@ open class BaseViewModel {
         errorHandling: ActivityErrorHandling,
         _ work: @escaping @MainActor () async throws -> Void
     ) -> Task<Void, Never> {
-        activityTask?.cancel()
+        inFlightActivity?.cancel()
         startActivity(style)
+
+        activityGeneration &+= 1
+        let generation = activityGeneration
 
         let task = Task { [weak self] in
             guard let self else { return }
             await self._runActivity(style: style, errorHandling: errorHandling, work)
+            // Same non-clobbering guard as `_performLoad`'s.
+            if self.activityGeneration == generation {
+                self.inFlightActivity = nil
+            }
         }
-        activityTask = task
+        inFlightActivity = task
         return task
     }
 
@@ -298,7 +357,7 @@ open class BaseViewModel {
             guard !Task.isCancelled else { return }
             stopActivity()
         } catch {
-            guard !Task.isCancelled, !Self.cancellationRecognizer.isCancellation(error) else { return }
+            guard !Task.isCancelled, !recognizer.isCancellation(error) else { return }
             stopActivity()
             handleActivityError(error, strategy: errorHandling)
         }
@@ -339,6 +398,18 @@ open class BaseViewModel {
     /// replaced it).
     private var presenter: any ErrorPresenting {
         instanceErrorPresenter ?? Self.errorPresenter
+    }
+
+    /// The effective cancellation recognizer for this instance: the per-instance override,
+    /// then `BaseViewModel.cancellationRecognizer`. Same precedence as `presenter`.
+    private var recognizer: any CancellationRecognizing {
+        instanceCancellationRecognizer ?? Self.cancellationRecognizer
+    }
+
+    /// The effective clock for this instance: the per-instance override, then
+    /// `BaseViewModel.clock`. Same precedence as `presenter`.
+    private var effectiveClock: any Clock<Duration> {
+        instanceClock ?? Self.clock
     }
 
     // MARK: - Computed Helpers
