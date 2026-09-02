@@ -170,7 +170,7 @@ struct BaseViewModelTests {
 
     @Test func loadSuccessSetsContent() async throws {
         var workWasExecuted = false
-        viewModel.performLoad {
+        viewModel.performLoad { _ in
             workWasExecuted = true
         }
         try await waitUntil { viewModel.phase == .content }
@@ -179,7 +179,7 @@ struct BaseViewModelTests {
     }
 
     @Test func loadFailureSetsErrorWithDefaultTitle() async throws {
-        viewModel.performLoad {
+        viewModel.performLoad { _ in
             throw TestError("boom")
         }
         try await waitUntil { viewModel.hasError }
@@ -187,7 +187,7 @@ struct BaseViewModelTests {
     }
 
     @Test func loadFailureUsesCustomErrorTitle() async throws {
-        viewModel.performLoad(errorTitle: "Network Error") {
+        viewModel.performLoad(errorTitle: "Network Error") { _ in
             throw TestError()
         }
         try await waitUntil { viewModel.hasError }
@@ -195,14 +195,14 @@ struct BaseViewModelTests {
     }
 
     @Test func loadAppliesLoadingStyleImmediately() async throws {
-        let task = viewModel.performLoad(style: .inline) {}
+        let task = viewModel.performLoad(style: .inline) { _ in }
         #expect(viewModel.phase == .loading(.inline))
         await task.value
         #expect(viewModel.phase == .content)
     }
 
     @Test func loadErrorProvidesRetryAction() async throws {
-        viewModel.performLoad {
+        viewModel.performLoad { _ in
             throw TestError()
         }
         try await waitUntil { viewModel.hasError }
@@ -262,7 +262,7 @@ struct BaseViewModelAuditBugTests {
     /// A1: performLoad debe consultar AppErrorConvertible para el error de pantalla,
     /// no volcar localizedDescription crudo.
     @Test func loadFailureConsultsAppErrorConvertible() async throws {
-        viewModel.performLoad {
+        viewModel.performLoad { _ in
             throw DomainTestError()
         }
         try await waitUntil { viewModel.hasError }
@@ -279,10 +279,10 @@ struct BaseViewModelCancellationTests {
 
     /// C8: una carga nueva cancela la carga en vuelo, y la superada no pisa el estado.
     @Test func newLoadCancelsInFlightLoad() async {
-        let first = viewModel.performLoad {
+        let first = viewModel.performLoad { _ in
             try await Task.sleep(for: .seconds(10))
         }
-        let second = viewModel.performLoad {}
+        let second = viewModel.performLoad { _ in }
 
         await second.value
         // La primera termina rápido porque su sleep fue cancelado — no en 10s.
@@ -293,7 +293,7 @@ struct BaseViewModelCancellationTests {
 
     /// La cancelación no es fallo: jamás debe aparecer como error de pantalla.
     @Test func cancelledLoadDoesNotSurfaceError() async {
-        let task = viewModel.performLoad {
+        let task = viewModel.performLoad { _ in
             try await Task.sleep(for: .seconds(10))
         }
         task.cancel()
@@ -304,15 +304,15 @@ struct BaseViewModelCancellationTests {
 
     /// preserveCurrentPhase: el trabajo decide la fase resultante.
     @Test func preserveCurrentPhaseKeepsWorkDecision() async {
-        let task = viewModel.performLoad(successTransition: .preserveCurrentPhase) {
-            self.viewModel.setEmpty()
+        let task = viewModel.performLoad(successTransition: .preserveCurrentPhase) { vm in
+            vm.setEmpty()
         }
         await task.value
         #expect(viewModel.phase == .empty)
     }
 
     @Test func preserveCurrentPhaseWithoutExplicitPhaseStaysLoading() async {
-        let task = viewModel.performLoad(style: .overlay, successTransition: .preserveCurrentPhase) {}
+        let task = viewModel.performLoad(style: .overlay, successTransition: .preserveCurrentPhase) { _ in }
         await task.value
         #expect(viewModel.phase == .loading(.overlay))
     }
@@ -320,7 +320,7 @@ struct BaseViewModelCancellationTests {
     // MARK: - performActivity
 
     @Test func activitySuccessStartsAndStops() async {
-        let task = viewModel.performActivity(style: .inline) {}
+        let task = viewModel.performActivity(style: .inline) { _ in }
         #expect(viewModel.activity == .loading(.inline))
         await task.value
         #expect(viewModel.activity == ActivityState.none)
@@ -328,7 +328,7 @@ struct BaseViewModelCancellationTests {
     }
 
     @Test func activityFailureSurfacesBannerByDefault() async {
-        let task = viewModel.performActivity {
+        let task = viewModel.performActivity { _ in
             throw DomainTestError()
         }
         await task.value
@@ -339,7 +339,7 @@ struct BaseViewModelCancellationTests {
     }
 
     @Test func activityFailureAsAlertUsesConvertibleTitleAndMessage() async {
-        let task = viewModel.performActivity(errorHandling: .alert) {
+        let task = viewModel.performActivity(errorHandling: .alert) { _ in
             throw DomainTestError()
         }
         await task.value
@@ -348,7 +348,7 @@ struct BaseViewModelCancellationTests {
     }
 
     @Test func activityFailureSilentShowsNothing() async {
-        let task = viewModel.performActivity(errorHandling: .silent) {
+        let task = viewModel.performActivity(errorHandling: .silent) { _ in
             throw TestError()
         }
         await task.value
@@ -359,10 +359,10 @@ struct BaseViewModelCancellationTests {
 
     /// Re-entrancy de actividad: la nueva cancela la anterior sin pisar su estado.
     @Test func newActivityCancelsInFlightActivity() async {
-        let first = viewModel.performActivity(style: .overlay) {
+        let first = viewModel.performActivity(style: .overlay) { _ in
             try await Task.sleep(for: .seconds(10))
         }
-        let second = viewModel.performActivity(style: .inline) {}
+        let second = viewModel.performActivity(style: .inline) { _ in }
 
         await second.value
         await first.value
@@ -374,7 +374,7 @@ struct BaseViewModelCancellationTests {
     /// El retry del error reintenta la carga con los mismos parámetros.
     @Test func retryFromLoadErrorRetriesLoad() async throws {
         var attempts = 0
-        let task = viewModel.performLoad {
+        let task = viewModel.performLoad { _ in
             attempts += 1
             if attempts == 1 { throw TestError("first") }
         }

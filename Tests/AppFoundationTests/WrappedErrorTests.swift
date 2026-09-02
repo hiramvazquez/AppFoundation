@@ -46,7 +46,7 @@ struct WrappedErrorTests {
 
     @Test func performLoadSurfacesWrappedErrorMessage() async {
         let viewModel = BaseViewModel()
-        let task = viewModel.performLoad {
+        let task = viewModel.performLoad { _ in
             throw WrappedError(underlying: TestError("offline"), context: "Loading feed")
         }
         await task.value
