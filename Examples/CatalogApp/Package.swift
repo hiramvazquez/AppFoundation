@@ -27,7 +27,7 @@ let package = Package(
         //   .package(url: "https://github.com/<org>/AppFoundation", from: "1.0.0"),
         //   .package(url: "https://github.com/<org>/CoreNetworking", from: "1.0.0"),
         .package(path: "../../../AppFoundation"),
-        .package(path: "../../../CoreNetworking")
+        .package(url: "https://github.com/hiramvazquez/CoreNetworking.git", branch: "main")
     ],
     targets: [
         .target(
