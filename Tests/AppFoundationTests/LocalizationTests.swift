@@ -57,7 +57,7 @@ struct LocalizationTests {
             "Back": "Atrás",
             "Close": "Cerrar",
             "Something went wrong. Please try again.": "Algo ha ido mal. Inténtalo de nuevo.",
-            "Dismiss": "Descartar",
+            "Dismiss": "Descartar"
         ]
         for (key, value) in expected {
             #expect(try localizedValue(forKey: key, language: "es") == value)
@@ -67,7 +67,7 @@ struct LocalizationTests {
     @Test func englishCatalogCoversEveryDefaultString() throws {
         for key in [
             "Error", "OK", "Retry", "Updating…", "Nothing to show yet", "Search", "Cancel", "Back", "Close",
-            "Something went wrong. Please try again.", "Dismiss",
+            "Something went wrong. Please try again.", "Dismiss"
         ] {
             #expect(try localizedValue(forKey: key, language: "en") == key)
         }
