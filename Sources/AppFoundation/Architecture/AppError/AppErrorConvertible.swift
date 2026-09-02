@@ -38,19 +38,14 @@ import Foundation
 ///
 /// // In your view model:
 /// func loadData() {
-///     load {
-///         try await fetchData()
-///     }
-/// }
-///
-/// func loadData() throws {
-///     do {
-///         try await service.fetchData()
-///     } catch let error as APIError {
-///         setError(error.screenError)
+///     performLoad { vm in
+///         vm.data = try await vm.service.fetchData()
 ///     }
 /// }
 /// ```
+///
+/// `performLoad` consults `AppErrorConvertible` (through the registered `ErrorPresenting`)
+/// automatically — there's no need to catch `APIError` yourself just to call `setError`.
 public nonisolated protocol AppErrorConvertible: Error {
     /// Converts this error to a user-facing `ScreenError`.
     ///

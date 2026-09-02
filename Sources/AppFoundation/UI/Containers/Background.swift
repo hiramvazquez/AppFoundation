@@ -15,7 +15,7 @@ import SwiftUI
 ///
 /// ## Example
 /// ```swift
-/// @StateObject var viewModel = MyViewModel()
+/// @State var viewModel = MyViewModel()
 ///
 /// PhaseView(phase: $viewModel.phase) {
 ///     ContentView()
