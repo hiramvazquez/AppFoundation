@@ -2,6 +2,17 @@
 
 Una app SwiftUI mínima sobre AppFoundation, de cero a tests en verde, en seis pasos.
 
+## Paso 0: `archinit` (una vez por proyecto)
+
+```bash
+swift package --allow-writing-to-package-directory archinit
+```
+
+Crea `.archlint.yml`, `Features/`, `AGENTS.md`, la línea `@AGENTS.md` en `CLAUDE.md` y la
+skill `.claude/skills/feature.md`. Es lo que hace que un agente de IA que trabaje en el
+proyecto conozca la arquitectura y use `generate-feature` en vez de improvisar; el
+paquete en sí queda en `DerivedData`/`.build/checkouts`, fuera de lo que un agente lee.
+
 ## Overview
 
 Cada paso deja el paquete compilando. El resultado esperado se indica al final de cada

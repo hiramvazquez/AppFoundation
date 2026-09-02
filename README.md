@@ -35,6 +35,19 @@ Para desarrollo local: `.package(path: "../AppFoundation")`.
 
 ## Empieza aquí
 
+**Paso 0, una sola vez por proyecto** (también para los agentes de IA que trabajen en él):
+
+```bash
+swift package --allow-writing-to-package-directory archinit
+```
+
+Deja en la raíz del proyecto `.archlint.yml`, `Features/`, `AGENTS.md` (la arquitectura que
+generador y linter hacen cumplir), una línea `@AGENTS.md` en `CLAUDE.md` y la skill
+`.claude/skills/feature.md`. Sin esto, un agente no ve las reglas: el paquete vive en
+`DerivedData`/`.build/checkouts`, fuera de lo que lee. Con esto, `/feature Login --api`
+genera el módulo completo dentro de la arquitectura.
+
+
 La documentación completa vive en DocC (Xcode: **Product ▸ Build Documentation**, o
 `AppFoundation/Sources/AppFoundation/Documentation.docc/`): landing, guía de 20 minutos,
 un artículo por pieza, arquitectura, recetas, testing y el generador/linter.

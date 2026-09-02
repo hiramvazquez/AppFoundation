@@ -4,6 +4,13 @@ Arquitectura obligatoria de cualquier feature: **View → ViewModel → Logic �
 Un `Logic` por `ViewModel`. Todo entra por `init`, siempre como protocolo. Nada de esto
 llama a `Container.shared`/`@Inject` por su cuenta: el composition root es el `XxxModule`.
 
+## Si estás en un proyecto que consume este paquete
+
+Ejecuta una vez `swift package --allow-writing-to-package-directory archinit` en la raíz
+del proyecto: copia este fichero como `AGENTS.md`, crea `.archlint.yml` y `Features/`, añade
+`@AGENTS.md` a `CLAUDE.md` e instala la skill `/feature`. A partir de ahí, crea features
+con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
+
 ## Capas
 
 - **View** (SwiftUI): recibe el `ViewModel`, renderiza con `ScreenContainer(vm) { send in … }`.
