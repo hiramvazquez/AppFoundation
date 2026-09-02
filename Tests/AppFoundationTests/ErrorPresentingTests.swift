@@ -123,35 +123,40 @@ struct ErrorPresenterPrecedenceTests {
     }
 }
 
-/// `.serialized`: the only test left anywhere in `AppFoundation/Tests` that mutates
+/// The only test left anywhere in `AppFoundation/Tests` that mutates
 /// `BaseViewModel.errorPresenter`, a global `static var` — kept because it's the one thing
 /// that genuinely needs the static: the fallback chain when nothing is injected per
 /// instance, and the static overriding the built-in default. Every other precedence test
-/// (`ErrorPresenterPrecedenceTests` above) uses per-instance injection instead, precisely
-/// to avoid this test's residual flake risk (DC-AF-3): a parallel suite reading
-/// `BaseViewModel.errorPresenter` while this one is mutating it. `.serialized` only
-/// protects this suite's own (single) test from other tests within it — it can't protect
-/// against unrelated suites running concurrently, which is why every other precedence test
-/// no longer needs the static at all.
+/// (`ErrorPresenterPrecedenceTests` above) uses per-instance injection instead.
+///
+/// A first version of this test drove the mutated static through `performLoad`, `await`ing
+/// its `Task` while `BaseViewModel.errorPresenter` was set to a mock — and failed roughly
+/// one `swift test` run in four with unrelated suites' assertions contaminated by that
+/// mock (DC-AF-3's predicted flake, worse in practice than "residual risk"). The
+/// `AppFoundationTests` target sets `.defaultIsolation(MainActor.self)`, so every test here
+/// runs on the *same* serial executor — nothing else on `MainActor` can run while a
+/// non-`async` test function is on the stack, only at an `await` suspension point. Calling
+/// `handleActivityError` directly (synchronous, `open`, no `await` anywhere in this test)
+/// keeps the whole mutate-read-restore sequence atomic: no other suite ever observes the
+/// mock. `.serialized` is no longer needed for that reason (nothing to serialize against —
+/// this suite has one test), but stays as documentation of intent.
 @Suite("ErrorPresenting — estático por defecto en BaseViewModel", .serialized)
 struct ErrorPresenterStaticDefaultTests {
-    @Test func staticErrorPresenterDefaultsAndCanBeOverridden() async throws {
+    @Test func staticErrorPresenterDefaultsAndCanBeOverridden() {
         let original = BaseViewModel.errorPresenter
         defer { BaseViewModel.errorPresenter = original }
 
         // Nothing injected per instance, static explicitly at its documented default.
         BaseViewModel.errorPresenter = DefaultErrorPresenter()
         let defaultVM = BaseViewModel()
-        let defaultTask = defaultVM.performLoad { _ in throw MarkedError() }
-        await defaultTask.value
-        #expect(defaultVM.currentError?.message == L10n.genericErrorMessage)
+        defaultVM.handleActivityError(MarkedError(), strategy: .alert)
+        #expect(defaultVM.alert?.message == L10n.genericErrorMessage)
 
         // The static overrides the built-in default when nothing is injected per instance.
         BaseViewModel.errorPresenter = MockPresenter(name: "static-presenter")
         let staticVM = BaseViewModel()
-        let staticTask = staticVM.performLoad { _ in throw MarkedError() }
-        await staticTask.value
-        #expect(staticVM.currentError?.title == "static-presenter")
+        staticVM.handleActivityError(MarkedError(), strategy: .alert)
+        #expect(staticVM.alert?.title == "static-presenter")
     }
 }
 
