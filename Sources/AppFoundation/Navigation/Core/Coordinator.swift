@@ -133,8 +133,11 @@ public final class Coordinator<Route: Hashable>: Router {
 
 #if DEBUG
     /// Navigation history for debugging (only in DEBUG builds).
+    ///
+    /// Internal on purpose (AF-14): an API whose existence depends on the build
+    /// configuration would break a consumer that references it in Release.
     @ObservationIgnored
-    public private(set) var navigationHistory: [String] = []
+    private(set) var navigationHistory: [String] = []
 #endif
 
     // MARK: - Initialization

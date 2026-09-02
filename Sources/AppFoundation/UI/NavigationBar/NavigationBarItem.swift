@@ -57,7 +57,10 @@ public struct NavigationBarItem: Identifiable {
         case icon(String, badge: Int?)
         case systemIcon(String, badge: Int?)
         case text(String)
-        case view(AnyView)
+        /// A caller-supplied view. Stored type-erased (`ErasedView`, see that file):
+        /// items of different concrete view types must live side by side in the same
+        /// `[NavigationBarItem]` array, which `some View` cannot express (AF-15).
+        case view(ErasedView)
     }
 
     // MARK: - Factory Methods
@@ -93,7 +96,7 @@ public struct NavigationBarItem: Identifiable {
     /// Custom views cannot derive a content-based id — pass `id:` when a bar hosts
     /// more than one custom item.
     public static func custom<V: View>(_ view: V, id: String = "custom", action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(id: id, role: .plain, content: .view(AnyView(view)), action: action)
+        NavigationBarItem(id: id, role: .plain, content: .view(ErasedView(view)), action: action)
     }
 }
 
@@ -107,11 +110,9 @@ public enum NavigationBarTitle {
     /// Simple text title.
     case text(String)
 
-    /// Large title that can collapse on scroll (future feature).
-    case largeText(String)
-
-    /// Custom view as title (for logos, search bars, etc.).
-    case custom(AnyView)
+    /// Custom view as title (for logos, search bars, etc.). Stored type-erased
+    /// (`ErasedView`): see that file for why (AF-15).
+    case custom(ErasedView)
 
     // MARK: - Factory Methods
 
@@ -123,7 +124,7 @@ public enum NavigationBarTitle {
 
     /// Creates a custom view title.
     public static func view<V: View>(_ view: V) -> NavigationBarTitle {
-        .custom(AnyView(view))
+        .custom(ErasedView(view))
     }
 }
 
@@ -266,8 +267,9 @@ public struct NavigationBarConfiguration {
     public let searchBar: SearchBarConfiguration?
 
     /// Optional custom view rendered below the navigation bar (same slot as searchBar).
-    /// Takes priority over `searchBar` when both are set.
-    public let accessoryView: AnyView?
+    /// Takes priority over `searchBar` when both are set. Stored type-erased
+    /// (`ErasedView`): see that file for why (AF-15).
+    public let accessoryView: ErasedView?
 
     /// Visual style.
     public let style: NavigationBarStyle
@@ -276,7 +278,8 @@ public struct NavigationBarConfiguration {
     public let isVisible: Bool
 
     /// Full-width custom content that replaces the entire left/title/right layout.
-    public let customContent: AnyView?
+    /// Stored type-erased (`ErasedView`): see that file for why (AF-15).
+    public let customContent: ErasedView?
 
     public init(
         title: NavigationBarTitle = .none,
@@ -336,7 +339,7 @@ public struct NavigationBarConfiguration {
     /// (e.g. a header with avatar, greeting text, and action buttons).
     ///
     /// ```swift
-    /// NavigationBarConfiguration.custom(style: .dark) {
+    /// NavigationBarConfiguration.custom(style: .solid) {
     ///     HStack {
     ///         Avatar()
     ///         Text("Hello")
@@ -350,13 +353,13 @@ public struct NavigationBarConfiguration {
         @ViewBuilder content: () -> Content
     ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(
-            customContent: AnyView(content()),
+            customContent: ErasedView(content()),
             style: style
         )
     }
 
     /// Internal init for custom content configurations.
-    private init(customContent: AnyView, accessoryView: AnyView? = nil, style: NavigationBarStyle) {
+    private init(customContent: ErasedView, accessoryView: ErasedView? = nil, style: NavigationBarStyle) {
         self.title = .none
         self.leftItems = []
         self.rightItems = []
@@ -373,7 +376,7 @@ public struct NavigationBarConfiguration {
     /// ```swift
     /// NavigationBarConfiguration.withBackAndAccessory(
     ///     title: "Select Partner",
-    ///     style: .dark,
+    ///     style: .solid,
     ///     backAction: { coordinator.pop() }
     /// ) {
     ///     PlayerSearchBar(text: $searchText, onFilter: { })
@@ -388,24 +391,24 @@ public struct NavigationBarConfiguration {
         NavigationBarConfiguration(
             title: title.map { .title($0) } ?? .none,
             leftItems: [.back(action: backAction)],
-            accessoryView: AnyView(accessory()),
-            style: style
+            style: style,
+            accessoryView: accessory
         )
     }
 
     /// Full init with accessory view support.
-    public init(
+    public init<Accessory: View>(
         title: NavigationBarTitle = .none,
         leftItems: [NavigationBarItem] = [],
         rightItems: [NavigationBarItem] = [],
-        accessoryView: AnyView,
-        style: NavigationBarStyle = .default
+        style: NavigationBarStyle = .default,
+        @ViewBuilder accessoryView: () -> Accessory
     ) {
         self.title = title
         self.leftItems = leftItems
         self.rightItems = rightItems
         self.searchBar = nil
-        self.accessoryView = accessoryView
+        self.accessoryView = ErasedView(accessoryView())
         self.style = style
         self.isVisible = true
         self.customContent = nil

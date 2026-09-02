@@ -139,16 +139,16 @@ open class BaseViewModel {
 
     /// Displays a non-blocking banner.
     ///
-    /// A banner with `duration: .seconds(n)` auto-dismisses after `n` seconds (A3).
+    /// A banner with a `duration` auto-dismisses after it elapses; `nil` stays (A3).
     /// Showing a new banner cancels the previous banner's pending dismissal.
     open func showBanner(_ banner: BannerState) {
         bannerDismissTask?.cancel()
         self.banner = banner
 
-        guard case .seconds(let interval) = banner.duration else { return }
+        guard let duration = banner.duration else { return }
         let bannerID = banner.id
         bannerDismissTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(interval))
+            try? await Task.sleep(for: duration)
             guard !Task.isCancelled else { return }
             guard let self, self.banner?.id == bannerID else { return }
             self.banner = nil

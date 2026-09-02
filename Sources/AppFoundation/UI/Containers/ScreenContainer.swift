@@ -3,11 +3,35 @@ import SwiftUI
 import Accessibility
 
 /// Defines where the custom navigation bar is rendered relative to screen content.
+/// Only meaningful for `ScreenChrome.custom` — `.native` chrome has no notion of placement,
+/// the system owns it.
 public enum NavigationPlacement {
     /// Navigation bar participates in normal vertical layout (default).
     case stack
     /// Navigation bar is overlaid and remains fixed while content scrolls beneath.
     case overlay
+}
+
+/// How a `ScreenContainer` presents its navigation chrome (AF-12/AF-13).
+///
+/// `.native` is the default and the recommended choice for new screens: the system
+/// navigation bar stays visible, and the screen drives it with the ordinary SwiftUI
+/// modifiers (`navigationTitle`, `toolbar`, `searchable`) — large titles, scroll-edge
+/// effects, and swipe-back all keep working for free, on every OS release.
+///
+/// `.custom` opts a screen OUT of the native bar in favor of `CustomNavigationBar`. Reach
+/// for it only when the native bar genuinely can't do the job. Because hiding the native
+/// bar also disables `UINavigationController`'s interactive pop gesture, `ScreenContainer`
+/// installs `PopGestureEnabler` automatically whenever chrome is `.custom` — screens don't
+/// need to think about it, but they should still verify swipe-back manually in a
+/// simulator/device, since it can't be covered by a unit test.
+public enum ScreenChrome {
+    /// Use the caller's own `navigationTitle`/`toolbar`/`searchable` on the native bar.
+    /// `ScreenContainer` does not touch navigation chrome at all in this mode.
+    case native
+
+    /// Hide the native bar and render `CustomNavigationBar` with the given configuration.
+    case custom(NavigationBarConfiguration, placement: NavigationPlacement = .stack)
 }
 
 // MARK: - Presentation Logic
@@ -57,6 +81,16 @@ nonisolated enum ScreenPresentationLogic {
         if case .loading(let style) = activity { return style }
         return nil
     }
+
+    /// Whether `chrome` hides the platform's native navigation bar (AF-12/AF-13/AF-14
+    /// verification surface — pure logic, exercised without snapshots in
+    /// `ScreenChromeTests`).
+    static func hidesNativeBar(_ chrome: ScreenChrome) -> Bool {
+        switch chrome {
+        case .native: return false
+        case .custom: return true
+        }
+    }
 }
 
 // MARK: - ScreenContainer
@@ -69,6 +103,12 @@ nonisolated enum ScreenPresentationLogic {
 /// - transient activity overlays (`activity`)
 /// - user feedback (`alert` via the native alert presentation, `banner` as an overlay)
 ///
+/// Chrome defaults to `.native` (AF-12/AF-13): the navigation bar is never hidden unless a
+/// screen opts into `chrome: .custom(...)`. Loading/error/empty/banner appearances come
+/// from `Environment` (`LoadingViewStyle`, `ErrorViewStyle`, `EmptyViewStyle`,
+/// `BannerViewStyle` — install with `.loadingViewStyle(_:)` etc.), so customizing them
+/// never needs type erasure at the call site (AF-15).
+///
 /// Observation: the view-model initializer derives its bindings through `Bindable`, so
 /// reads go straight to the `@Observable` view model during body evaluation and updates
 /// are tracked automatically (A4 — no hand-rolled closures over an unobserved object).
@@ -78,24 +118,21 @@ public struct ScreenContainer<Content: View>: View {
     @Binding private var alert: AlertState?
     @Binding private var banner: BannerState?
 
-    private let navigation: NavigationBarConfiguration
-    private let navigationPlacement: NavigationPlacement
+    private let chrome: ScreenChrome
     private let content: () -> Content
     private let backgroundColor: Color
 
-    private var loadingViewBuilder: (() -> AnyView)?
-    private var errorViewBuilder: ((ScreenError) -> AnyView)?
-    private var emptyViewBuilder: (() -> AnyView)?
-    private var alertViewBuilder: ((AlertState) -> AnyView)?
-    private var bannerViewBuilder: ((BannerState) -> AnyView)?
+    @Environment(\.loadingViewStyle) private var loadingStyle
+    @Environment(\.errorViewStyle) private var errorStyle
+    @Environment(\.emptyViewStyle) private var emptyStyle
+    @Environment(\.bannerViewStyle) private var bannerStyle
 
     // MARK: - Initializers
 
     /// Creates a screen container bound to a `BaseViewModel`.
     public init(
         viewModel: BaseViewModel,
-        navigation: NavigationBarConfiguration = .hidden,
-        navigationPlacement: NavigationPlacement = .stack,
+        chrome: ScreenChrome = .native,
         backgroundColor: Color = .platformBackground,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -104,8 +141,7 @@ public struct ScreenContainer<Content: View>: View {
         self._activity = bindable.activity
         self._alert = bindable.alert
         self._banner = bindable.banner
-        self.navigation = navigation
-        self.navigationPlacement = navigationPlacement
+        self.chrome = chrome
         self.content = content
         self.backgroundColor = backgroundColor
     }
@@ -116,8 +152,7 @@ public struct ScreenContainer<Content: View>: View {
         activity: Binding<ActivityState> = .constant(.none),
         alert: Binding<AlertState?> = .constant(nil),
         banner: Binding<BannerState?> = .constant(nil),
-        navigation: NavigationBarConfiguration = .hidden,
-        navigationPlacement: NavigationPlacement = .stack,
+        chrome: ScreenChrome = .native,
         backgroundColor: Color = .platformBackground,
         @ViewBuilder content: @escaping () -> Content
     ) {
@@ -125,8 +160,7 @@ public struct ScreenContainer<Content: View>: View {
         self._activity = activity
         self._alert = alert
         self._banner = banner
-        self.navigation = navigation
-        self.navigationPlacement = navigationPlacement
+        self.chrome = chrome
         self.content = content
         self.backgroundColor = backgroundColor
     }
@@ -134,56 +168,68 @@ public struct ScreenContainer<Content: View>: View {
     // MARK: - Body
 
     public var body: some View {
-        let core = ZStack {
-            backgroundColor.ignoresSafeArea()
-
-            mainContentView
-
-            primaryPhaseOverlay
-
-            activityOverlay
-
-            if banner != nil {
-                bannerOverlayView
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        chromeWrappedBody
+            .animation(.default, value: phase)
+            .animation(.default, value: activity)
+            .animation(.default, value: banner)
+            .onChange(of: banner) { _, newBanner in
+                guard let newBanner else { return }
+                // Accessibility: banners are transient — VoiceOver users hear them arrive.
+                AccessibilityNotification.Announcement(newBanner.message).post()
             }
+            // A15: alerts use the native presentation — there is no custom alert overlay
+            // to opt into; a fully custom alert is a future `AlertViewStyle`, not a type-erased closure.
+            .alert(
+                alert?.title ?? "",
+                isPresented: isAlertPresented,
+                presenting: alert
+            ) { alertState in
+                alertButtons(for: alertState)
+            } message: { alertState in
+                Text(alertState.message)
+            }
+    }
+
+    /// Installs chrome exactly once around the whole screen (content + every phase
+    /// overlay), which is also what fixes AF-17: the previous implementation re-created
+    /// `CustomNavigationBar` a second time for the error/empty overlay, duplicating the
+    /// search `TextField` and its focus/keyboard state.
+    @ViewBuilder
+    private var chromeWrappedBody: some View {
+        switch chrome {
+        case .native:
+            coreStack
+
+        case .custom(let navigation, let placement):
+            customChromeStack(navigation: navigation, placement: placement)
         }
-        // Transiciones dirigidas por transacción (A15): los cambios de estado animan sin
-        // que cada mutación tenga que envolverse en withAnimation en el ViewModel.
-        .animation(.default, value: phase)
-        .animation(.default, value: activity)
-        .animation(.default, value: banner)
-        .onChange(of: banner) { _, newBanner in
-            guard let newBanner else { return }
-            // Accessibility: banners are transient — VoiceOver users hear them arrive.
-            AccessibilityNotification.Announcement(newBanner.message).post()
+    }
+
+    @ViewBuilder
+    private func customChromeStack(navigation: NavigationBarConfiguration, placement: NavigationPlacement) -> some View {
+        Group {
+            switch placement {
+            case .stack:
+                VStack(spacing: 0) {
+                    CustomNavigationBar(configuration: navigation)
+                    coreStack
+                }
+                .ignoresSafeArea(.container, edges: navigation.isVisible ? [] : .top)
+
+            case .overlay:
+                ZStack(alignment: .top) {
+                    coreStack
+                        .ignoresSafeArea(.container, edges: .top)
+                    CustomNavigationBar(configuration: navigation)
+                }
+            }
         }
         #if os(iOS)
+        // Hiding the native bar disables interactive pop — this workaround is the whole
+        // reason `chrome: .custom` doesn't quietly break swipe-back (AF-12).
         .toolbar(.hidden, for: .navigationBar)
+        .background(PopGestureEnabler().frame(width: 0, height: 0))
         #endif
-
-        Group {
-            if alertViewBuilder != nil {
-                core.overlay {
-                    if alert != nil {
-                        alertOverlayView
-                            .transition(.opacity)
-                    }
-                }
-                .animation(.default, value: alert)
-            } else {
-                // A15: alerts use the native presentation by default.
-                core.alert(
-                    alert?.title ?? "",
-                    isPresented: isAlertPresented,
-                    presenting: alert
-                ) { alertState in
-                    alertButtons(for: alertState)
-                } message: { alertState in
-                    Text(alertState.message)
-                }
-            }
-        }
     }
 
     private var isAlertPresented: Binding<Bool> {
@@ -215,34 +261,25 @@ public struct ScreenContainer<Content: View>: View {
         }
     }
 
-    // MARK: - Main Content
+    // MARK: - Core (content + phase/activity/banner overlays, chrome-agnostic)
 
     @ViewBuilder
-    private var mainContentView: some View {
-        switch navigationPlacement {
-        case .stack:
-            VStack(spacing: 0) {
-                if navigation.isVisible {
-                    Color.clear
-                        .frame(height: 0)
-                        .background(navigationBarBackground)
-                }
+    private var coreStack: some View {
+        ZStack {
+            backgroundColor.ignoresSafeArea()
 
-                CustomNavigationBar(configuration: navigation)
-                contentAreaView
-            }
-            .edgesIgnoringSafeArea(navigation.isVisible ? [] : .top)
+            contentAreaView
 
-        case .overlay:
-            ZStack(alignment: .top) {
-                contentAreaView
-                    .edgesIgnoringSafeArea(.top)
+            primaryPhaseOverlay
 
-                if navigation.isVisible {
-                    CustomNavigationBar(configuration: navigation)
-                }
+            activityOverlay
+
+            if banner != nil {
+                bannerOverlayView
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -252,18 +289,6 @@ public struct ScreenContainer<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .opacity(hidden ? 0 : 1)
             .accessibilityHidden(hidden)
-    }
-
-    @ViewBuilder
-    private var navigationBarBackground: some View {
-        switch navigation.style.background {
-        case .solid(let color):
-            color
-        case .blur(let material):
-            Rectangle().fill(material)
-        case .gradient(let gradient):
-            gradient
-        }
     }
 
     // MARK: - Phase and Activity Rendering
@@ -277,10 +302,12 @@ public struct ScreenContainer<Content: View>: View {
             activityView(style: style)
                 .transition(.opacity)
         case .error(let error):
-            errorOverlayView(error: error)
+            errorStyle.makeBody(configuration: ErrorConfiguration(error: error))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
         case .empty:
-            emptyOverlayView
+            emptyStyle.makeBody(configuration: EmptyConfiguration())
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .transition(.opacity)
         }
     }
@@ -297,164 +324,48 @@ public struct ScreenContainer<Content: View>: View {
     /// activity. Every style renders something (A2 is dead by construction).
     @ViewBuilder
     private func activityView(style: ActivityStyle) -> some View {
+        let loadingBody = loadingStyle.makeBody(configuration: LoadingConfiguration(style: style))
         switch style {
         case .fullScreen:
             ZStack {
                 backgroundColor.ignoresSafeArea()
-                builtLoadingView
+                loadingBody
             }
         case .overlay:
             ZStack {
                 Color.black.opacity(0.25)
                     .ignoresSafeArea()
-                builtLoadingView
+                loadingBody
             }
         case .inline:
             VStack {
-                builtInlineActivityView
+                loadingBody
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    @ViewBuilder
-    private var builtLoadingView: some View {
-        if let builder = loadingViewBuilder {
-            builder()
-        } else {
-            DefaultLoadingView()
-        }
-    }
-
-    @ViewBuilder
-    private var builtInlineActivityView: some View {
-        if let builder = loadingViewBuilder {
-            builder()
-        } else {
-            DefaultInlineActivityView()
-        }
-    }
-
-    // MARK: - Overlay Views
-
-    @ViewBuilder
-    private func errorOverlayView(error: ScreenError) -> some View {
-        stateOverlayContainer {
-            if let builder = errorViewBuilder {
-                builder(error)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                DefaultErrorView(error: error)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var emptyOverlayView: some View {
-        stateOverlayContainer {
-            if let builder = emptyViewBuilder {
-                builder()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                DefaultEmptyView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func stateOverlayContainer<Overlay: View>(@ViewBuilder overlay: () -> Overlay) -> some View {
-        ZStack {
-            backgroundColor.ignoresSafeArea()
-
-            switch navigationPlacement {
-            case .stack:
-                VStack(spacing: 0) {
-                    if navigation.isVisible {
-                        CustomNavigationBar(configuration: navigation)
-                    }
-                    overlay()
-                }
-            case .overlay:
-                ZStack(alignment: .top) {
-                    overlay()
-                    if navigation.isVisible {
-                        CustomNavigationBar(configuration: navigation)
-                    }
-                }
-            }
-        }
-    }
-
-    /// Custom alert overlay — only used when `alertView(builder:)` was provided;
-    /// the default path presents alerts natively.
-    @ViewBuilder
-    private var alertOverlayView: some View {
-        ZStack {
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture { }
-
-            if let alertState = alert, let builder = alertViewBuilder {
-                builder(alertState)
-            }
-        }
-    }
+    // MARK: - Banner
 
     @ViewBuilder
     private var bannerOverlayView: some View {
         VStack(spacing: 0) {
             if let bannerState = banner {
-                if let builder = bannerViewBuilder {
-                    builder(bannerState)
-                } else {
-                    DefaultBannerView(banner: bannerState) {
-                        self.banner = nil
-                    }
-                }
+                bannerStyle.makeBody(configuration: BannerConfiguration(banner: bannerState) {
+                    self.banner = nil
+                })
             }
             Spacer()
         }
         .ignoresSafeArea(edges: .bottom)
     }
-
-    // MARK: - Custom View Builders
-
-    public func loadingView<V: View>(@ViewBuilder builder: @escaping () -> V) -> Self {
-        var copy = self
-        copy.loadingViewBuilder = { AnyView(builder()) }
-        return copy
-    }
-
-    public func errorView<V: View>(@ViewBuilder builder: @escaping (ScreenError) -> V) -> Self {
-        var copy = self
-        copy.errorViewBuilder = { AnyView(builder($0)) }
-        return copy
-    }
-
-    public func emptyView<V: View>(@ViewBuilder builder: @escaping () -> V) -> Self {
-        var copy = self
-        copy.emptyViewBuilder = { AnyView(builder()) }
-        return copy
-    }
-
-    /// Replaces the native alert presentation with a fully custom overlay.
-    public func alertView<V: View>(@ViewBuilder builder: @escaping (AlertState) -> V) -> Self {
-        var copy = self
-        copy.alertViewBuilder = { AnyView(builder($0)) }
-        return copy
-    }
-
-    public func bannerView<V: View>(@ViewBuilder builder: @escaping (BannerState) -> V) -> Self {
-        var copy = self
-        copy.bannerViewBuilder = { AnyView(builder($0)) }
-        return copy
-    }
 }
 
 public extension ScreenContainer {
+    /// Convenience for a `.custom` chrome with just a title.
+    ///
+    /// Prefer `chrome: .native` with `.navigationTitle(_:)` for new screens.
     init(
         viewModel: BaseViewModel,
         title: LocalizedStringResource,
@@ -464,12 +375,15 @@ public extension ScreenContainer {
     ) {
         self.init(
             viewModel: viewModel,
-            navigation: .title(title, style: style),
-            navigationPlacement: navigationPlacement,
+            chrome: .custom(.title(title, style: style), placement: navigationPlacement),
             content: content
         )
     }
 
+    /// Convenience for a `.custom` chrome with a title and back button.
+    ///
+    /// Prefer `chrome: .native` with `.navigationTitle(_:)` — the system back button and
+    /// swipe-back come for free, with no `PopGestureEnabler` workaround needed.
     init(
         viewModel: BaseViewModel,
         title: LocalizedStringResource,
@@ -480,12 +394,15 @@ public extension ScreenContainer {
     ) {
         self.init(
             viewModel: viewModel,
-            navigation: .withBack(title: title, style: style, backAction: onBack),
-            navigationPlacement: navigationPlacement,
+            chrome: .custom(.withBack(title: title, style: style, backAction: onBack), placement: navigationPlacement),
             content: content
         )
     }
 
+    /// Convenience for a `.custom` chrome with a title and search bar.
+    ///
+    /// Prefer `chrome: .native` with `.searchable(text:)` — it integrates with the
+    /// system's search keyboard, tokens, suggestions and scopes.
     init(
         viewModel: BaseViewModel,
         title: LocalizedStringResource,
@@ -498,115 +415,18 @@ public extension ScreenContainer {
     ) {
         self.init(
             viewModel: viewModel,
-            navigation: .withSearch(
-                title: title,
-                searchText: searchText,
-                searchPlaceholder: searchPlaceholder,
-                style: style,
-                onSubmit: onSearchSubmit
+            chrome: .custom(
+                .withSearch(
+                    title: title,
+                    searchText: searchText,
+                    searchPlaceholder: searchPlaceholder,
+                    style: style,
+                    onSubmit: onSearchSubmit
+                ),
+                placement: navigationPlacement
             ),
-            navigationPlacement: navigationPlacement,
             content: content
         )
-    }
-}
-
-// MARK: - Default Views
-
-struct DefaultLoadingView: View {
-    var body: some View {
-        ProgressView()
-            .progressViewStyle(.circular)
-            .controlSize(.large)
-            .padding(32)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-}
-
-struct DefaultInlineActivityView: View {
-    var body: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-            Text("Updating…", bundle: .module)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
-        .padding(.top, 16)
-    }
-}
-
-struct DefaultErrorView: View {
-    let error: ScreenError
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 36))
-            Text(error.title)
-                .font(.title3.bold())
-            Text(error.message)
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 24)
-
-            if let retry = error.retry {
-                Button(action: retry) {
-                    Text("Retry", bundle: .module)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
-}
-
-struct DefaultEmptyView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "tray")
-                .font(.system(size: 34))
-            Text("Nothing to show yet", bundle: .module)
-                .font(.title3.bold())
-            Text("The operation succeeded, but there is no content to display.", bundle: .module)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 24)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
-}
-
-struct DefaultBannerView: View {
-    let banner: BannerState
-    let dismiss: () -> Void
-
-    var body: some View {
-        Text(banner.message)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .onTapGesture(perform: dismiss)
-    }
-
-    private var backgroundColor: Color {
-        switch banner.style {
-        case .success: return .green
-        case .info: return .blue
-        case .warning: return .orange
-        case .error: return .red
-        }
     }
 }
 

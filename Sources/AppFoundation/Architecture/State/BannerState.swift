@@ -30,7 +30,7 @@ import Foundation
 /// let banner = BannerState(
 ///     message: "Processing request...",
 ///     style: .info,
-///     duration: .seconds(5)
+///     duration: .seconds(5)        // nil = stays until dismissed
 /// )
 /// showBanner(banner)
 /// ```
@@ -44,20 +44,21 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     /// The visual style (color/appearance) of the banner.
     public let style: Style
 
-    /// How long the banner should remain visible.
-    public let duration: Duration
+    /// How long the banner should remain visible; `nil` keeps it until it is
+    /// dismissed programmatically (AF-18: `Swift.Duration`, no shadowing enum).
+    public let duration: Swift.Duration?
 
     /// Creates a new banner state.
     ///
     /// - Parameters:
     ///   - message: Text displayed in the banner
     ///   - style: Visual style (success, info, warning, error)
-    ///   - duration: How long to show the banner
+    ///   - duration: How long to show the banner; `nil` means indefinite
     ///   - id: Unique identifier (auto-generated if not provided)
     public init(
         message: LocalizedStringResource,
         style: Style,
-        duration: Duration,
+        duration: Swift.Duration?,
         id: UUID = UUID()
     ) {
         self.id = id
@@ -72,7 +73,7 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
     public init(
         message: String,
         style: Style,
-        duration: Duration,
+        duration: Swift.Duration?,
         id: UUID = UUID()
     ) {
         self.id = id
@@ -157,14 +158,5 @@ public nonisolated struct BannerState: Equatable, Sendable, Identifiable {
 
         /// Error style (typically red).
         case error
-    }
-
-    /// How long a banner should remain visible.
-    public enum Duration: Equatable, Sendable {
-        /// Show for a specific number of seconds.
-        case seconds(TimeInterval)
-
-        /// Indefinite duration; banner only dismisses programmatically.
-        case indefinite
     }
 }

@@ -15,18 +15,18 @@ struct PreviewSampleList: View {
                             .overlay(
                                 Text("\(i + 1)")
                                     .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.accentColor)
+                                    .foregroundStyle(Color.accentColor)
                             )
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Item \(i + 1)").font(.body.weight(.medium))
                             Text("Subtitle for item \(i + 1)")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
