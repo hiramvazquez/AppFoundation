@@ -28,17 +28,22 @@ public struct DefaultBannerViewStyle: BannerViewStyle {
     public init() {}
 
     public func makeBody(configuration: BannerConfiguration) -> some View {
-        Text(configuration.banner.message)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(backgroundColor(for: configuration.banner.style))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .onTapGesture(perform: configuration.dismiss)
+        // `Button`, no `onTapGesture`: VoiceOver anuncia el banner como botón y puede
+        // descartarlo con la acción estándar; un gesto suelto no expone esa semántica.
+        Button(action: configuration.dismiss) {
+            Text(configuration.banner.message)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(backgroundColor(for: configuration.banner.style))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(Text("Dismiss", bundle: ResourceBundle.current))
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
     }
 
     private func backgroundColor(for style: BannerState.Style) -> Color {

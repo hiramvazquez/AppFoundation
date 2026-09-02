@@ -55,6 +55,24 @@
         }
       }
     },
+    "Dismiss": {
+      "comment": "Accessibility hint of the default banner (tap to dismiss)",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descartar"
+          }
+        }
+      }
+    },
     "Error": {
       "comment": "Default error title",
       "extractionState": "manual",

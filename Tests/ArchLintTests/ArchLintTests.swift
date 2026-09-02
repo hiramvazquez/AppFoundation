@@ -285,6 +285,9 @@ struct ArchLintInternalsTests {
         #expect(Glob.matches("**/*Tests.swift", path: "Features/Login/LoginLogicTests.swift"))
         #expect(!Glob.matches("Tests/**", path: "Sources/LoginLogic.swift"))
         #expect(Glob.matches("*.swift", path: "Package.swift"))
+        // Corchetes literales en un segmento: no son una clase de caracteres.
+        #expect(Glob.matches("Legacy[old]/**", path: "Legacy[old]/Thing.swift"))
+        #expect(!Glob.matches("Legacy[old]/**", path: "Legacyo/Thing.swift"))
         #expect(!Glob.matches("*.swift", path: "Sources/Package.swift"))
     }
 

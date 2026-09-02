@@ -38,7 +38,7 @@ enum Glob {
                 result += "[^/]*"
             } else if c == "?" {
                 result += "[^/]"
-            } else if ".+()^$|\\{}".contains(c) {
+            } else if ".+()^$|\\{}[]".contains(c) {
                 result += "\\\(c)"
             } else {
                 result.append(c)
