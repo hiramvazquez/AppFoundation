@@ -14,7 +14,7 @@ Swift 6.2+ (swift-tools 6.2) · iOS 17+ / macOS 14+ · sin dependencias externas
 // Package.swift
 dependencies: [
     // Cada paquete se publica en su propio repositorio (subtree split); sustituye la URL por la real.
-    .package(url: "https://github.com/hiram0816/AppFoundation.git", from: "1.0.0")
+    .package(url: "https://github.com/hiramvazquez/AppFoundation.git", from: "1.0.0")
 ],
 targets: [
     .target(

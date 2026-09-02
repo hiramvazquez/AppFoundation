@@ -42,7 +42,7 @@ let package = Package(
     products: [.library(name: "MiApp", targets: ["MiApp"])],
     dependencies: [
         // Cada paquete se publica en su propio repositorio (subtree split); sustituye la URL por la real.
-    .package(url: "https://github.com/hiram0816/AppFoundation.git", from: "1.0.0")
+    .package(url: "https://github.com/hiramvazquez/AppFoundation.git", from: "1.0.0")
     ],
     targets: [
         .target(
