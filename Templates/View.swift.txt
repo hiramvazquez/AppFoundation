@@ -1,0 +1,57 @@
+import AppFoundation
+
+#if canImport(SwiftUI)
+import SwiftUI
+
+/// Generado por `swift package generate-feature {{Feature}}`. Solo conoce el ViewModel a
+/// través de `ScreenContainer` — nunca referencia `{{Feature}}Logic`{{#api}}, `{{Feature}}Service`{{/api}}{{#local}}, `{{Feature}}Store`{{/local}}
+/// ni `APIService` (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 4).
+public struct {{Feature}}View: View {
+    let viewModel: {{Feature}}ViewModel
+
+    public init(viewModel: {{Feature}}ViewModel) {
+        self.viewModel = viewModel
+    }
+
+    public var body: some View {
+        ScreenContainer(viewModel) { send in
+            List(viewModel.items) { item in
+                Text(item.title)
+            }
+            .onAppear {
+                send(.load)
+            }
+        }
+        .navigationTitle("{{Feature}}")
+    }
+}
+#endif
+
+// MARK: - Preview: a stub, never used outside DEBUG (same pattern as
+// `AppFoundation/Examples/LoginApp/Sources/LoginApp/Features/Login/LoginView.swift`'s
+// `LoginPreview` — this scaffolding is exempt from the layering rules, `ArchLint.R4`
+// included: see `archlint`'s `#if DEBUG`/`#Preview` exemption).
+
+#if canImport(SwiftUI) && DEBUG
+/// Stub de `{{Feature}}LogicProtocol` solo para el `#Preview` de abajo. La spy con
+/// contadores para los tests (M9) es `{{Feature}}LogicMock`, en el target de tests.
+private final class {{Feature}}PreviewLogic: {{Feature}}LogicProtocol {
+{{#both}}
+    func cached() async -> [{{Feature}}Item] { [] }
+    func refresh() async throws -> [{{Feature}}Item] {
+        [{{Feature}}Item(title: "Hola mundo")]
+    }
+{{/both}}
+{{^both}}
+    func load() async throws -> [{{Feature}}Item] {
+        [{{Feature}}Item(title: "Hola mundo")]
+    }
+{{/both}}
+}
+
+#Preview {
+    NavigationStack {
+        {{Feature}}View(viewModel: {{Feature}}ViewModel(logic: {{Feature}}PreviewLogic()))
+    }
+}
+#endif

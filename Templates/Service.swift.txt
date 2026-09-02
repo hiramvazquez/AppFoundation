@@ -1,0 +1,49 @@
+import CoreNetworking
+import Foundation
+
+// MARK: - The request / response DTOs (ARQUITECTURA-KIT-2026-09-02.md §8, M2: only this
+// file ever sees them)
+
+/// Un endpoint tipado a la manera de CoreNetworking: el tipo ES el request, y `Response`
+/// dice qué devuelve `execute`. `Response`/`ItemDTO` son DTOs — `{{Feature}}Service` los
+/// mapea a `{{Feature}}Item` (el modelo de dominio) antes de devolver; `{{Feature}}Logic`/
+/// `{{Feature}}ViewModel` nunca los ven.
+struct Get{{Feature}}Request: BaseRequest {
+    struct ItemDTO: Decodable, Sendable {
+        let id: UUID
+        let title: String
+    }
+
+    struct Response: Decodable, Sendable {
+        let items: [ItemDTO]
+    }
+
+    let path = "/{{feature}}"
+    let method = HTTPMethod.get
+}
+
+// MARK: - The service
+
+/// Una llamada a la API: `GET /{{feature}}` → `[{{Feature}}Item]`. `{{Feature}}Servicing`
+/// es lo que `{{Feature}}Logic` conoce a través de `init` — nunca este tipo concreto
+/// (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3). `struct Sendable` (M5): un Service no
+/// carga estado mutable propio, solo `api`.
+public protocol {{Feature}}Servicing: Sendable {
+    func fetchItems() async throws(APIError) -> [{{Feature}}Item]
+}
+
+/// El ÚNICO tipo de esta app que referencia `APIServiceProtocol`/`BaseRequest` para el
+/// endpoint de {{feature}}. Conforma `EndpointService` (CoreNetworking) para `call(_:)`
+/// gratis.
+public struct {{Feature}}Service: {{Feature}}Servicing, EndpointService {
+    public let api: any APIServiceProtocol
+
+    public init(api: any APIServiceProtocol) {
+        self.api = api
+    }
+
+    public func fetchItems() async throws(APIError) -> [{{Feature}}Item] {
+        let response = try await call(Get{{Feature}}Request())
+        return response.items.map { {{Feature}}Item(id: $0.id, title: $0.title) }
+    }
+}

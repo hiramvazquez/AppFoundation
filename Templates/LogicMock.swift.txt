@@ -1,0 +1,36 @@
+import Foundation
+
+@testable import {{Module}}
+
+/// Spy que sustituye a `{{Feature}}LogicProtocol` en `{{Feature}}ViewModelTests` — el
+/// ViewModel bajo prueba nunca toca una `{{Feature}}Logic` real.
+final class {{Feature}}LogicMock: {{Feature}}LogicProtocol {
+{{#both}}
+    private(set) var cachedCallCount = 0
+    private(set) var refreshCallCount = 0
+
+    var cachedToReturn: [{{Feature}}Item] = []
+    var refreshResult: Result<[{{Feature}}Item], any Error> = .success([])
+
+    func cached() async -> [{{Feature}}Item] {
+        cachedCallCount += 1
+        return cachedToReturn
+    }
+
+    func refresh() async throws -> [{{Feature}}Item] {
+        refreshCallCount += 1
+        return try refreshResult.get()
+    }
+{{/both}}
+{{^both}}
+    private(set) var loadCallCount = 0
+    var itemsToReturn: [{{Feature}}Item] = []
+    var errorToThrow: (any Error)?
+
+    func load() async throws -> [{{Feature}}Item] {
+        loadCallCount += 1
+        if let errorToThrow { throw errorToThrow }
+        return itemsToReturn
+    }
+{{/both}}
+}

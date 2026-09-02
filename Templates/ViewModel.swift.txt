@@ -1,0 +1,61 @@
+import AppFoundation
+import Foundation
+
+/// Generado por `swift package generate-feature {{Feature}}`. Orquesta: recibe una
+/// `Action`, llama a `logic`, actualiza `items`. Nunca importa CoreNetworking ni
+/// referencia `{{Feature}}Service`/`{{Feature}}Store` directamente — solo `logic`
+/// (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 1).
+{{#analytics}}
+///
+/// Analítica (M10): si este feature necesita eventos de negocio, inyecta un
+/// `Analytics`/`EventTracking` en `{{Feature}}Logic` — nunca aquí ni en la View.
+{{/analytics}}
+@MainActor
+public final class {{Feature}}ViewModel: LogicViewModel<any {{Feature}}LogicProtocol>, ActionHandling {
+    public private(set) var items: [{{Feature}}Item] = []
+
+    /// Cada acción que reconoce esta pantalla.
+    public enum Action: Sendable {
+        case load
+    }
+
+    public func handle(_ action: Action) {
+        switch action {
+        case .load: load()
+        }
+    }
+
+    private func load() {
+{{#both}}
+        // Cache-then-network (M7): enseña la caché al momento; una vez llega la red,
+        // reemplaza el contenido. Un fallo de refresh con caché visible es un banner —
+        // sin caché, es la fase de error de la pantalla.
+        performLoad(successTransition: .preserveCurrentPhase) { vm in
+            let cached = await vm.logic.cached()
+            if !cached.isEmpty {
+                vm.items = cached
+                vm.setContent()
+            }
+
+            do {
+                let fresh = try await vm.logic.refresh()
+                vm.items = fresh
+                vm.setContent()
+            } catch {
+                guard !cached.isEmpty else { throw error }
+                vm.handleActivityError(error, strategy: .banner)
+            }
+        }
+{{/both}}
+{{^both}}
+        // `.preserveCurrentPhase` (like NotesApp's NotesViewModel): the work closure picks
+        // between `.content`/`.empty` itself — the default `successTransition` would force
+        // `.content` afterward and silently discard `setEmpty()`.
+        performLoad(successTransition: .preserveCurrentPhase) { vm in
+            let items = try await vm.logic.load()
+            vm.items = items
+            items.isEmpty ? vm.setEmpty() : vm.setContent()
+        }
+{{/both}}
+    }
+}

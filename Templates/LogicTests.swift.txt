@@ -1,0 +1,143 @@
+import Foundation
+import Testing
+{{#api}}
+import CoreNetworking
+{{/api}}
+
+@testable import {{Module}}
+
+@Suite("{{Feature}}Logic")
+struct {{Feature}}LogicTests {
+{{#both}}
+    @Test("cached() returns what the store has")
+    func cachedReturnsStoredItems() async throws {
+        let store = InMemory{{Feature}}Store()
+        let existing = {{Feature}}Item(title: "Existing")
+        try await store.replaceAll([existing])
+        let logic = {{Feature}}Logic({{feature}}Service: {{Feature}}ServiceMock(), {{feature}}Store: store)
+
+        let cached = await logic.cached()
+
+        #expect(cached == [existing])
+    }
+
+    @Test("cached() never throws — a store failure returns an empty list")
+    func cachedNeverThrows() async {
+        struct SomeStorageError: Error {}
+        let store = InMemory{{Feature}}Store(failureToThrow: SomeStorageError())
+        let logic = {{Feature}}Logic({{feature}}Service: {{Feature}}ServiceMock(), {{feature}}Store: store)
+
+        let cached = await logic.cached()
+
+        #expect(cached.isEmpty)
+    }
+
+    @Test("refresh() fetches from the service, persists, and returns the fresh items")
+    func refreshFetchesPersistsAndReturns() async throws {
+        let fresh = [{{Feature}}Item(title: "Fresh 1"), {{Feature}}Item(title: "Fresh 2")]
+        let service = {{Feature}}ServiceMock(result: .success(fresh))
+        let store = InMemory{{Feature}}Store()
+        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: store)
+
+        let items = try await logic.refresh()
+
+        #expect(items == fresh)
+        #expect(await service.fetchCalls.count == 1)
+        #expect(await store.replaceAllCalls.calls == [fresh])
+    }
+
+    @Test("An offline service failure maps to {{Feature}}Error.offline")
+    func offlineFailureMapsToDomainError() async {
+        let service = {{Feature}}ServiceMock(
+            result: .failure(.stub(code: .transport, underlying: URLError(.notConnectedToInternet)))
+        )
+        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: InMemory{{Feature}}Store())
+
+        await #expect(throws: {{Feature}}Error.offline) {
+            _ = try await logic.refresh()
+        }
+    }
+
+    @Test("A 5xx service failure maps to {{Feature}}Error.server")
+    func serverFailureMapsToDomainError() async {
+        let service = {{Feature}}ServiceMock(result: .failure(.stub(code: .httpStatus, statusCode: 503)))
+        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: InMemory{{Feature}}Store())
+
+        await #expect(throws: {{Feature}}Error.server) {
+            _ = try await logic.refresh()
+        }
+    }
+{{/both}}
+{{^both}}
+{{#api}}
+    @Test("load() returns what the service returns")
+    func loadReturnsServiceItems() async throws {
+        let items = [{{Feature}}Item(title: "Hola mundo")]
+        let service = {{Feature}}ServiceMock(result: .success(items))
+        let logic = {{Feature}}Logic({{feature}}Service: service)
+
+        let loaded = try await logic.load()
+
+        #expect(loaded == items)
+        #expect(await service.fetchCalls.count == 1)
+    }
+
+    @Test("An offline service failure maps to {{Feature}}Error.offline")
+    func offlineFailureMapsToDomainError() async {
+        let service = {{Feature}}ServiceMock(
+            result: .failure(.stub(code: .transport, underlying: URLError(.notConnectedToInternet)))
+        )
+        let logic = {{Feature}}Logic({{feature}}Service: service)
+
+        await #expect(throws: {{Feature}}Error.offline) {
+            _ = try await logic.load()
+        }
+    }
+
+    @Test("A 5xx service failure maps to {{Feature}}Error.server")
+    func serverFailureMapsToDomainError() async {
+        let service = {{Feature}}ServiceMock(result: .failure(.stub(code: .httpStatus, statusCode: 503)))
+        let logic = {{Feature}}Logic({{feature}}Service: service)
+
+        await #expect(throws: {{Feature}}Error.server) {
+            _ = try await logic.load()
+        }
+    }
+{{/api}}
+{{#local}}
+    @Test("load() returns what the store has")
+    func loadReturnsStoredItems() async throws {
+        let store = InMemory{{Feature}}Store()
+        let item = {{Feature}}Item(title: "Hola mundo")
+        try await store.save(item)
+        let logic = {{Feature}}Logic({{feature}}Store: store)
+
+        let items = try await logic.load()
+
+        #expect(items == [item])
+    }
+
+    @Test("A store failure maps to {{Feature}}Error.storageFailure")
+    func storeFailureMapsToDomainError() async {
+        struct SomeStorageError: Error {}
+        let store = InMemory{{Feature}}Store(failureToThrow: SomeStorageError())
+        let logic = {{Feature}}Logic({{feature}}Store: store)
+
+        await #expect(throws: {{Feature}}Error.storageFailure) {
+            _ = try await logic.load()
+        }
+    }
+{{/local}}
+{{#none}}
+    @Test("load() returns the Hola mundo item")
+    func loadReturnsHolaMundo() async throws {
+        let items = try await {{Feature}}Logic().load()
+
+        // Not `items == [{{Feature}}Item(title: "Hola mundo")]`: `{{Feature}}Item.init`
+        // defaults `id` to a fresh `UUID()`, so two independently-constructed items are
+        // never equal — compare the one field this test actually cares about.
+        #expect(items.map(\.title) == ["Hola mundo"])
+    }
+{{/none}}
+{{/both}}
+}

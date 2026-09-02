@@ -1,0 +1,109 @@
+import AppFoundation
+{{#api}}
+import CoreNetworking
+{{/api}}
+{{#local}}
+import SwiftData
+{{/local}}
+import Foundation
+
+/// Registra el feature {{Feature}} en un `Container`: el composition root es el único
+/// sitio del proyecto que conoce los tipos concretos detrás de sus protocolos (M4) —
+/// ninguna Logic/Service/Store llama a `Container.shared`/`resolve(`/`@Inject` por su
+/// cuenta (`ArchLint.R10`).
+///
+/// ```swift
+{{#api}}
+/// Container.shared.register(modules: [{{Feature}}Module(baseURL: URL(string: "https://api.example.com")!)])
+{{/api}}
+{{^api}}
+{{#local}}
+/// Container.shared.register(modules: [try! {{Feature}}Module()])
+{{/local}}
+{{^local}}
+/// Container.shared.register(modules: [{{Feature}}Module()])
+{{/local}}
+{{/api}}
+/// // Vista raíz:
+/// {{Feature}}View(viewModel: Container.shared.resolve())
+/// ```
+public struct {{Feature}}Module: DependencyModule {
+{{#api}}
+    private let baseURL: URL
+{{/api}}
+{{#local}}
+    private let modelContainer: ModelContainer
+{{/local}}
+
+{{#api}}
+{{#local}}
+    public init(baseURL: URL, modelContainer: ModelContainer? = nil) throws {
+        self.baseURL = baseURL
+        self.modelContainer = try modelContainer ?? ModelContainer(for: {{Feature}}Record.self)
+    }
+{{/local}}
+{{^local}}
+    public init(baseURL: URL) {
+        self.baseURL = baseURL
+    }
+{{/local}}
+{{/api}}
+{{^api}}
+{{#local}}
+    public init(modelContainer: ModelContainer? = nil) throws {
+        self.modelContainer = try modelContainer ?? ModelContainer(for: {{Feature}}Record.self)
+    }
+{{/local}}
+{{^local}}
+    public init() {}
+{{/local}}
+{{/api}}
+
+    public func register(in container: Container) {
+{{#api}}
+        // MARK: Networking wiring
+        container.register(APIServiceProtocol.self) { [baseURL] _ in
+            APIService(configuration: NetworkingConfiguration(baseURL: baseURL))
+        }
+
+        // MARK: Service
+        container.register({{Feature}}Servicing.self) { c in
+            {{Feature}}Service(api: c.resolve())
+        }
+{{/api}}
+{{#local}}
+
+        // MARK: Store
+        container.register({{Feature}}Storing.self) { [modelContainer] _ in
+            SwiftData{{Feature}}Store(modelContainer: modelContainer)
+        }
+{{/local}}
+
+        // MARK: Logic
+{{#both}}
+        container.register({{Feature}}LogicProtocol.self) { c in
+            {{Feature}}Logic({{feature}}Service: c.resolve(), {{feature}}Store: c.resolve())
+        }
+{{/both}}
+{{^both}}
+{{#api}}
+        container.register({{Feature}}LogicProtocol.self) { c in
+            {{Feature}}Logic({{feature}}Service: c.resolve())
+        }
+{{/api}}
+{{#local}}
+        container.register({{Feature}}LogicProtocol.self) { c in
+            {{Feature}}Logic({{feature}}Store: c.resolve())
+        }
+{{/local}}
+{{#none}}
+        container.register({{Feature}}LogicProtocol.self) { _ in {{Feature}}Logic() }
+{{/none}}
+{{/both}}
+
+        // MARK: ViewModel — resuelto por la vista raíz, nunca construido por Logic/Service/Store.
+        container.register({{Feature}}ViewModel.self, lifecycle: .transient) { c in
+            {{Feature}}ViewModel(logic: c.resolve())
+        }
+    }
+}

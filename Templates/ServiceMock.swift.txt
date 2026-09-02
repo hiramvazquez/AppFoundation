@@ -1,0 +1,27 @@
+import AppFoundationTestSupport
+import CoreNetworking
+import Foundation
+
+@testable import {{Module}}
+
+/// Spy que sustituye a `{{Feature}}Servicing` en `{{Feature}}LogicTests` — la Logic bajo
+/// prueba nunca toca `APIServiceProtocol`/una red real.
+///
+/// `actor` (M5): una conformidad `Servicing` es `Sendable`, y un actor es la forma directa
+/// de guardar estado mutable de stub detrás de ese requisito.
+actor {{Feature}}ServiceMock: {{Feature}}Servicing {
+    let fetchCalls = SpyRecorder<Void>()
+    private var result: Result<[{{Feature}}Item], APIError>
+
+    init(result: Result<[{{Feature}}Item], APIError> = .success([])) {
+        self.result = result
+    }
+
+    func fetchItems() async throws(APIError) -> [{{Feature}}Item] {
+        await fetchCalls.record()
+        switch result {
+        case .success(let items): return items
+        case .failure(let error): throw error
+        }
+    }
+}

@@ -1,0 +1,62 @@
+import Foundation
+import SwiftData
+import Testing
+
+@testable import {{Module}}
+
+/// `SwiftData{{Feature}}Store` probado contra un `ModelContainer` REAL — solo en memoria
+/// (`isStoredInMemoryOnly: true`), nunca un mock del framework.
+@Suite("SwiftData{{Feature}}Store")
+struct {{Feature}}StoreTests {
+    private func makeStore() throws -> SwiftData{{Feature}}Store {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: {{Feature}}Record.self, configurations: configuration)
+        return SwiftData{{Feature}}Store(modelContainer: container)
+    }
+
+{{#both}}
+    @Test("replaceAll(_:) then fetchAll() round-trips the items")
+    func replaceAllThenFetchAllRoundTrips() async throws {
+        let store = try makeStore()
+        let items = [{{Feature}}Item(title: "Alpha"), {{Feature}}Item(title: "Beta")]
+
+        try await store.replaceAll(items)
+        let fetched = try await store.fetchAll()
+
+        #expect(Set(fetched) == Set(items))
+    }
+
+    @Test("replaceAll(_:) discards whatever was cached before — a full snapshot, not a merge")
+    func replaceAllDiscardsPreviousItems() async throws {
+        let store = try makeStore()
+        try await store.replaceAll([{{Feature}}Item(title: "Old")])
+
+        let newItem = {{Feature}}Item(title: "New")
+        try await store.replaceAll([newItem])
+        let fetched = try await store.fetchAll()
+
+        #expect(fetched == [newItem])
+    }
+{{/both}}
+{{^both}}
+    @Test("save(_:) then fetchAll() round-trips an item")
+    func saveThenFetchAllRoundTrips() async throws {
+        let store = try makeStore()
+        let item = {{Feature}}Item(title: "Round trip")
+
+        try await store.save(item)
+        let fetched = try await store.fetchAll()
+
+        #expect(fetched == [item])
+    }
+{{/both}}
+
+    @Test("fetchAll() on an empty store returns an empty list")
+    func fetchAllOnEmptyStoreReturnsEmpty() async throws {
+        let store = try makeStore()
+
+        let fetched = try await store.fetchAll()
+
+        #expect(fetched.isEmpty)
+    }
+}

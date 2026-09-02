@@ -1,0 +1,133 @@
+import Foundation
+import Testing
+
+@testable import {{Module}}
+
+/// `{{Feature}}ViewModel` probado solo contra `{{Feature}}LogicMock` — sin
+/// `{{Feature}}Service`/`{{Feature}}Store` real, sin red, sin SwiftData involucrados.
+@Suite("{{Feature}}ViewModel")
+@MainActor
+struct {{Feature}}ViewModelTests {
+{{#both}}
+    @Test("No cache, refresh succeeds: reaches .content with the fresh items")
+    func noCacheRefreshSucceeds() async {
+        let mock = {{Feature}}LogicMock()
+        let freshItem = {{Feature}}Item(title: "Fresh")
+        mock.cachedToReturn = []
+        mock.refreshResult = .success([freshItem])
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(viewModel.phase == .content)
+        #expect(viewModel.items == [freshItem])
+    }
+
+    @Test("No cache, refresh fails: reaches the screen's error phase")
+    func noCacheRefreshFails() async {
+        let mock = {{Feature}}LogicMock()
+        mock.cachedToReturn = []
+        mock.refreshResult = .failure({{Feature}}Error.offline)
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(viewModel.hasError)
+        #expect(viewModel.items.isEmpty)
+        #expect(viewModel.banner == nil)
+    }
+
+    @Test("Cache present, refresh succeeds: content is replaced by the fresh items")
+    func cachePresentRefreshSucceeds() async {
+        let mock = {{Feature}}LogicMock()
+        let cachedItem = {{Feature}}Item(title: "Cached")
+        let freshItem = {{Feature}}Item(title: "Fresh")
+        mock.cachedToReturn = [cachedItem]
+        mock.refreshResult = .success([freshItem])
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(viewModel.phase == .content)
+        #expect(viewModel.items == [freshItem])
+    }
+
+    @Test("Cache present, refresh fails: a banner shows, content keeps the cached items")
+    func cachePresentRefreshFailsShowsBanner() async {
+        let mock = {{Feature}}LogicMock()
+        let cachedItem = {{Feature}}Item(title: "Cached")
+        mock.cachedToReturn = [cachedItem]
+        mock.refreshResult = .failure({{Feature}}Error.offline)
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(viewModel.phase == .content)
+        #expect(viewModel.items == [cachedItem])
+        #expect(viewModel.banner != nil)
+    }
+
+    @Test("Both cached() and refresh() are called exactly once per load")
+    func bothCallsHappenExactlyOnce() async {
+        let mock = {{Feature}}LogicMock()
+        mock.cachedToReturn = [{{Feature}}Item(title: "Cached")]
+        mock.refreshResult = .success([{{Feature}}Item(title: "Fresh")])
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(mock.cachedCallCount == 1)
+        #expect(mock.refreshCallCount == 1)
+    }
+{{/both}}
+{{^both}}
+    @Test("handle(.load) calls logic.load and reaches .content when non-empty")
+    func loadReachesContent() async {
+        let mock = {{Feature}}LogicMock()
+        let item = {{Feature}}Item(title: "Hola mundo")
+        mock.itemsToReturn = [item]
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(mock.loadCallCount == 1)
+        #expect(viewModel.phase == .content)
+        #expect(viewModel.items == [item])
+    }
+
+    @Test("handle(.load) reaches .empty when there is nothing to show")
+    func loadReachesEmptyWhenNothing() async {
+        let mock = {{Feature}}LogicMock()
+        mock.itemsToReturn = []
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(viewModel.phase == .empty)
+    }
+
+    @Test("A failing logic.load lands on .error")
+    func loadFailureSurfacesError() async {
+        let mock = {{Feature}}LogicMock()
+{{#local}}
+        mock.errorToThrow = {{Feature}}Error.storageFailure
+{{/local}}
+{{^local}}
+        mock.errorToThrow = {{Feature}}Error.unknown
+{{/local}}
+        let viewModel = {{Feature}}ViewModel(logic: mock)
+
+        viewModel.handle(.load)
+        await viewModel.inFlightLoad?.value
+
+        #expect(viewModel.hasError)
+    }
+{{/both}}
+}

@@ -1,0 +1,236 @@
+import AppFoundation
+import Foundation
+{{#api}}
+import CoreNetworking
+{{/api}}
+
+// MARK: - The domain model
+
+/// Generado por `swift package generate-feature {{Feature}}`. `Sendable`/`Equatable`,
+/// como todo modelo de dominio de este kit — nunca el DTO/`@Model` directamente (M2): ver
+{{#api}}
+/// `Services/{{Feature}}Service.swift`{{#local}} y `Stores/{{Feature}}Store.swift`{{/local}}.
+{{/api}}
+{{^api}}
+{{#local}}
+/// `Stores/{{Feature}}Store.swift`.
+{{/local}}
+{{^local}}
+/// nada — esta variante no tiene Service ni Store.
+{{/local}}
+{{/api}}
+public nonisolated struct {{Feature}}Item: Sendable, Equatable, Hashable, Identifiable {
+    public let id: UUID
+    public let title: String
+
+    public init(id: UUID = UUID(), title: String) {
+        self.id = id
+        self.title = title
+    }
+}
+
+// MARK: - Domain errors (ARQUITECTURA-KIT-2026-09-02.md §8, M1)
+
+/// Cada forma en la que puede fallar esta pantalla — nunca `APIError`{{#local}}{{^api}}/un error de
+/// persistencia{{/api}}{{/local}}, que se queda en la frontera Logic/Service{{#local}}{{^api}}Store{{/api}}{{/local}}.
+public enum {{Feature}}Error: DomainError, Equatable {
+{{#both}}
+    case offline
+    case server
+    case unknown
+{{/both}}
+{{^both}}
+{{#api}}
+    case offline
+    case server
+    case unknown
+{{/api}}
+{{#local}}
+    case storageFailure
+{{/local}}
+{{#none}}
+    case unknown
+{{/none}}
+{{/both}}
+
+    public var isRetryable: Bool {
+        switch self {
+{{#both}}
+        case .offline, .server, .unknown: true
+{{/both}}
+{{^both}}
+{{#api}}
+        case .offline, .server, .unknown: true
+{{/api}}
+{{#local}}
+        case .storageFailure: true
+{{/local}}
+{{#none}}
+        case .unknown: false
+{{/none}}
+{{/both}}
+        }
+    }
+
+    public var screenError: ScreenError {
+        switch self {
+{{#both}}
+        case .offline:
+            return ScreenError(title: "No connection", message: "Check your network and try again.")
+        case .server:
+            return ScreenError(title: "Server error", message: "Please try again later.")
+        case .unknown:
+            return ScreenError(title: "Something went wrong", message: "Please try again.")
+{{/both}}
+{{^both}}
+{{#api}}
+        case .offline:
+            return ScreenError(title: "No connection", message: "Check your network and try again.")
+        case .server:
+            return ScreenError(title: "Server error", message: "Please try again later.")
+        case .unknown:
+            return ScreenError(title: "Something went wrong", message: "Please try again.")
+{{/api}}
+{{#local}}
+        case .storageFailure:
+            return ScreenError(title: "Couldn't load", message: "Please try again.")
+{{/local}}
+{{#none}}
+        case .unknown:
+            return ScreenError(title: "Something went wrong", message: "Please try again.")
+{{/none}}
+{{/both}}
+        }
+    }
+}
+
+// MARK: - Logic
+
+/// Cada operación que `{{Feature}}ViewModel` puede pedirle a su Logic.
+public protocol {{Feature}}LogicProtocol: Logic {
+{{#both}}
+    /// Lo que hay persistido localmente ahora mismo, o `[]` si no hay nada (o falló la
+    /// lectura) — nunca lanza (M7).
+    func cached() async -> [{{Feature}}Item]
+
+    /// Trae de la red, persiste, y devuelve. Lanza `{{Feature}}Error` (M1) si falla; lo que
+    /// había en caché queda intacto.
+    func refresh() async throws -> [{{Feature}}Item]
+{{/both}}
+{{^both}}
+    func load() async throws -> [{{Feature}}Item]
+{{/both}}
+}
+
+/// Toda la lógica de negocio de este feature — nunca en el ViewModel (que solo orquesta) ni
+{{#api}}
+/// en `{{Feature}}Service` (que solo sabe hacer la llamada).
+{{/api}}
+{{^api}}
+{{#local}}
+/// en `{{Feature}}Store` (que solo sabe leer/escribir localmente).
+{{/local}}
+{{^local}}
+/// en ningún otro tipo — esta variante no depende de nada externo.
+{{/local}}
+{{/api}}
+///
+/// `nonisolated` (M5): no depende del actor principal — sus métodos `async` corren en el
+/// actor de quien la llama.
+public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
+{{#api}}
+    private let {{feature}}Service: any {{Feature}}Servicing
+{{/api}}
+{{#local}}
+    private let {{feature}}Store: any {{Feature}}Storing
+{{/local}}
+
+{{#both}}
+    /// - Parameters:
+    ///   - {{feature}}Service: La llamada a red de este feature. Inyectada como protocolo.
+    ///   - {{feature}}Store: La caché local. Inyectada como protocolo — nunca el
+    ///     `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store` concreto
+    ///     (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+    public init({{feature}}Service: any {{Feature}}Servicing, {{feature}}Store: any {{Feature}}Storing) {
+        self.{{feature}}Service = {{feature}}Service
+        self.{{feature}}Store = {{feature}}Store
+    }
+
+    public func cached() async -> [{{Feature}}Item] {
+        (try? await {{feature}}Store.fetchAll()) ?? []
+    }
+
+    public func refresh() async throws -> [{{Feature}}Item] {
+        do {
+            let items = try await {{feature}}Service.fetchItems()
+            // Best-effort: los items frescos se devuelven aunque falle persistirlos — un
+            // fallo de caché no debe convertir un refresh exitoso en un error.
+            try? await {{feature}}Store.replaceAll(items)
+            return items
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    private static func mapError(_ error: APIError) -> {{Feature}}Error {
+        switch error.category {
+        case .offline: return .offline
+        case .server: return .server
+        default: return .unknown
+        }
+    }
+{{/both}}
+{{^both}}
+{{#api}}
+    /// - Parameter {{feature}}Service: La única llamada a red de este feature. Inyectada
+    ///   como protocolo — nunca `{{Feature}}Service` directamente
+    ///   (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+    public init({{feature}}Service: any {{Feature}}Servicing) {
+        self.{{feature}}Service = {{feature}}Service
+    }
+
+    public func load() async throws -> [{{Feature}}Item] {
+        do {
+            return try await {{feature}}Service.fetchItems()
+        } catch {
+            throw Self.mapError(error)
+        }
+    }
+
+    private static func mapError(_ error: APIError) -> {{Feature}}Error {
+        switch error.category {
+        case .offline: return .offline
+        case .server: return .server
+        default: return .unknown
+        }
+    }
+{{/api}}
+{{#local}}
+    /// - Parameter {{feature}}Store: La única dependencia de este feature. Inyectada como
+    ///   protocolo — nunca `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store`
+    ///   directamente (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+    public init({{feature}}Store: any {{Feature}}Storing) {
+        self.{{feature}}Store = {{feature}}Store
+    }
+
+    public func load() async throws -> [{{Feature}}Item] {
+        do {
+            return try await {{feature}}Store.fetchAll()
+        } catch {
+            throw {{Feature}}Error.storageFailure
+        }
+    }
+{{/local}}
+{{#none}}
+    /// La variante "sin datos": `Logic` no depende de nada — ni `*Servicing` ni
+    /// `*Storing` — pero sigue siendo su propio tipo: la regla de negocio (aquí, "Hola
+    /// mundo") vive aquí y en ningún otro sitio, exactamente igual que en las otras tres
+    /// variantes.
+    public init() {}
+
+    public func load() async throws -> [{{Feature}}Item] {
+        [{{Feature}}Item(title: "Hola mundo")]
+    }
+{{/none}}
+{{/both}}
+}

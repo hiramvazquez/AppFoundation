@@ -1,0 +1,48 @@
+import AppFoundationTestSupport
+import Foundation
+
+@testable import {{Module}}
+
+/// `{{Feature}}Storing` respaldado por `AppFoundationTestSupport.InMemoryStore` — contra lo
+/// que corre `{{Feature}}LogicTests` en vez de un `SwiftData{{Feature}}Store`/
+/// `ModelContainer` real: rápido, y sin estado compartido entre tests.
+///
+/// `actor`: una conformidad `Storing` es `Sendable`, y un actor es la forma directa de
+/// guardar estado mutable de stub detrás de ese requisito.
+actor InMemory{{Feature}}Store: {{Feature}}Storing {
+    private let storage = InMemoryStore<UUID, {{Feature}}Item>()
+{{#both}}
+    let replaceAllCalls = SpyRecorder<[{{Feature}}Item]>()
+{{/both}}
+
+    /// Cuando está presente, `fetchAll`/`{{#both}}replaceAll{{/both}}{{^both}}save{{/both}}` lanzan esto en vez de tocar `storage` — así prueba
+    /// `{{Feature}}LogicTests` el mapeo a `.storageFailure`.
+    private var failureToThrow: (any Error)?
+
+    init(failureToThrow: (any Error)? = nil) {
+        self.failureToThrow = failureToThrow
+    }
+
+    func fetchAll() async throws -> [{{Feature}}Item] {
+        if let failureToThrow { throw failureToThrow }
+        return await storage.values()
+    }
+{{#both}}
+
+    func replaceAll(_ items: [{{Feature}}Item]) async throws {
+        if let failureToThrow { throw failureToThrow }
+        await replaceAllCalls.record(items)
+        await storage.removeAll()
+        for item in items {
+            await storage.set(item.id, item)
+        }
+    }
+{{/both}}
+{{^both}}
+
+    func save(_ item: {{Feature}}Item) async throws {
+        if let failureToThrow { throw failureToThrow }
+        await storage.set(item.id, item)
+    }
+{{/both}}
+}

@@ -1,0 +1,40 @@
+import CoreNetworking
+import CoreNetworkingTestSupport
+import Foundation
+import Testing
+
+@testable import {{Module}}
+
+/// `{{Feature}}Service` — el único tipo de este feature que toca `APIServiceProtocol` —
+/// probado contra `MockAPIService`.
+@Suite("{{Feature}}Service")
+struct {{Feature}}ServiceTests {
+    @Test("A stubbed 200 decodes DTOs into domain items")
+    func stubbedSuccessDecodesItems() async throws {
+        let mock = MockAPIService()
+        let id = UUID()
+        mock.stub(
+            Get{{Feature}}Request.self,
+            returning: Get{{Feature}}Request.Response(items: [Get{{Feature}}Request.ItemDTO(id: id, title: "Widget")])
+        )
+        let service = {{Feature}}Service(api: mock)
+
+        let items = try await service.fetchItems()
+
+        #expect(items == [{{Feature}}Item(id: id, title: "Widget")])
+    }
+
+    @Test("A stubbed failure propagates as APIError")
+    func stubbedFailurePropagates() async {
+        let mock = MockAPIService()
+        mock.stub(Get{{Feature}}Request.self, throwing: .stub(code: .httpStatus, statusCode: 500))
+        let service = {{Feature}}Service(api: mock)
+
+        do {
+            _ = try await service.fetchItems()
+            Issue.record("Expected fetchItems() to throw")
+        } catch {
+            #expect(error.statusCode == 500)
+        }
+    }
+}

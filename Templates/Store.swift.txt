@@ -1,0 +1,72 @@
+import Foundation
+import SwiftData
+
+// MARK: - The persistence model (ARQUITECTURA-KIT-2026-09-02.md §8, M2: only this file
+// ever sees it)
+
+/// La entidad SwiftData. Nunca sale de este fichero: `SwiftData{{Feature}}Store` la mapea
+/// a `{{Feature}}Item` (el modelo de dominio) al leer, y de vuelta al escribir.
+@Model
+final class {{Feature}}Record {
+    @Attribute(.unique) var id: UUID
+    var title: String
+
+    init(id: UUID, title: String) {
+        self.id = id
+        self.title = title
+    }
+}
+
+// MARK: - The store
+
+/// Persistencia local para este feature. `{{Feature}}Logic` depende de este protocolo a
+/// través de `init` — nunca de `SwiftData{{Feature}}Store` directamente
+/// (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+public protocol {{Feature}}Storing: Sendable {
+    func fetchAll() async throws -> [{{Feature}}Item]
+{{#both}}
+
+    /// Reemplaza TODA la caché con `items` — un refresh es una foto completa del
+    /// servidor, no un diff.
+    func replaceAll(_ items: [{{Feature}}Item]) async throws
+{{/both}}
+{{^both}}
+
+    func save(_ item: {{Feature}}Item) async throws
+{{/both}}
+}
+
+/// El `{{Feature}}Storing` con el que corre esta app. `@ModelActor` (M5: "actor (o
+/// `@ModelActor` con SwiftData)"): el `ModelContext` de SwiftData no es `Sendable` y su
+/// propio init es main-actor-isolated — exactamente lo que resuelve la macro, generando
+/// el `init(modelContainer:)` correcto. Ver `{{Feature}}Module.swift` para cómo se
+/// construye el `ModelContainer`.
+@ModelActor
+public actor SwiftData{{Feature}}Store: {{Feature}}Storing {
+    public func fetchAll() async throws -> [{{Feature}}Item] {
+        let descriptor = FetchDescriptor<{{Feature}}Record>(sortBy: [SortDescriptor(\.title)])
+        let records = try modelContext.fetch(descriptor)
+        return records.map { {{Feature}}Item(id: $0.id, title: $0.title) }
+    }
+{{#both}}
+
+    public func replaceAll(_ items: [{{Feature}}Item]) async throws {
+        let existing = try modelContext.fetch(FetchDescriptor<{{Feature}}Record>())
+        for record in existing {
+            modelContext.delete(record)
+        }
+        for item in items {
+            modelContext.insert({{Feature}}Record(id: item.id, title: item.title))
+        }
+        try modelContext.save()
+    }
+{{/both}}
+{{^both}}
+
+    public func save(_ item: {{Feature}}Item) async throws {
+        let record = {{Feature}}Record(id: item.id, title: item.title)
+        modelContext.insert(record)
+        try modelContext.save()
+    }
+{{/both}}
+}
