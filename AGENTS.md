@@ -94,6 +94,7 @@ escribir código de una capa a mano, repasa la tabla de reglas en `README.md` §
 que un `APIError`/DTO llegue al ViewModel (R7/R8), o llamar a `Container.shared` fuera
 del `XxxModule` (R10) hacen fallar el build, no solo el code review.
 
-Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia)
-y `README.md` (instalación, resto de piezas del paquete, y la sección «Generador y
-linter» con el detalle completo de cada regla).
+Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia),
+`README.md` (instalación y los seis pasos mínimos) y `Sources/AppFoundation/Documentation.docc/`
+(Xcode: **Product ▸ Build Documentation**) para la referencia completa por pieza, con
+ejemplos que compilan (`Snippets/`).
