@@ -53,7 +53,8 @@ struct LocalizationTests {
             "Search": "Buscar",
             "Cancel": "Cancelar",
             "Back": "Atrás",
-            "Close": "Cerrar"
+            "Close": "Cerrar",
+            "Something went wrong. Please try again.": "Algo ha ido mal. Inténtalo de nuevo."
         ]
         for (key, value) in expected {
             #expect(try localizedValue(forKey: key, language: "es") == value)
@@ -61,7 +62,8 @@ struct LocalizationTests {
     }
 
     @Test func englishCatalogCoversEveryDefaultString() throws {
-        for key in ["Error", "OK", "Retry", "Updating…", "Nothing to show yet", "Search", "Cancel", "Back", "Close"] {
+        for key in ["Error", "OK", "Retry", "Updating…", "Nothing to show yet", "Search", "Cancel", "Back", "Close",
+                        "Something went wrong. Please try again."] {
             #expect(try localizedValue(forKey: key, language: "en") == key)
         }
     }
@@ -75,5 +77,9 @@ struct LocalizationTests {
         #expect(["Search", "Buscar"].contains(L10n.search))
         #expect(["Back", "Atrás"].contains(L10n.back))
         #expect(["Close", "Cerrar"].contains(L10n.close))
+        #expect([
+            "Something went wrong. Please try again.",
+            "Algo ha ido mal. Inténtalo de nuevo."
+        ].contains(L10n.genericErrorMessage))
     }
 }

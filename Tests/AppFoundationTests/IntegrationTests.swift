@@ -39,8 +39,8 @@ struct IntegrationTests {
 
         @discardableResult
         func loadData() -> Task<Void, Never> {
-            performLoad(errorTitle: "Load Failed") {
-                _ = try await self.dataService.fetchData()
+            performLoad(errorTitle: "Load Failed") { vm in
+                _ = try await vm.dataService.fetchData()
             }
         }
 

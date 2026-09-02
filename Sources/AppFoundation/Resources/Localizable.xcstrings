@@ -145,6 +145,24 @@
         }
       }
     },
+    "Something went wrong. Please try again.": {
+      "comment": "Generic fallback message for errors that cannot be presented otherwise",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong. Please try again."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo ha ido mal. Inténtalo de nuevo."
+          }
+        }
+      }
+    },
     "The operation succeeded, but there is no content to display.": {
       "comment": "Default empty state subtitle",
       "extractionState": "manual",
