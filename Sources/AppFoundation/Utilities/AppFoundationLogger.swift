@@ -17,4 +17,9 @@ nonisolated enum AppFoundationLogger {
 
     /// Runtime environment diagnostics from `AppEnvironment`.
     static let environment = Logger(subsystem: subsystem, category: "Environment")
+
+    /// Errors that reach `DefaultErrorPresenter`'s generic fallback — i.e. errors that
+    /// are neither `AppErrorConvertible` nor `LocalizedError`. The technical detail goes
+    /// here (`.private`), never to the screen.
+    static let errors = Logger(subsystem: subsystem, category: "Errors")
 }

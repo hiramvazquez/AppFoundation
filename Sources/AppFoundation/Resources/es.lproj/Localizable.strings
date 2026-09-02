@@ -21,3 +21,6 @@
 
 /* Botón cancelar de la búsqueda */
 "Cancel" = "Cancelar";
+
+/* Mensaje de error genérico cuando un error no se puede presentar de otra forma */
+"Something went wrong. Please try again." = "Algo ha ido mal. Inténtalo de nuevo.";

@@ -17,4 +17,11 @@ nonisolated enum L10n {
 
     /// "Search" — default search placeholder.
     static var search: String { String(localized: "Search", bundle: .module) }
+
+    /// "Something went wrong. Please try again." — generic fallback message for errors
+    /// that `DefaultErrorPresenter` can't otherwise present (not `AppErrorConvertible`,
+    /// not `LocalizedError`). Never the raw `localizedDescription` of a foreign error.
+    static var genericErrorMessage: String {
+        String(localized: "Something went wrong. Please try again.", bundle: .module)
+    }
 }
