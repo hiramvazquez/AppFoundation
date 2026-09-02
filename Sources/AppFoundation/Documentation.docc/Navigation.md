@@ -38,7 +38,39 @@ var body: some View {
 `DeepLinkType.parse(_:)` traduce una `URL` a un caso propio; `coordinator.handle(url:as:)`
 aplica la `DeepLinkAction` (`.setStack`, `.push`, `.present`) que tu mapeo produce:
 
-@Snippet(path: "AppFoundation/Snippets/navigation-deeplink")
+<!-- snippet: navigation-deeplink -->
+```swift
+import AppFoundation
+import Foundation
+
+enum AppRoute: Hashable {
+    case home
+    case profile
+    case profileDetails(id: String)
+}
+
+enum AppDeepLink: DeepLinkType {
+    case profile(id: String)
+
+    static func parse(_ url: URL) -> AppDeepLink? {
+        let components = url.pathComponents
+        guard let index = components.firstIndex(of: "profile"), components.count > index + 1 else {
+            return nil
+        }
+        return .profile(id: components[index + 1])
+    }
+}
+
+@MainActor
+func handleIncomingURL(_ url: URL, coordinator: Coordinator<AppRoute>) {
+    coordinator.handle(url, as: AppDeepLink.self) { link in
+        switch link {
+        case .profile(let id):
+            return .setStack([.profile, .profileDetails(id: id)])
+        }
+    }
+}
+```
 
 ```swift
 .onOpenURL { url in

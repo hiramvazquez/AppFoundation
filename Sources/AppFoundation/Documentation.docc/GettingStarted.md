@@ -59,7 +59,28 @@ let package = Package(
 `Container` es el composition root: el único sitio que conoce tipos concretos. Copia esto
 en un fichero nuevo, `Sources/MiApp/GreetingModule.swift`:
 
-@Snippet(path: "AppFoundation/Snippets/getting-started-container")
+<!-- snippet: getting-started-container -->
+```swift
+import AppFoundation
+
+protocol GreetingServicing {
+    func greeting(for name: String) -> String
+}
+
+struct GreetingService: GreetingServicing {
+    func greeting(for name: String) -> String { "Hola, \(name)" }
+}
+
+struct GreetingModule: DependencyModule {
+    func register(in container: Container) {
+        container.register(GreetingServicing.self) { _ in GreetingService() }
+    }
+}
+
+Container.shared.register(modules: [GreetingModule()])
+let service: GreetingServicing = Container.shared.resolve()
+print(service.greeting(for: "Hiram"))
+```
 
 **Resultado esperado**: compila. Las últimas tres líneas del snippet son la demostración de
 uso — en un target de biblioteca (no un ejecutable) no van sueltas en el fichero; muévelas
@@ -71,7 +92,31 @@ suite, o directamente en el paso 6) o al `init` de tu `App`.
 `Coordinator` modela una pila de navegación con una sola capa modal. Nuevo fichero,
 `Sources/MiApp/RootView.swift`:
 
-@Snippet(path: "AppFoundation/Snippets/getting-started-coordinator")
+<!-- snippet: getting-started-coordinator -->
+```swift
+import AppFoundation
+import SwiftUI
+
+enum AppRoute: Hashable {
+    case home
+    case greeting(name: String)
+}
+
+struct RootView: View {
+    @State private var coordinator = Coordinator<AppRoute>(root: .home)
+
+    var body: some View {
+        CoordinatorView(coordinator: coordinator) { route in
+            switch route {
+            case .home:
+                Text("Home")
+            case .greeting(let name):
+                Text("Hola, \(name)")
+            }
+        }
+    }
+}
+```
 
 **Resultado esperado**: `RootView` compila; `CoordinatorView` resuelve `.home` y
 `.greeting(name:)` sin código de navegación adicional.
@@ -82,7 +127,43 @@ Un feature real separa la regla de negocio (`Logic`) de la orquestación de pant
 (`ViewModel`) desde el primer momento — ver <doc:Architecture> para las cuatro variantes.
 Nuevo fichero, `Sources/MiApp/GreetingFeature.swift`:
 
-@Snippet(path: "AppFoundation/Snippets/getting-started-viewmodel")
+<!-- snippet: getting-started-viewmodel -->
+```swift
+import AppFoundation
+
+protocol GreetingLogicProtocol: Logic {
+    func greeting(for name: String) -> String
+}
+
+final class GreetingLogic: GreetingLogicProtocol {
+    func greeting(for name: String) -> String {
+        "Hola, \(name)"
+    }
+}
+
+final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
+    private(set) var message: String = ""
+
+    enum Action: Sendable {
+        case load(name: String)
+    }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .load(let name): load(name: name)
+        }
+    }
+
+    private func load(name: String) {
+        performLoad { vm in
+            vm.message = vm.logic.greeting(for: name)
+        }
+    }
+}
+
+let viewModel = GreetingViewModel(logic: GreetingLogic())
+viewModel.handle(.load(name: "Hiram"))
+```
 
 **Resultado esperado**: compila (las dos últimas líneas del snippet, la demostración de
 uso, van al paso 6 — un test, no el fichero de biblioteca). Tras `handle(.load(name:))`,
@@ -95,7 +176,53 @@ paso 4 para poder compilar solo, como todo snippet de esta documentación — en
 ya los tienes en `GreetingFeature.swift`: copia solo el `struct GreetingView` en un
 fichero nuevo, `Sources/MiApp/GreetingView.swift`.
 
-@Snippet(path: "AppFoundation/Snippets/getting-started-view")
+<!-- snippet: getting-started-view -->
+```swift
+import AppFoundation
+import SwiftUI
+
+protocol GreetingLogicProtocol: Logic {
+    func greeting(for name: String) -> String
+}
+
+final class GreetingLogic: GreetingLogicProtocol {
+    func greeting(for name: String) -> String {
+        "Hola, \(name)"
+    }
+}
+
+final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
+    private(set) var message: String = ""
+
+    enum Action: Sendable {
+        case load(name: String)
+    }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .load(let name): load(name: name)
+        }
+    }
+
+    private func load(name: String) {
+        performLoad { vm in
+            vm.message = vm.logic.greeting(for: name)
+        }
+    }
+}
+
+struct GreetingView: View {
+    let viewModel: GreetingViewModel
+
+    var body: some View {
+        ScreenContainer(viewModel) { send in
+            Text(viewModel.message)
+                .onAppear { send(.load(name: "Hiram")) }
+        }
+        .navigationTitle("Saludo")
+    }
+}
+```
 
 **Resultado esperado**: `GreetingView` compila; al aparecer, `send(.load(name:))` dispara
 `performLoad`, la pantalla muestra el indicador de carga y luego el texto.

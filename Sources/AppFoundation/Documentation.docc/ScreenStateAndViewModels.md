@@ -15,7 +15,37 @@ carga inicial o un fallo a pantalla completa; usa `activity` para todo lo demás
 `@Observable`, `open class`. Las propiedades de una subclase se observan automáticamente
 — sin `@Published`, sin `ObservableObject`.
 
-@Snippet(path: "AppFoundation/Snippets/quickstart-viewmodel")
+<!-- snippet: quickstart-viewmodel -->
+```swift
+import AppFoundation
+
+struct Profile {
+    let name: String
+}
+
+final class ProfileViewModel: BaseViewModel, ActionHandling {
+    private(set) var profile: Profile?
+
+    enum Action: Sendable {
+        case load
+    }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .load: load()
+        }
+    }
+
+    private func load() {
+        performLoad { vm in
+            vm.profile = Profile(name: "Hiram")
+        }
+    }
+}
+
+let viewModel = ProfileViewModel()
+viewModel.handle(.load)
+```
 
 `work` recibe el view model como parámetro (`{ vm in ... }`) en vez de capturarlo. No es
 una preferencia de estilo: un closure que captura `self` en vez de usar `vm` puede recrear
@@ -55,7 +85,43 @@ Para usar desde `.task`, donde SwiftUI ya cancela al desaparecer la vista:
 `ActionHandling` — cada subclase declara su propio `enum Action`. Es la forma recomendada
 de construir un ViewModel sobre una `Logic` (ver <doc:Architecture>):
 
-@Snippet(path: "AppFoundation/Snippets/getting-started-viewmodel")
+<!-- snippet: getting-started-viewmodel -->
+```swift
+import AppFoundation
+
+protocol GreetingLogicProtocol: Logic {
+    func greeting(for name: String) -> String
+}
+
+final class GreetingLogic: GreetingLogicProtocol {
+    func greeting(for name: String) -> String {
+        "Hola, \(name)"
+    }
+}
+
+final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
+    private(set) var message: String = ""
+
+    enum Action: Sendable {
+        case load(name: String)
+    }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .load(let name): load(name: name)
+        }
+    }
+
+    private func load(name: String) {
+        performLoad { vm in
+            vm.message = vm.logic.greeting(for: name)
+        }
+    }
+}
+
+let viewModel = GreetingViewModel(logic: GreetingLogic())
+viewModel.handle(.load(name: "Hiram"))
+```
 
 ### `ActionHandling` y `ActionSender`: un solo punto de entrada
 
@@ -74,7 +140,41 @@ Un `ScreenState` de solo lectura (sin acciones) no necesita `ActionHandling` en 
 expone el que está en vuelo (`nil` al terminar), así que un test nunca sondea `phase` en un
 bucle con `Task.sleep`:
 
-@Snippet(path: "AppFoundation/Snippets/screenstate-inflight")
+<!-- snippet: screenstate-inflight -->
+```swift
+import AppFoundation
+
+final class CounterViewModel: BaseViewModel, ActionHandling {
+    private(set) var count = 0
+
+    enum Action: Sendable {
+        case increment
+    }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .increment: increment()
+        }
+    }
+
+    private func increment() {
+        performLoad { vm in
+            vm.count += 1
+        }
+    }
+}
+
+@MainActor
+func incrementAndWait() async {
+    let viewModel = CounterViewModel()
+    viewModel.handle(.increment)
+    await viewModel.inFlightLoad?.value
+    assert(viewModel.phase == .content)
+    assert(viewModel.count == 1)
+}
+
+await incrementAndWait()
+```
 
 `clock` y `cancellationRecognizer` siguen la misma precedencia que `errorPresenter`
 (<doc:ErrorHandling>): instancia > `BaseViewModel.clock`/`.cancellationRecognizer`

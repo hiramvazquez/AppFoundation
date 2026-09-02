@@ -61,7 +61,94 @@ testear: `cached()` (nunca lanza, `[]` si no hay nada) y `refresh()` (lanza en e
 ViewModel secuencia las dos y decide la política: caché presente + `refresh()` falla →
 banner, contenido intacto; caché vacía + `refresh()` falla → fase de error de la pantalla.
 
-@Snippet(path: "AppFoundation/Snippets/architecture-cache-then-network")
+<!-- snippet: architecture-cache-then-network -->
+```swift
+import AppFoundation
+
+struct Item: Sendable, Equatable {
+    let id: String
+    let title: String
+}
+
+enum CatalogError: DomainError {
+    case offline
+
+    var screenError: ScreenError {
+        ScreenError(title: "Sin conexión", message: "Mostrando la última copia guardada.")
+    }
+}
+
+protocol CatalogServicing: Sendable {
+    func fetchItems() async throws -> [Item]
+}
+
+protocol CatalogStoring: Sendable {
+    func cachedItems() async -> [Item]
+    func replaceAll(_ items: [Item]) async
+}
+
+protocol CatalogLogicProtocol: Logic, Sendable {
+    func cached() async -> [Item]
+    func refresh() async throws(CatalogError) -> [Item]
+}
+
+final class CatalogLogic: CatalogLogicProtocol {
+    private let service: any CatalogServicing
+    private let store: any CatalogStoring
+
+    init(service: any CatalogServicing, store: any CatalogStoring) {
+        self.service = service
+        self.store = store
+    }
+
+    func cached() async -> [Item] {
+        await store.cachedItems()
+    }
+
+    func refresh() async throws(CatalogError) -> [Item] {
+        do {
+            let items = try await service.fetchItems()
+            await store.replaceAll(items)
+            return items
+        } catch {
+            throw .offline
+        }
+    }
+}
+
+final class CatalogViewModel: LogicViewModel<any CatalogLogicProtocol>, ActionHandling {
+    private(set) var items: [Item] = []
+
+    enum Action: Sendable { case load }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .load: load()
+        }
+    }
+
+    private func load() {
+        performLoad(successTransition: .preserveCurrentPhase) { vm in
+            let cached = await vm.logic.cached()
+            if !cached.isEmpty {
+                vm.items = cached
+                vm.setContent()
+            }
+
+            do {
+                vm.items = try await vm.logic.refresh()
+                vm.setContent()
+            } catch {
+                // Sin caché que mostrar: es el fallo de la pantalla — deja que el
+                // catch de performLoad lo convierta en fase de error.
+                guard !cached.isEmpty else { throw error }
+                // Hay caché: el fallo del refresh no se lleva el contenido, es un banner (M7).
+                vm.handleActivityError(error, strategy: .banner)
+            }
+        }
+    }
+}
+```
 
 ## Mejoras sobre la arquitectura base
 

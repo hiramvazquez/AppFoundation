@@ -12,7 +12,28 @@ call site. El reloj es `any Clock<Duration>` (por defecto `ContinuousClock`); lo
 inyectan un reloj manual para aserciones deterministas y sin esperas reales. `deinit`
 cancela cualquier trabajo en vuelo.
 
-@Snippet(path: "AppFoundation/Snippets/utilities-debouncer")
+<!-- snippet: utilities-debouncer -->
+```swift
+import AppFoundation
+
+final class SearchViewModel: BaseViewModel {
+    private let debouncer = Debouncer(delay: .milliseconds(300))
+    private(set) var query = ""
+
+    func onQueryChanged(_ text: String) {
+        query = text
+        debouncer.debounce { [weak self] in
+            self?.search()
+        }
+    }
+
+    private func search() {
+        performActivity { _ in
+            // await apiService.search(query)
+        }
+    }
+}
+```
 
 `Throttler` tiene la misma forma: ejecuta como mucho una vez por ventana, en vez de
 esperar a que las llamadas paren.

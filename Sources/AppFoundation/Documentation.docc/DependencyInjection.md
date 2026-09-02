@@ -38,7 +38,37 @@ entra con `register(instance:as:)`.
 wizard — dependencias que sobreviven a una pantalla pero no a la app — van en un
 contenedor **hijo**, sin scope con clave de cadena que crear/destruir a mano:
 
-@Snippet(path: "AppFoundation/Snippets/di-child-container")
+<!-- snippet: di-child-container -->
+```swift
+import AppFoundation
+
+protocol ProfileRepository {
+    func fetchProfile() -> String
+}
+
+struct LiveProfileRepository: ProfileRepository {
+    func fetchProfile() -> String { "Hiram" }
+}
+
+final class CheckoutCart {
+    var items: [String] = []
+}
+
+@MainActor
+func makeCheckoutContainer(parent: Container = .shared) -> Container {
+    let checkout = Container(parent: parent)
+    // Compartido por toda pantalla del flujo.
+    checkout.register(CheckoutCart.self) { _ in CheckoutCart() }
+    return checkout
+}
+
+Container.shared.register(ProfileRepository.self) { _ in LiveProfileRepository() }
+let checkout = makeCheckoutContainer()
+let cart: CheckoutCart = checkout.resolve()
+let repository: ProfileRepository = checkout.resolve()  // cae al padre
+assert(repository.fetchProfile() == "Hiram")
+assert(cart.items.isEmpty)
+```
 
 Una fábrica registrada en el padre se resuelve desde el padre incluso a través de un hijo:
 sustituir `ProfileRepository` en un hijo de test nunca reconstruye el singleton de
