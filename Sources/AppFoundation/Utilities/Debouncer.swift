@@ -21,23 +21,72 @@ public nonisolated enum DebouncerEdge: Sendable {
     case both
 }
 
-/// Actor-based debouncer for rate-limiting operations.
+// MARK: - Clock helpers
+
+/// Measures elapsed time on an `any Clock<Duration>`.
 ///
-/// Use this to prevent rapid-fire calls to expensive operations like
-/// search filtering, API calls, or UI updates.
+/// The existential hides the clock's `Instant`, so instants cannot be stored or
+/// compared through it. Opening the existential once captures a typed origin; from
+/// then on "now" is a `Duration` since that origin — enough for cooldown windows.
+private nonisolated struct ClockStopwatch: Sendable {
+    private let elapsed: @Sendable () -> Duration
+
+    init(_ clock: any Clock<Duration>) {
+        self.init(opening: clock)
+    }
+
+    private init(opening clock: some Clock<Duration>) {
+        let origin = clock.now
+        elapsed = { origin.duration(to: clock.now) }
+    }
+
+    /// Time elapsed on the clock since the stopwatch was created.
+    var now: Duration { elapsed() }
+}
+
+// MARK: - Debouncer
+
+/// Main-actor debouncer for rate-limiting operations.
 ///
-/// The clock is injectable (C13): production uses `ContinuousClock` through the
-/// convenience initializers; tests inject a manual clock and advance time
-/// deterministically — no real sleeps.
+/// Use it to coalesce rapid-fire calls to expensive work — filtering, network
+/// requests, layout updates — from code that is not a SwiftUI view (view models,
+/// coordinators). For a search field inside a view, prefer SwiftUI's own
+/// `.task(id: query) { try await Task.sleep(for: .milliseconds(300)); … }`: it
+/// cancels itself when the query changes and needs no extra type.
+///
+/// ## Why a `@MainActor` class and not an actor (audit AF-19)
+///
+/// The debouncer's state is only ever touched by its owner, which is almost always
+/// main-actor code. Modelling it as an `actor` bought no useful isolation and
+/// taxed every call site: `Task { await debouncer.debounce { … } }`, a `@Sendable`
+/// operation, and a further hop back to the main actor to touch the owner's state.
+/// As a `@MainActor` class the call is synchronous and the operation runs on the
+/// main actor, so a view model can write `debouncer.debounce { self.query = … }`
+/// with no `Task`, no `await`, and no `@Sendable`.
+///
+/// ## Clock
+///
+/// The clock is injectable: production uses `ContinuousClock` (the default); tests
+/// inject a manual clock and advance time deterministically — no real sleeps. It is
+/// typed as `any Clock<Duration>` so a stored property reads `let debouncer: Debouncer`
+/// instead of `Debouncer<ContinuousClock>`.
+///
+/// ## Lifetime
+///
+/// A pending operation is retained until it runs, is cancelled, or the debouncer is
+/// deallocated (`deinit` cancels in-flight work). If the operation captures its owner
+/// strongly, the owner lives for at most `delay` longer than it otherwise would; use
+/// `[weak self]` when that matters.
 ///
 /// ## Example - Trailing Edge (Default)
 /// ```swift
-/// let debouncer = Debouncer(delay: .milliseconds(300))
+/// @MainActor final class SearchViewModel {
+///     private let debouncer = Debouncer(delay: .milliseconds(300))
+///     var results: [Item] = []
 ///
-/// func searchTextChanged() {
-///     Task {
-///         await debouncer.debounce { [weak self] in
-///             await self?.performSearch()
+///     func queryChanged(_ query: String) {
+///         debouncer.debounce { [weak self] in
+///             self?.results = await self?.repository.search(query) ?? []
 ///         }
 ///     }
 /// }
@@ -48,38 +97,51 @@ public nonisolated enum DebouncerEdge: Sendable {
 /// // Execute immediately, then ignore for 1 second
 /// let debouncer = Debouncer(delay: .seconds(1), edge: .leading)
 /// ```
-public actor Debouncer<C: Clock> where C.Duration == Duration {
-    private let clock: C
+@MainActor
+public final class Debouncer {
+    private let clock: any Clock<Duration>
+    private let stopwatch: ClockStopwatch
     private let delay: Duration
     private let edge: DebouncerEdge
 
     /// Pending trailing execution.
     private var trailingTask: Task<Void, Never>?
 
-    /// In-flight leading execution — tracked so `cancel()` can actually cancel it (C13).
+    /// In-flight leading execution — tracked so `cancel()` can actually cancel it.
     private var leadingTask: Task<Void, Never>?
 
-    /// Last time an operation EXECUTED (leading or trailing — C13: trailing counts too).
-    private var lastExecutionTime: C.Instant?
+    /// Last time an operation EXECUTED (leading or trailing — trailing counts too).
+    private var lastExecutionTime: Duration?
 
-    private var pendingOperation: (@Sendable () async -> Void)?
+    private var pendingOperation: (@MainActor () async -> Void)?
 
-    /// Creates a debouncer with an explicit clock.
+    /// Creates a debouncer.
     ///
     /// - Parameters:
     ///   - delay: The duration to wait before executing the operation.
     ///   - edge: When to execute the operation. Defaults to `.trailing`.
-    ///   - clock: The clock used for delays and cooldown measurement.
-    public init(delay: Duration, edge: DebouncerEdge = .trailing, clock: C) {
+    ///   - clock: The clock used for delays and cooldown measurement. Defaults to
+    ///     `ContinuousClock`; tests inject a manual clock.
+    public init(
+        delay: Duration,
+        edge: DebouncerEdge = .trailing,
+        clock: any Clock<Duration> = ContinuousClock()
+    ) {
         self.delay = delay
         self.edge = edge
         self.clock = clock
+        self.stopwatch = ClockStopwatch(clock)
+    }
+
+    deinit {
+        trailingTask?.cancel()
+        leadingTask?.cancel()
     }
 
     /// Debounces the given operation according to the configured edge behavior.
     ///
-    /// - Parameter operation: The async operation to execute.
-    public func debounce(_ operation: @escaping @Sendable () async -> Void) {
+    /// - Parameter operation: The operation to execute, on the main actor.
+    public func debounce(_ operation: @escaping @MainActor () async -> Void) {
         switch edge {
         case .trailing:
             debounceTrailing(operation)
@@ -90,57 +152,55 @@ public actor Debouncer<C: Clock> where C.Duration == Duration {
         }
     }
 
-    private func debounceTrailing(_ operation: @escaping @Sendable () async -> Void) {
+    private func debounceTrailing(_ operation: @escaping @MainActor () async -> Void) {
         trailingTask?.cancel()
-        trailingTask = Task {
+        trailingTask = Task { [weak self, clock, delay] in
             do {
                 try await clock.sleep(for: delay)
-                guard !Task.isCancelled else { return }
-                lastExecutionTime = clock.now
-                await operation()
             } catch {
-                // Task was cancelled, do nothing
+                return // Cancelled: nothing to run.
             }
+            guard let self, !Task.isCancelled else { return }
+            lastExecutionTime = stopwatch.now
+            await operation()
         }
     }
 
     /// Executes on the leading edge when outside the cooldown window.
     /// - Returns: `true` if the operation was started.
-    private func executeLeadingIfReady(_ operation: @escaping @Sendable () async -> Void) -> Bool {
-        if let lastTime = lastExecutionTime, lastTime.duration(to: clock.now) < delay {
+    private func executeLeadingIfReady(_ operation: @escaping @MainActor () async -> Void) -> Bool {
+        if let lastTime = lastExecutionTime, stopwatch.now - lastTime < delay {
             return false // Still in cooldown.
         }
 
-        lastExecutionTime = clock.now
+        lastExecutionTime = stopwatch.now
         leadingTask = Task {
             await operation()
         }
         return true
     }
 
-    private func debounceBoth(_ operation: @escaping @Sendable () async -> Void) {
+    private func debounceBoth(_ operation: @escaping @MainActor () async -> Void) {
         let executedLeading = executeLeadingIfReady(operation)
 
         // Only calls that did NOT run on the leading edge become the trailing candidate.
         pendingOperation = executedLeading ? nil : operation
 
         trailingTask?.cancel()
-        trailingTask = Task {
+        trailingTask = Task { [weak self, clock, delay] in
             do {
                 try await clock.sleep(for: delay)
-                guard !Task.isCancelled else { return }
-                if let pending = pendingOperation {
-                    pendingOperation = nil
-                    lastExecutionTime = clock.now
-                    await pending()
-                }
             } catch {
-                // Task was cancelled
+                return // Cancelled: nothing to run.
             }
+            guard let self, !Task.isCancelled, let pending = pendingOperation else { return }
+            pendingOperation = nil
+            lastExecutionTime = stopwatch.now
+            await pending()
         }
     }
 
-    /// Cancels any pending or in-flight debounced operation — leading included (C13).
+    /// Cancels any pending or in-flight debounced operation — leading included.
     public func cancel() {
         trailingTask?.cancel()
         trailingTask = nil
@@ -158,40 +218,22 @@ public actor Debouncer<C: Clock> where C.Duration == Duration {
     /// Executes the operation immediately, cancelling any pending debounce.
     ///
     /// - Parameter operation: The operation to execute immediately.
-    public func executeImmediately(_ operation: @escaping @Sendable () async -> Void) async {
+    public func executeImmediately(_ operation: @MainActor () async -> Void) async {
         cancel()
-        lastExecutionTime = clock.now
+        lastExecutionTime = stopwatch.now
         await operation()
-    }
-}
-
-public extension Debouncer where C == ContinuousClock {
-    /// Creates a new debouncer with the specified delay and edge behavior.
-    ///
-    /// - Parameters:
-    ///   - delay: The duration to wait before executing the operation.
-    ///   - edge: When to execute the operation. Defaults to `.trailing`.
-    init(delay: Duration, edge: DebouncerEdge = .trailing) {
-        self.init(delay: delay, edge: edge, clock: ContinuousClock())
-    }
-
-    /// Creates a new debouncer with delay in milliseconds.
-    ///
-    /// - Parameters:
-    ///   - milliseconds: The delay in milliseconds before executing.
-    ///   - edge: When to execute the operation. Defaults to `.trailing`.
-    init(milliseconds: Int, edge: DebouncerEdge = .trailing) {
-        self.init(delay: .milliseconds(milliseconds), edge: edge, clock: ContinuousClock())
     }
 }
 
 // MARK: - Throttler
 
-/// Actor-based throttler for rate-limiting operations.
+/// Main-actor throttler for rate-limiting operations.
 ///
-/// Unlike Debouncer which waits for a pause in calls, Throttler ensures
-/// operations execute at most once per time period. The clock is injectable
-/// for deterministic tests.
+/// Unlike `Debouncer`, which waits for a pause in calls, `Throttler` ensures
+/// operations execute at most once per interval. Same design as `Debouncer`
+/// (audit AF-19): a `@MainActor` class instead of an actor, so the call site needs
+/// no `Task`, no `@Sendable`, and the operation runs on the main actor; the clock
+/// is injectable for deterministic tests.
 ///
 /// ## Example
 /// ```swift
@@ -204,19 +246,21 @@ public extension Debouncer where C == ContinuousClock {
 ///     }
 /// }
 /// ```
-public actor Throttler<C: Clock> where C.Duration == Duration {
-    private var lastExecutionTime: C.Instant?
+@MainActor
+public final class Throttler {
+    private let stopwatch: ClockStopwatch
     private let interval: Duration
-    private let clock: C
+    private var lastExecutionTime: Duration?
 
-    /// Creates a throttler with an explicit clock.
+    /// Creates a throttler.
     ///
     /// - Parameters:
     ///   - interval: The minimum time between executions.
-    ///   - clock: The clock used to measure the interval.
-    public init(interval: Duration, clock: C) {
+    ///   - clock: The clock used to measure the interval. Defaults to
+    ///     `ContinuousClock`; tests inject a manual clock.
+    public init(interval: Duration, clock: any Clock<Duration> = ContinuousClock()) {
         self.interval = interval
-        self.clock = clock
+        self.stopwatch = ClockStopwatch(clock)
     }
 
     /// Throttles the given operation.
@@ -224,15 +268,15 @@ public actor Throttler<C: Clock> where C.Duration == Duration {
     /// The operation will only execute if enough time has passed
     /// since the last execution.
     ///
-    /// - Parameter operation: The async operation to execute.
+    /// - Parameter operation: The operation to execute, on the main actor.
     /// - Returns: `true` if the operation was executed, `false` if throttled.
     @discardableResult
-    public func throttle(_ operation: @escaping @Sendable () async -> Void) async -> Bool {
-        if let lastTime = lastExecutionTime, lastTime.duration(to: clock.now) < interval {
+    public func throttle(_ operation: @MainActor () async -> Void) async -> Bool {
+        if let lastTime = lastExecutionTime, stopwatch.now - lastTime < interval {
             return false // Throttled
         }
 
-        lastExecutionTime = clock.now
+        lastExecutionTime = stopwatch.now
         await operation()
         return true
     }
@@ -240,14 +284,5 @@ public actor Throttler<C: Clock> where C.Duration == Duration {
     /// Resets the throttler, allowing the next operation to execute immediately.
     public func reset() {
         lastExecutionTime = nil
-    }
-}
-
-public extension Throttler where C == ContinuousClock {
-    /// Creates a new throttler with the specified interval.
-    ///
-    /// - Parameter interval: The minimum time between executions.
-    init(interval: Duration) {
-        self.init(interval: interval, clock: ContinuousClock())
     }
 }
