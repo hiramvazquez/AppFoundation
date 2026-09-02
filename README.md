@@ -9,6 +9,8 @@ Requires **Swift 6.2** (tools), **iOS 17 / macOS 14**. The package builds with
 
 - **Architecture**
   - `BaseViewModel` (`@Observable`) + `LoadableViewModel` (`performLoad`/`performActivity`/`load`/`activity`)
+  - `ScreenState` / `ActionHandling` / `ActionSender` — the screen ↔ shell contract
+    (`ScreenContainer` depends on these protocols, not on `BaseViewModel`)
   - `ErrorPresenting` / `DefaultErrorPresenter` (single place to map errors to copy)
   - `CancellationRecognizing` / `DefaultCancellationRecognizer`
   - `ViewPhase` / `ActivityStyle` / `ActivityState`
@@ -25,7 +27,10 @@ Requires **Swift 6.2** (tools), **iOS 17 / macOS 14**. The package builds with
   - `DependencyModule` + `Container.register(modules:)`
   - `@Inject` (`@MainActor`)
 - **UI**
-  - `ScreenContainer` (native navigation chrome by default — `ScreenChrome.custom` is opt-in)
+  - `ScreenContainer` (native navigation chrome by default — `ScreenChrome.custom` is opt-in;
+    depends on `ScreenState`/`ActionHandling`, never on the concrete `BaseViewModel` class)
+  - `.screen(_:chrome:)` — `ScreenContainer`'s chrome/phase rendering for a read-only
+    `ScreenState`, as a `View` modifier
   - `LoadingViewStyle` / `ErrorViewStyle` / `EmptyViewStyle` / `BannerViewStyle` (`Environment`-propagated, no `AnyView`)
   - `CustomNavigationBar` / `NavigationBarItem` (stable identity + semantic roles; opt-in via `ScreenChrome.custom`)
 - **Utilities**
@@ -288,6 +293,11 @@ enum AppDeepLink: DeepLinkType {
 
 ### 5. Build a feature view model
 
+`ScreenContainer` needs the view model to conform to `ActionHandling` (AF-05, see «Acciones:
+un solo punto de entrada» below): an `Action` enum names every gesture the screen
+recognizes, `handle(_:)` is the only method a view calls, and everything else can be
+`private`.
+
 ```swift
 import AppFoundation
 
@@ -295,11 +305,17 @@ struct Profile {
     let name: String
 }
 
-final class ProfileViewModel: BaseViewModel {
+final class ProfileViewModel: BaseViewModel, ActionHandling {
     private(set) var profile: Profile?
 
     private let repository: ProfileRepository
     private let router: any Router<AppRoute>
+
+    enum Action: Sendable {
+        case onAppear
+        case refresh
+        case openDetails
+    }
 
     init(
         repository: ProfileRepository,
@@ -310,7 +326,15 @@ final class ProfileViewModel: BaseViewModel {
         super.init()
     }
 
-    func onAppear() {
+    func handle(_ action: Action) {
+        switch action {
+        case .onAppear: onAppear()
+        case .refresh: refresh()
+        case .openDetails: openDetails()
+        }
+    }
+
+    private func onAppear() {
         performLoad(successTransition: .preserveCurrentPhase) { vm in
             let profile = try await vm.repository.fetchProfile()
             vm.profile = profile
@@ -318,7 +342,7 @@ final class ProfileViewModel: BaseViewModel {
         }
     }
 
-    func refresh() {
+    private func refresh() {
         performActivity(style: .overlay) { vm in
             let profile = try await vm.repository.fetchProfile()
             vm.profile = profile
@@ -326,7 +350,7 @@ final class ProfileViewModel: BaseViewModel {
         }
     }
 
-    func openDetails() {
+    private func openDetails() {
         router.push(.profileDetails(id: "42"))
     }
 }
@@ -340,14 +364,16 @@ automatically — no `@Published`, no `ObservableObject`.
 `ScreenContainer(chrome:)` defaults to `.native`: the system navigation bar stays visible,
 and the screen drives it the ordinary SwiftUI way — `navigationTitle`, `toolbar`,
 `searchable`. That means large titles, scroll-edge effects, and (importantly)
-swipe-back all keep working for free, on every OS release:
+swipe-back all keep working for free, on every OS release. The content closure receives an
+`ActionSender<ProfileViewModel.Action>` — call it `send(.refresh)` — never the view model
+itself:
 
 ```swift
 struct ProfileView: View {
     let viewModel: ProfileViewModel
 
     var body: some View {
-        ScreenContainer(viewModel: viewModel) {
+        ScreenContainer(viewModel) { send in
             VStack(spacing: 20) {
                 if let profile = viewModel.profile {
                     Text(profile.name)
@@ -355,22 +381,26 @@ struct ProfileView: View {
                 }
 
                 Button("Refresh") {
-                    viewModel.refresh()
+                    send(.refresh)
                 }
 
                 Button("Open details") {
-                    viewModel.openDetails()
+                    send(.openDetails)
                 }
             }
             .padding()
+            .onAppear {
+                send(.onAppear)
+            }
         }
         .navigationTitle("Profile")
-        .onAppear {
-            viewModel.onAppear()
-        }
     }
 }
 ```
+
+`viewModel.profile` above still reads the view model directly — `ScreenState`
+(`phase`/`activity`/`alert`/`banner`) and `Profile` are both fine to read from `viewModel`
+for rendering; only *acting* on the screen goes through `send`.
 
 Alerts present through the native `.alert` by default; banners auto-dismiss after their
 duration and are announced to VoiceOver.
@@ -391,7 +421,7 @@ struct BrandErrorStyle: ErrorViewStyle {
     }
 }
 
-ScreenContainer(viewModel: viewModel) { ContentView() }
+ScreenContainer(viewModel) { send in ContentView() }
     .errorViewStyle(BrandErrorStyle())
 ```
 
@@ -406,14 +436,164 @@ unit test:
 
 ```swift
 ScreenContainer(
-    viewModel: viewModel,
+    viewModel,
     chrome: .custom(.withBack(title: "Profile") {
         // Usually delegated back to router/coordinator owner
     })
-) {
+) { send in
     ProfileContent()
 }
 ```
+
+## Acciones: un solo punto de entrada
+
+`ActionHandling` (AF-05) is the contract behind every `ScreenContainer(_:chrome:content:)`
+call above: a view model names its `Action`s and implements a single `handle(_:)` — the
+ONLY method a view (or a test) calls. Everything else the view model does can be `private`.
+
+```swift
+@Observable
+final class ProfileViewModel: BaseViewModel, ActionHandling {
+    enum Action: Sendable {
+        case load
+        case refresh
+    }
+
+    private(set) var profile: Profile?
+    private let repository: ProfileRepository
+
+    init(repository: ProfileRepository) {
+        self.repository = repository
+        super.init()
+    }
+
+    func handle(_ action: Action) {
+        switch action {
+        case .load: load()
+        case .refresh: refresh()
+        }
+    }
+
+    private func load() {
+        performLoad { vm in vm.profile = try await vm.repository.fetchProfile() }
+    }
+
+    private func refresh() {
+        performActivity(style: .overlay) { vm in
+            vm.profile = try await vm.repository.fetchProfile()
+        }
+    }
+}
+```
+
+The view never sees `load()`/`refresh()` — `ScreenContainer`'s content closure hands it an
+`ActionSender<ProfileViewModel.Action>` instead, built from `handle(_:)` behind a `weak`
+reference (`ActionHandling.sender`), so holding on to a `send` closure never keeps the view
+model alive:
+
+```swift
+struct ProfileView: View {
+    let viewModel: ProfileViewModel
+
+    var body: some View {
+        ScreenContainer(viewModel) { send in
+            VStack {
+                Text(viewModel.profile?.name ?? "—")
+                Button("Refresh") { send(.refresh) }
+            }
+            .onAppear { send(.load) }
+        }
+    }
+}
+```
+
+Tests call `handle(_:)` directly — the same call the view makes — and assert on observable
+state, without `@testable import` reaching past a `private` method:
+
+```swift
+@Test func loadReachesContent() async throws {
+    let viewModel = ProfileViewModel(repository: LiveProfileRepository())
+
+    viewModel.handle(.load)
+    try await waitUntil { viewModel.phase == .content }
+
+    #expect(viewModel.profile != nil)
+}
+```
+
+A subview many levels deep that needs to send actions without the intermediate views
+prop-drilling `send` can install its own concretely-typed `@Entry` from inside the content
+closure — the same `Environment` pattern the DI section above uses for `analytics` — because
+`send` is already in scope right there:
+
+```swift
+extension EnvironmentValues {
+    @Entry var profileActions: ActionSender<ProfileViewModel.Action>?
+}
+
+ScreenContainer(viewModel) { send in
+    ProfileContent()
+        .environment(\.profileActions, send)
+}
+```
+
+AppFoundation doesn't ship a generic, one-size-fits-all `EnvironmentKey` for
+`ActionSender<Action>` — a single `EnvironmentKey` can't carry a different `Action` type per
+screen without either a metatype-keyed subscript (fragile to spell correctly at call sites)
+or one `@Entry` per concrete `Action` type (which is exactly the snippet above, and no more
+code than declaring the key once per screen that actually needs it).
+
+## Pantalla y cáscara: el contrato `ScreenState`
+
+Before AF-05, `ScreenContainer` took a concrete `BaseViewModel` — so any screen that wanted
+the shell had to inherit from it, even a screen that only used four of its properties.
+`ScreenContainer` depends on `ScreenState` instead:
+
+```swift
+@MainActor
+public protocol ScreenState: AnyObject, Observable {
+    var phase: ViewPhase { get }
+    var activity: ActivityState { get }
+    var alert: AlertState? { get set }
+    var banner: BannerState? { get set }
+}
+```
+
+`BaseViewModel` conforms (`extension BaseViewModel: ScreenState {}`), but any other
+`@Observable final class` can conform too, without inheriting from `BaseViewModel` at all —
+`ScreenContainer(_ state: State, ...)` only requires `State: ScreenState & ActionHandling`
+(the `ScreenViewModel` typealias).
+
+Two things worth explaining:
+
+- **Why a class taken by value, not a `Binding`.** `ScreenState: AnyObject, Observable` —
+  `ScreenContainer` reads `state.phase` directly in `body`; that's how `Observable` tracking
+  works (no `@Bindable`/`Binding` needed for reads). It only needs to *write* `alert`/
+  `banner` (to dismiss them), which a reference type's stored property supports without any
+  `Binding` machinery.
+- **Why a protocol, not a class.** Swift has no abstract methods, so `BaseViewModel` alone
+  cannot force a subclass to implement anything — a protocol with an associated type
+  (`ActionHandling.Action`) can, at compile time. `ScreenContainer(vm) { send in ... }`
+  simply does not compile unless `vm` conforms to `ActionHandling`.
+
+A screen with nothing to `handle(_:)` — pure navigation, pure read-only state — doesn't need
+`ActionHandling` at all. `ScreenContainer(observing:)` and the `.screen(_:chrome:)` modifier
+take a plain `ScreenState`, with no `ActionSender` in `content` because there is nothing to
+send to:
+
+```swift
+struct DashboardView: View {
+    let viewModel: DashboardViewModel   // a BaseViewModel with no ActionHandling
+
+    var body: some View {
+        DashboardContent(viewModel: viewModel)
+            .screen(viewModel)
+    }
+}
+```
+
+`PhaseView` has the same read-only shape: `PhaseView(observing: viewModel) { ... }` reads
+`phase` directly, without a `Binding`.
 
 ## `BaseViewModel` guidance
 
@@ -595,7 +775,8 @@ naming every type in the cycle. Break it by passing one side through its initial
 
 ## Notes
 
-- `ScreenContainer` is the public shell type.
+- `ScreenContainer` is the public shell type; it depends on `ScreenViewModel`
+  (`ScreenState & ActionHandling`, AF-05), never on the concrete `BaseViewModel` class.
 - `performLoad`/`performActivity` (unstructured, `Task`-returning) and `load`/`activity`
   (structured, run inline in the caller's own `Task`) come from `LoadableViewModel`;
   `work` always takes the view model as a parameter, never by capture.
