@@ -36,7 +36,7 @@ import Foundation
 ///         underlying: error,
 ///         context: "Fetching catalog",
 ///         code: "VM_FETCH_ERROR",
-///         file: #file,
+///         file: #fileID,
 ///         line: #line
 ///     )
 ///     setError(wrapped.screenError)
@@ -56,6 +56,9 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
     public let code: String?
 
     /// The file where the error was wrapped (for debugging).
+    ///
+    /// `#fileID` (`"Module/File.swift"`), not `#file`: `#file` embeds the absolute build
+    /// path of the source file in the binary, which `#fileID` avoids.
     public let file: String
 
     /// The line number where the error was wrapped (for debugging).
@@ -70,28 +73,31 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
     ///   - underlying: The original error.
     ///   - context: Description of the operation that failed.
     ///   - code: Optional error code for analytics and tracking.
-    ///   - file: The file where the error occurred (auto-filled).
+    ///   - file: The file where the error occurred (auto-filled, `#fileID`).
     ///   - line: The line where the error occurred (auto-filled).
+    ///   - now: Clock used to stamp `timestamp`. Injectable for deterministic tests;
+    ///     defaults to `Date.init`.
     public init(
         underlying: Error,
         context: String,
         code: String? = nil,
-        file: String = #file,
-        line: Int = #line
+        file: String = #fileID,
+        line: Int = #line,
+        now: () -> Date = Date.init
     ) {
         self.underlying = underlying
         self.context = context
         self.code = code
         self.file = file
         self.line = line
-        self.timestamp = Date()
+        self.timestamp = now()
     }
-    
+
     /// User-friendly error message combining context and underlying error.
     public var message: String {
         "\(context): \(underlying.localizedDescription)"
     }
-    
+
     /// Detailed description for debugging.
     public var description: String {
         var desc = """
@@ -109,23 +115,7 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
         """
         return desc
     }
-    
-    /// Debug description with full stack.
-    public var debugDescription: String {
-        var desc = description
-        
-        // Unwrap nested WrappedErrors
-        var current: Error = underlying
-        var depth = 1
-        while let wrapped = current as? WrappedError {
-            desc += "\n  Nested[\(depth)]: \(wrapped.context)"
-            current = wrapped.underlying
-            depth += 1
-        }
-        
-        return desc
-    }
-    
+
     /// The root cause error, unwrapping any nested WrappedErrors.
     public var rootCause: Error {
         var current: Error = underlying
@@ -161,11 +151,38 @@ nonisolated extension WrappedError: AppErrorConvertible {
 
 // MARK: - Equatable
 
+/// Compares `context`, `code`, and `underlying.localizedDescription` only.
+///
+/// Two `WrappedError`s wrapping structurally different `underlying` errors that happen
+/// to share a `localizedDescription` compare equal — this is a description-based
+/// approximation, not a structural comparison of `underlying` (which isn't `Equatable`
+/// as `any Error`). Good enough for tests and simple deduplication; don't rely on it for
+/// anything that needs a precise identity check.
 nonisolated extension WrappedError: Equatable {
     public static func == (lhs: WrappedError, rhs: WrappedError) -> Bool {
         lhs.context == rhs.context &&
         lhs.code == rhs.code &&
         lhs.underlying.localizedDescription == rhs.underlying.localizedDescription
+    }
+}
+
+// MARK: - CustomDebugStringConvertible
+
+nonisolated extension WrappedError: CustomDebugStringConvertible {
+    /// Debug description including the full chain of nested `WrappedError` contexts.
+    public var debugDescription: String {
+        var desc = description
+
+        // Unwrap nested WrappedErrors
+        var current: Error = underlying
+        var depth = 1
+        while let wrapped = current as? WrappedError {
+            desc += "\n  Nested[\(depth)]: \(wrapped.context)"
+            current = wrapped.underlying
+            depth += 1
+        }
+
+        return desc
     }
 }
 
@@ -206,7 +223,7 @@ public nonisolated extension Error {
     func wrapped(
         context: String,
         code: String? = nil,
-        file: String = #file,
+        file: String = #fileID,
         line: Int = #line
     ) -> WrappedError {
         WrappedError(underlying: self, context: context, code: code, file: file, line: line)
