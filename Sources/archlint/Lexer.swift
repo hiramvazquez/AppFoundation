@@ -1,7 +1,7 @@
 import Foundation
 
 /// A single lexical unit produced by `Lexer.tokenize(_:)`. `archlint` never builds a real
-/// AST (no SwiftSyntax, `ARQUITECTURA-KIT-2026-09-02.md` §4): every rule works off this
+/// AST (no SwiftSyntax, `AGENTS.md`): every rule works off this
 /// flat token stream, which is enough to find `import` statements, type declarations and
 /// identifier references while safely ignoring comments and string contents.
 struct Token {

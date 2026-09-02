@@ -4,7 +4,7 @@ import Foundation
 /// Generado por `swift package generate-feature {{Feature}}`. Orquesta: recibe una
 /// `Action`, llama a `logic`, actualiza `items`. Nunca importa CoreNetworking ni
 /// referencia `{{Feature}}Service`/`{{Feature}}Store` directamente — solo `logic`
-/// (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 1).
+///.
 {{#analytics}}
 ///
 /// Analítica (M10): si este feature necesita eventos de negocio, inyecta un

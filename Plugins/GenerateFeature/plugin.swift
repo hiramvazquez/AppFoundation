@@ -10,7 +10,7 @@ import PackagePlugin
 /// `swift package --allow-writing-to-package-directory generate-feature <Nombre> [--api]
 /// [--local] [--module] [--analytics] [--no-logic] [--no-tests] [--path Features]
 /// [--dry-run] [--target NAME] [--route AppRoute.xxx]`
-/// (`ARQUITECTURA-KIT-2026-09-02.md` §3, PRD-AF-08).
+/// (`AGENTS.md`).
 ///
 /// Genera el cascarón completo View → ViewModel → Logic → Services/Stores de una feature
 /// desde las plantillas de texto en `AppFoundation/Templates/` — nunca desde código Swift
@@ -251,7 +251,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
     /// AppFoundation's `Templates/` directory, located through the package dependency
     /// graph rather than bundled as a plugin resource — the templates are plain text a
     /// human/agent reads directly from AppFoundation's own checkout
-    /// (`ARQUITECTURA-KIT-2026-09-02.md` §3).
+    ///.
     private static func findTemplatesDirectory(in package: Package) -> URL? {
         if package.displayName == "AppFoundation" {
             let local = package.directoryURL.appendingPathComponent("Templates")
@@ -282,7 +282,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
         return url.path.hasPrefix(rootPath) ? String(url.path.dropFirst(rootPath.count)) : url.path
     }
 
-    // MARK: - Next steps (never automated: no `.xcodeproj`/`AppRoute` edits, PRD-AF-08)
+    // MARK: - Next steps (never automated: no `.xcodeproj`/`AppRoute` edits)
 
     private static func printNextSteps(
         feature: String,

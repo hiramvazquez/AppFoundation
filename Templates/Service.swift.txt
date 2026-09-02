@@ -1,7 +1,7 @@
 import CoreNetworking
 import Foundation
 
-// MARK: - The request / response DTOs (ARQUITECTURA-KIT-2026-09-02.md §8, M2: only this
+// MARK: - The request / response DTOs (AGENTS.md §8, M2: only this
 // file ever sees them)
 
 /// Un endpoint tipado a la manera de CoreNetworking: el tipo ES el request, y `Response`
@@ -26,7 +26,7 @@ struct Get{{Feature}}Request: BaseRequest {
 
 /// Una llamada a la API: `GET /{{feature}}` → `[{{Feature}}Item]`. `{{Feature}}Servicing`
 /// es lo que `{{Feature}}Logic` conoce a través de `init` — nunca este tipo concreto
-/// (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3). `struct Sendable` (M5): un Service no
+///. `struct Sendable` (M5): un Service no
 /// carga estado mutable propio, solo `api`.
 public protocol {{Feature}}Servicing: Sendable {
     func fetchItems() async throws(APIError) -> [{{Feature}}Item]

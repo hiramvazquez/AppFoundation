@@ -1,7 +1,7 @@
 import Foundation
 
 /// Which layer a file belongs to, decided purely from its name/path — the same convention
-/// the generator writes (`ARQUITECTURA-KIT-2026-09-02.md` §1): `XxxViewModel.swift`,
+/// the generator writes: `XxxViewModel.swift`,
 /// `XxxView.swift`, `XxxLogic.swift`, `Services/XxxService.swift`, `Stores/XxxStore.swift`,
 /// `XxxModule.swift` (composition root — exempt from most rules, since naming every
 /// concrete type is its entire job). Anything under `Tests/`, or named `*Tests.swift`/
@@ -315,7 +315,7 @@ enum RuleEngine {
         for file in files where layers[file.relativePath] == .viewModel {
             // A ViewModel that inherits `BaseViewModel` directly (never `LogicViewModel<...>`)
             // has no Logic to be missing — that is precisely the `--no-logic` escape hatch
-            // (PRD-AF-08), a deliberate choice for a screen with no business rule of its
+            //, a deliberate choice for a screen with no business rule of its
             // own, not an omission R5 should flag.
             let hasLogicViewModelBase = file.typeDecls.contains {
                 $0.keyword == "class" && $0.inherits("LogicViewModel")

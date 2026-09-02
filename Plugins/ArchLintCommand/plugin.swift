@@ -3,7 +3,7 @@ import PackagePlugin
 
 /// Command plugin: `swift package archlint [--path DIR]`. The same `archlint` executable
 /// the build-tool plugin runs, exposed for CI (or a quick manual check) without wiring it
-/// into any target — `ARQUITECTURA-KIT-2026-09-02.md` §4: "El mismo ejecutable se expone
+/// into any target — `AGENTS.md`: "El mismo ejecutable se expone
 /// como command plugin... para CI sin integrar el build."
 ///
 /// Without `--path`, it scans the whole package directory (respecting `.archlint.yml`'s

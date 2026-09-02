@@ -1,6 +1,6 @@
 import Foundation
 
-// `archlint` — the lexical linter behind PRD-AF-08 / `ARQUITECTURA-KIT-2026-09-02.md` §4.
+// `archlint` — the lexical linter behind `AGENTS.md`.
 // Zero dependencies, on purpose: it is invoked both as a build-tool plugin (once per
 // target, on every build) and as a command plugin (`swift package archlint`, for CI), and
 // has to compile and run in a couple of seconds either way.

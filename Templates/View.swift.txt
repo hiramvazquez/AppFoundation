@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Generado por `swift package generate-feature {{Feature}}`. Solo conoce el ViewModel a
 /// través de `ScreenContainer` — nunca referencia `{{Feature}}Logic`{{#api}}, `{{Feature}}Service`{{/api}}{{#local}}, `{{Feature}}Store`{{/local}}
-/// ni `APIService` (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 4).
+/// ni `APIService`.
 public struct {{Feature}}View: View {
     let viewModel: {{Feature}}ViewModel
 

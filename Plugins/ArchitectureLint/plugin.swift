@@ -4,7 +4,7 @@ import PackagePlugin
 /// Build-tool plugin: attach it to a target and every `swift build`/Xcode build runs
 /// `archlint` over that target's `sourceFiles` before compiling — an architecture
 /// violation fails the build with a navigable diagnostic
-/// (`ARQUITECTURA-KIT-2026-09-02.md` §4).
+///.
 ///
 /// ```swift
 /// .target(

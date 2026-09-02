@@ -268,7 +268,7 @@ enum FileParser {
 
     /// Token-index ranges exempt from reference scanning: inside a `#if <cond containing
     /// DEBUG> … #endif` block, or inside a `#Preview { … }` body. Both are preview/debug
-    /// scaffolding that never ships (`ARQUITECTURA-KIT-2026-09-02.md`'s examples wire a
+    /// scaffolding that never ships (`AGENTS.md`'s examples wire a
     /// real stack — not a mock — into their `#Preview`, e.g. `LoginApp`'s `LoginPreview`).
     private static func exemptRanges(tokens: [Token]) -> [Range<Int>] {
         var ranges: [Range<Int>] = []

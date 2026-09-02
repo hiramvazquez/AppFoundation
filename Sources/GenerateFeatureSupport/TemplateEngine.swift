@@ -1,6 +1,6 @@
 import Foundation
 
-/// The generator's own template engine (`ARQUITECTURA-KIT-2026-09-02.md` §3: "sin
+/// The generator's own template engine (`AGENTS.md`: "sin
 /// dependencia de Stencil"). A deliberately small Mustache-like subset: `{{Name}}`
 /// substitutions and `{{#flag}}…{{/flag}}` / `{{^flag}}…{{/flag}}` (inverted) sections,
 /// nestable. That is everything `AppFoundation/Templates/*.txt` needs — no loops, no

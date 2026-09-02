@@ -29,7 +29,7 @@ public nonisolated struct {{Feature}}Item: Sendable, Equatable, Hashable, Identi
     }
 }
 
-// MARK: - Domain errors (ARQUITECTURA-KIT-2026-09-02.md §8, M1)
+// MARK: - Domain errors (AGENTS.md §8, M1)
 
 /// Cada forma en la que puede fallar esta pantalla — nunca `APIError`{{#local}}{{^api}}/un error de
 /// persistencia{{/api}}{{/local}}, que se queda en la frontera Logic/Service{{#local}}{{^api}}Store{{/api}}{{/local}}.
@@ -150,7 +150,7 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
     ///   - {{feature}}Service: La llamada a red de este feature. Inyectada como protocolo.
     ///   - {{feature}}Store: La caché local. Inyectada como protocolo — nunca el
     ///     `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store` concreto
-    ///     (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+    ///.
     public init({{feature}}Service: any {{Feature}}Servicing, {{feature}}Store: any {{Feature}}Storing) {
         self.{{feature}}Service = {{feature}}Service
         self.{{feature}}Store = {{feature}}Store
@@ -184,7 +184,7 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
 {{#api}}
     /// - Parameter {{feature}}Service: La única llamada a red de este feature. Inyectada
     ///   como protocolo — nunca `{{Feature}}Service` directamente
-    ///   (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+    ///.
     public init({{feature}}Service: any {{Feature}}Servicing) {
         self.{{feature}}Service = {{feature}}Service
     }
@@ -208,7 +208,7 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
 {{#local}}
     /// - Parameter {{feature}}Store: La única dependencia de este feature. Inyectada como
     ///   protocolo — nunca `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store`
-    ///   directamente (`ARQUITECTURA-KIT-2026-09-02.md` §1, regla 3).
+    ///   directamente.
     public init({{feature}}Store: any {{Feature}}Storing) {
         self.{{feature}}Store = {{feature}}Store
     }

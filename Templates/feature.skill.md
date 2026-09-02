@@ -6,7 +6,7 @@ description: Genera un feature completo (View → ViewModel → Logic → Servic
 # /feature — generador de features de AppFoundation
 
 Instalado por `swift package --allow-writing-to-package-directory archinit`
-(`AppFoundation`, PRD-AF-08). Este proyecto sigue la arquitectura
+(`AppFoundation`). Este proyecto sigue la arquitectura
 **View → ViewModel → Logic → Services/Stores** (`AGENTS.md` en la raíz del proyecto —
 léelo antes de tocar código de un feature).
 

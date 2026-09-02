@@ -7,7 +7,7 @@ import Foundation
 ///
 /// This path is built directly here rather than through `AppFoundation/Templates/*.txt`:
 /// it is a deliberately minimal, rarely-used variant (every other combination goes through
-/// the four real `ARQUITECTURA-KIT-2026-09-02.md` §1 variants and their templates), and
+/// the four real `AGENTS.md` variants and their templates), and
 /// keeping it out of the mustache-flag matrix in `Logic.swift.txt`/`Module.swift.txt` kept
 /// those templates readable.
 extension GenerateFeaturePlugin {

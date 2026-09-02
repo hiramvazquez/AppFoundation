@@ -2,7 +2,7 @@ import Foundation
 import PackagePlugin
 
 /// `swift package --allow-writing-to-package-directory archinit`
-/// (`ARQUITECTURA-KIT-2026-09-02.md` §3, PRD-AF-08). Bootstraps a project that's about to
+/// (`AGENTS.md`). Bootstraps a project that's about to
 /// adopt AppFoundation's architecture:
 ///
 /// 1. `.archlint.yml` at the package root (commented defaults).
@@ -111,7 +111,7 @@ struct ArchInitPlugin: CommandPlugin {
     }
 
     private static let archLintYML = """
-        # .archlint.yml — configuración de ArchitectureLint (PRD-AF-08).
+        # .archlint.yml — configuración de ArchitectureLint.
         # Formato: 'key: value' plano, con listas en bloque ('- item') o inline ('[a, b]').
         # Ver AppFoundation/README.md § Generador y linter para el detalle de cada regla (R1-R11).
 

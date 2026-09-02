@@ -2,7 +2,7 @@ import Foundation
 
 /// `.archlint.yml` configuration, read from the target/package root. `archlint` ships its
 /// own minimal reader — a subset of YAML that covers exactly the shapes this file needs
-/// (`ARQUITECTURA-KIT-2026-09-02.md` §4: "sin SwiftSyntax en la v1", same philosophy
+/// (`AGENTS.md`: "sin SwiftSyntax en la v1", same philosophy
 /// applies to the config format: no YAML library dependency).
 ///
 /// ## Supported syntax
