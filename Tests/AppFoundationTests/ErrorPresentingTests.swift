@@ -134,6 +134,23 @@ struct ErrorPresenterPrecedenceTests {
 
         #expect(vm.alert?.title == "instance-presenter")
     }
+
+    /// Criterio de aceptación literal del PRD: un `enum` de dominio plano, sin
+    /// `AppErrorConvertible` ni `LocalizedError`, produce
+    /// `ScreenError(title: L10n.error, message: L10n.genericErrorMessage)` — nunca la
+    /// cadena de `localizedDescription` que Foundation compone para un tipo Swift ajeno.
+    @Test func plainDomainEnumProducesGenericLocalizedScreenError() async throws {
+        enum Foo: Error { case bar }
+        defer { resetStaticPresenter() }
+        resetStaticPresenter()
+
+        let vm = BaseViewModel()
+        let task = vm.performLoad { _ in throw Foo.bar }
+        await task.value
+
+        #expect(vm.currentError == ScreenError(title: L10n.error, message: L10n.genericErrorMessage))
+        #expect(!(vm.currentError?.message.contains("couldn't be completed") ?? false))
+    }
 }
 
 // MARK: - CancellationRecognizing
