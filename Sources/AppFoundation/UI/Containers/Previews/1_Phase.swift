@@ -2,97 +2,102 @@
 import SwiftUI
 
 /// Previews para cada estado de ViewPhase + LoadingStyle.
-struct ScreenContainer_Phase_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            // 1 · Idle
-            ScreenContainer(
-                phase: .constant(.idle),
-                navigation: .title("Idle", style: .solid)
-            ) {
-                VStack {
-                    Spacer()
-                    Text("Sin datos todavía").foregroundColor(.secondary)
-                    Spacer()
-                }
-            }
-            .previewDisplayName("idle")
+///
+/// Usa `chrome: .custom(...)` para que la barra quede visible en el lienzo de previews sin
+/// depender de un `NavigationStack` (`chrome: .native` renderiza sin barra propia — es la
+/// barra del sistema la que la aporta — así que estas previews eligen `.custom` a propósito
+/// para poder mostrarla). Cada estado es su propio `#Preview` con nombre: el macro no
+/// respeta `.previewDisplayName` en subvistas agrupadas.
 
-            // 2 · Content
-            ScreenContainer(
-                phase: .constant(.content),
-                navigation: .title("Content", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("content")
-
-            // 3 · Loading fullScreen
-            ScreenContainer(
-                phase: .constant(.loading(.fullScreen)),
-                navigation: .title("Loading", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("loading · fullScreen")
-
-            // 4 · Loading inline
-            ScreenContainer(
-                phase: .constant(.loading(.inline)),
-                navigation: .title("Loading", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("loading · inline")
-
-            // 5 · Loading overlay
-            ScreenContainer(
-                phase: .constant(.loading(.overlay)),
-                navigation: .title("Loading", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("loading · overlay")
+#Preview("phase · idle") {
+    ScreenContainer(
+        phase: .constant(.idle),
+        chrome: .custom(.title("Idle", style: .solid))
+    ) {
+        VStack {
+            Spacer()
+            Text("Sin datos todavía").foregroundStyle(.secondary)
+            Spacer()
         }
-        .frame(width: 390, height: 700)
-
-        Group {
-            // 6 · Empty
-            ScreenContainer(
-                phase: .constant(.empty),
-                navigation: .title("Empty", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("empty")
-
-            // 7 · Error con retry
-            ScreenContainer(
-                phase: .constant(.error(ScreenError(
-                    title: "Sin conexión",
-                    message: "Comprueba tu conexión e inténtalo de nuevo.",
-                    retry: {}
-                ))),
-                navigation: .title("Error", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("error · con retry")
-
-            // 8 · Error sin retry
-            ScreenContainer(
-                phase: .constant(.error(ScreenError(
-                    title: "Sin permiso",
-                    message: "No tienes acceso a este contenido."
-                ))),
-                navigation: .title("Error", style: .solid)
-            ) {
-                PreviewSampleList()
-            }
-            .previewDisplayName("error · sin retry")
-        }
-        .frame(width: 390, height: 700)
     }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · content") {
+    ScreenContainer(
+        phase: .constant(.content),
+        chrome: .custom(.title("Content", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · loading · fullScreen") {
+    ScreenContainer(
+        phase: .constant(.loading(.fullScreen)),
+        chrome: .custom(.title("Loading", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · loading · inline") {
+    ScreenContainer(
+        phase: .constant(.loading(.inline)),
+        chrome: .custom(.title("Loading", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · loading · overlay") {
+    ScreenContainer(
+        phase: .constant(.loading(.overlay)),
+        chrome: .custom(.title("Loading", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · empty") {
+    ScreenContainer(
+        phase: .constant(.empty),
+        chrome: .custom(.title("Empty", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · error · con retry") {
+    ScreenContainer(
+        phase: .constant(.error(ScreenError(
+            title: "Sin conexión",
+            message: "Comprueba tu conexión e inténtalo de nuevo.",
+            retry: {}
+        ))),
+        chrome: .custom(.title("Error", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
+}
+
+#Preview("phase · error · sin retry") {
+    ScreenContainer(
+        phase: .constant(.error(ScreenError(
+            title: "Sin permiso",
+            message: "No tienes acceso a este contenido."
+        ))),
+        chrome: .custom(.title("Error", style: .solid))
+    ) {
+        PreviewSampleList()
+    }
+    .frame(width: 390, height: 700)
 }
 
 #endif
