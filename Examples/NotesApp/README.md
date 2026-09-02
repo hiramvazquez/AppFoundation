@@ -1,6 +1,6 @@
 # NotesApp
 
-The "solo local" variant (`ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed entirely
+The "solo local" variant (`docs/ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed entirely
 by local persistence, no network. SwiftData for real — a `@Model` entity and a real
 `ModelContainer` — not a simulation; the only concession in tests is an in-memory
 container (`isStoredInMemoryOnly: true`).

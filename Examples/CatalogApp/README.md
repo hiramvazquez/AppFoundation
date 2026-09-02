@@ -1,6 +1,6 @@
 # CatalogApp
 
-The "API + local" variant (`ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed by both a
+The "API + local" variant (`docs/ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed by both a
 network call and a local cache, following the cache-then-network contract (§8, M7): show
 whatever is cached immediately, refresh from the network, persist what comes back.
 

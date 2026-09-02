@@ -1,6 +1,6 @@
 # LoginApp
 
-The "solo API" variant (`ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed entirely by
+The "solo API" variant (`docs/ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed entirely by
 a network call, no local persistence beyond the session token. Replaces the former
 `Examples/IntegrationExample` — still the proof that AppFoundation and CoreNetworking
 compose without friction (PRD-X-02), now built through the full View → ViewModel → Logic

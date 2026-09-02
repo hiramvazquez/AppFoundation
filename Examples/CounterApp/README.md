@@ -1,6 +1,6 @@
 # CounterApp
 
-The "sin datos" variant (`ARQUITECTURA-KIT-2026-09-02.md` §1): a screen whose `Logic`
+The "sin datos" variant (`docs/ARQUITECTURA-KIT-2026-09-02.md` §1): a screen whose `Logic`
 depends on nothing — no `Service`, no `Store` — because the feature genuinely has no data
 to fetch or persist. `Logic` still exists as its own type: the rule "increment by one"
 belongs there, not in the `ViewModel`, exactly like every other variant.
