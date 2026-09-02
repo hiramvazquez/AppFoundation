@@ -61,13 +61,13 @@ struct IntegrationTests {
     // MARK: - DI Integration
 
     @Test func serviceRegistrationResolvesSameInstance() {
-        container.register(self.dataService, lifecycle: .singleton)
+        container.register(instance: self.dataService)
         let resolved: MockDataService = container.resolve()
         #expect(resolved === dataService)
     }
 
     @Test func coordinatorCanBeRegisteredAndResolved() {
-        container.register(self.coordinator, lifecycle: .singleton)
+        container.register(instance: self.coordinator)
         let resolved: Coordinator<TestRoute> = container.resolve()
         #expect(resolved === coordinator)
     }
@@ -77,7 +77,7 @@ struct IntegrationTests {
             let dataService: DataService
             init(dataService: DataService) { self.dataService = dataService }
             func register(in container: Container) {
-                container.register(self.dataService, lifecycle: .singleton)
+                container.register(instance: self.dataService)
             }
         }
 
@@ -165,21 +165,25 @@ struct IntegrationTests {
         #expect(coordinator.activeLayer == .main)
     }
 
-    // MARK: - Scope Lifecycle
+    // MARK: - Flow Lifecycle (child container per flow)
 
-    @Test func featureFlowScopeLifecycle() {
-        container.createScope("featureFlow")
-        container.register(MockDataService(), lifecycle: .scoped(key: "featureFlow"))
+    /// A feature flow owns a child container: what it registers as `.singleton` is shared
+    /// for the life of the flow, and a new flow gets a new container — nothing to destroy.
+    @Test func featureFlowChildContainerLifecycle() {
+        let firstFlow = Container(parent: container)
+        firstFlow.register(MockDataService.self) { _ in MockDataService() }
 
-        let service1: MockDataService = container.resolve()
-        let service2: MockDataService = container.resolve()
+        let service1: MockDataService = firstFlow.resolve()
+        let service2: MockDataService = firstFlow.resolve()
         #expect(service1 === service2)
 
-        container.destroyScope("featureFlow")
-        container.createScope("featureFlow")
-        container.register(MockDataService(), lifecycle: .scoped(key: "featureFlow"))
-        let service3: MockDataService = container.resolve()
+        let secondFlow = Container(parent: container)
+        secondFlow.register(MockDataService.self) { _ in MockDataService() }
+        let service3: MockDataService = secondFlow.resolve()
         #expect(service1 !== service3)
+
+        // The app-level container never saw the flow's registrations.
+        #expect(!container.canResolve(MockDataService.self))
     }
 
     // MARK: - Constructor Injection
