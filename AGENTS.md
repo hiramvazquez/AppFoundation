@@ -98,3 +98,5 @@ Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código d
 `README.md` (instalación y los seis pasos mínimos) y `Sources/AppFoundation/Documentation.docc/`
 (Xcode: **Product ▸ Build Documentation**) para la referencia completa por pieza, con
 ejemplos que compilan (`Snippets/`).
+
+Los ejemplos de DocC están sincronizados con `Snippets/` por CI (`Scripts/check-doc-snippets.sh`, job `docs`).

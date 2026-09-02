@@ -40,3 +40,15 @@ en vez de preguntarle al entorno en qué está corriendo.
 No. `ScreenContainer(observing:)` y el modifier `.screen(_:chrome:)` toman un `ScreenState`
 plano, sin `ActionSender` en `content`: no hay nada que enviar. Reserva `ActionHandling`
 para pantallas que de verdad reciben gestos del usuario. Ver <doc:UserInterface>.
+
+## ¿Por qué los ejemplos de código están en línea en los artículos Y también en `Snippets/`?
+
+`@Snippet(path:)` no se resuelve en el **primer** `xcodebuild docbuild` sobre DerivedData
+limpio (la extracción de símbolos de `Snippets/` termina después de compilar la
+documentación) — quien integra el paquete y pulsa "Build Documentation" una sola vez ve
+artículos sin código. Cada bloque en línea va precedido de `<!-- snippet: <name> -->` y
+`Scripts/check-doc-snippets.sh` (job `docs` de CI, antes de `docbuild`) compara ese bloque
+con el fichero de `Snippets/` correspondiente y falla si divergen — editar un snippet sin
+actualizar el artículo (o al revés) rompe el build, no solo el code review. `Snippets/` se
+conserva porque es lo único que garantiza que el ejemplo compila de verdad con
+`swift build`; el bloque en línea es lo que garantiza que se ve en el primer intento.
