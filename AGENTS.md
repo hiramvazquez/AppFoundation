@@ -70,5 +70,30 @@ llama a `Container.shared`/`@Inject` por su cuenta: el composition root es el `X
 - No llames a `Container.shared`/`@Inject` desde ViewModel/Logic/Service/Store: regístralos
   y resuélvelos desde el `XxxModule` (composition root).
 
+## Generador y linter (PRD-AF-08)
+
+No escribas una feature a mano si `generate-feature` puede darte el cascarón correcto
+desde el primer segundo:
+
+```bash
+swift package --allow-writing-to-package-directory generate-feature Login --api      # Service
+swift package --allow-writing-to-package-directory generate-feature Notes --local    # Store (SwiftData)
+swift package --allow-writing-to-package-directory generate-feature Catalog --api --local
+swift package --allow-writing-to-package-directory generate-feature Counter          # sin datos
+```
+
+Genera View/ViewModel/Logic/Service/Store/Module + tests/mocks, todo compilando y en
+verde. Nunca edita el `.xcodeproj` ni el `enum AppRoute` — imprime esos dos pasos
+manuales al terminar; hazlos tú.
+
+`ArchitectureLint` (build-tool plugin, se añade al target en `Package.swift`) y
+`swift package archlint` (command plugin, para CI o una comprobación puntual) aplican
+las reglas R1-R11 — un error de build es lo único que no se puede ignorar. Antes de
+escribir código de una capa a mano, repasa la tabla de reglas en `README.md` §
+«Generador y linter»: importar `CoreNetworking` fuera de Logic/Service (R1/R7), dejar
+que un `APIError`/DTO llegue al ViewModel (R7/R8), o llamar a `Container.shared` fuera
+del `XxxModule` (R10) hacen fallar el build, no solo el code review.
+
 Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia)
-y `README.md` (instalación y resto de piezas del paquete).
+y `README.md` (instalación, resto de piezas del paquete, y la sección «Generador y
+linter» con el detalle completo de cada regla).

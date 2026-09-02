@@ -833,6 +833,136 @@ absence is not modelled; use `Container.tryResolve` when it is).
 A factory that resolves the type it is building — A → B → A — traps with a message
 naming every type in the cycle. Break it by passing one side through its initializer.
 
+## Generador y linter
+
+PRD-AF-08 (`ARQUITECTURA-KIT-2026-09-02.md` §3-4): AppFoundation trae un generador que
+escribe el cascarón View → ViewModel → Logic → Services/Stores de un feature, y un linter
+que hace fallar el build si alguien se sale de esa arquitectura. Ninguno de los dos viaja
+en el binario de producción — son plugins de SwiftPM (macOS-only) que un proyecto que
+depende de AppFoundation puede invocar sin tocar su propio código.
+
+### `generate-feature`: el generador
+
+```bash
+swift package --allow-writing-to-package-directory generate-feature Login --api
+swift package --allow-writing-to-package-directory generate-feature Notes --local
+swift package --allow-writing-to-package-directory generate-feature Catalog --api --local
+swift package --allow-writing-to-package-directory generate-feature Counter
+```
+
+| Opción | Qué hace |
+|---|---|
+| `--api` | La Logic depende de `any XxxServicing`; genera `Services/XxxService.swift`. |
+| `--local` | La Logic depende de `any XxxStoring` (SwiftData); genera `Stores/XxxStore.swift`. |
+| `--api --local` | Ambos, con la política cache-then-network de `CatalogApp` (M7). |
+| (ninguna) | La Logic no depende de nada — sigue existiendo como tipo, pura. |
+| `--module` | M8: separa el feature en `XxxCore/`/`XxxUI/` dentro del mismo target e imprime el snippet de `Package.swift` para promoverlas a targets reales — el generador nunca edita `Package.swift` él mismo. |
+| `--analytics` | Deja el hueco documentado para inyectar un tracker en la Logic (M10). |
+| `--no-logic` | Sin Logic: el ViewModel hereda `BaseViewModel` directamente — solo para una pantalla sin regla de negocio propia. |
+| `--no-tests` | Omite los tests/mocks generados. |
+| `--path Features` | Carpeta destino dentro del target (por defecto `Features`). |
+| `--target NAME` | Target de origen, si el paquete tiene más de uno (por defecto, el primer target `.generic`). |
+| `--dry-run` | Lista lo que generaría sin escribir nada. |
+| `--route AppRoute.xxx` | Se imprime en los pasos manuales, como recordatorio. |
+
+Cada variante genera el cascarón completo del kit (`ARQUITECTURA-KIT-2026-09-02.md` §8): un
+error de dominio `XxxError: DomainError` con el mapeo desde `APIError` en la Logic (M1),
+DTOs que no salen del Service/Store (M2), el `XxxModule: DependencyModule` como
+composition root (M4), un `#Preview` con un stub de Logic (nunca produce ni referencia
+tipos de test — ver `LoginApp`'s `LoginPreview` para el mismo patrón), y mocks/spies con
+contadores por protocolo (M9) en el target de tests. Todo compila y sus tests pasan desde
+el primer segundo.
+
+Límites honestos, iguales para un humano y para un agente: el generador escribe ficheros,
+**nunca** edita el `.xcodeproj` (los proyectos con carpetas sincronizadas de Xcode 16+ los
+recogen solos; los antiguos requieren arrastrar la carpeta) ni añade el `case` al
+`enum AppRoute` — los imprime como pasos siguientes al terminar.
+
+**Desde Xcode**: clic derecho sobre el proyecto en el navegador → el plugin aparece en el
+menú contextual (Xcode 14+) → pide permiso de escritura una vez.
+
+### `ArchitectureLint`: el linter que obliga
+
+Build-tool plugin: añádelo al target que quieres que cumpla la arquitectura.
+
+```swift
+.target(
+    name: "MyApp",
+    dependencies: [...],
+    plugins: [.plugin(name: "ArchitectureLint", package: "AppFoundation")]
+)
+```
+
+Cada `swift build`/build de Xcode corre `archlint` sobre `target.sourceFiles` antes de
+compilar; una violación hace fallar el build con un diagnóstico navegable:
+
+```
+Sources/MyApp/Features/Login/LoginViewModel.swift:2:1: error: [ArchLint.R1] El ViewModel no debe importar CoreNetworking — delega en su Logic (any XxxLogicProtocol).
+```
+
+**Desde Xcode**: selecciona el target → Build Phases → **Run Build Tool Plug-ins** → **+**
+→ `ArchitectureLint`.
+
+**Para CI**, el mismo ejecutable como command plugin, sin integrarlo en ningún target:
+
+```bash
+swift package archlint [--path DIR]
+```
+
+### Las reglas (R1-R11)
+
+Análisis léxico propio (tokens, `import`, declaraciones de tipo; ignora comentarios y
+strings — sin SwiftSyntax en la v1, `ARQUITECTURA-KIT-2026-09-02.md` §4), clasificando
+cada fichero por el sufijo de su nombre (`XxxViewModel.swift`, `XxxView.swift`,
+`XxxLogic.swift`, `Services/XxxService.swift`, `Stores/XxxStore.swift`,
+`XxxModule.swift` — el composition root, exento de casi todas las reglas). Código dentro de
+`#if DEBUG`/`#Preview { … }` está exento: es andamiaje de previsualización, no producción
+(el mismo patrón que `LoginApp`'s `LoginPreview`, que construye una `LoginService`/
+`LoginLogic` reales dentro de un bloque `#if canImport(SwiftUI) && DEBUG`).
+
+| Regla | De `ARQUITECTURA-KIT-2026-09-02.md` | Qué comprueba |
+|---|---|---|
+| **R1** | §1, regla 1 | El ViewModel no importa CoreNetworking ni referencia `APIService`/`URLSession`/`*Service`/`*Store`; conforma `ActionHandling`. Con `strict: true`, exige heredar de `LogicViewModel`. |
+| **R2** | §1, regla 2 | La Logic no importa SwiftUI/UIKit ni referencia `*ViewModel`; declara su propio `protocol XxxLogicProtocol: Logic`. |
+| **R3** | §1, regla 3 | Un Service declara `protocol XxxServicing: Sendable`; un Store declara `protocol XxxStoring: Sendable`. Ninguna otra capa toca `APIServiceProtocol`/`BaseRequest`/SwiftData/CoreData directamente. |
+| **R4** | §1, regla 4 | La View no referencia `*Logic`/`*Service`/`*Store`/`APIService`. |
+| **R5** | §1, regla 5 | Cada `XxxViewModel.swift` (que hereda `LogicViewModel`) tiene su `XxxLogic.swift`. Desactivable por pantalla vía `ignore:`. |
+| **R6** | §1, regla 6 | Ningún `init` de otra capa recibe un `Service`/`Store`/`Logic` CONCRETO: siempre `any XxxProtocol`. |
+| **R7** | §8, M1 | `APIError` no llega al ViewModel/View; `import CoreNetworking` solo permitido en Logic y Services. |
+| **R8** | §8, M2 | Los DTOs (`*Request`/`*Response`/`*DTO`) no salen del Service/Store. |
+| **R9** | §8, M3 | Logic/Service/Store no referencian `Router`/`Coordinator`/`DeepLink`. |
+| **R10** | §8, M4 | `Container.shared`/`resolve(`/`@Inject` prohibidos fuera del `XxxModule` (composition root). |
+| **R11** | §8, M5 | Aviso (no error): una Logic marcada `@MainActor` pierde su independencia de actor. |
+
+### `.archlint.yml`
+
+Formato propio, mínimo: `key: value` plano, con listas en bloque (`- item`) o inline
+(`[a, b]`) — sin librería YAML. `archinit` (ver abajo) escribe uno con los valores por
+defecto documentados; sin fichero, `archlint` usa esos mismos defaults (incluido ignorar
+`Tests/**` y los dobles de test).
+
+```yaml
+strict: false                      # exige LogicViewModel en cada ViewModel (extiende R1)
+suffixes.viewModel: ViewModel
+suffixes.logic: Logic
+suffixes.service: Service
+suffixes.store: Store
+disabled: [R11]                    # reglas desactivadas por id
+ignore:                            # rutas ignoradas (glob: '*' un segmento, '**' cualquiera)
+  - Generated/**
+```
+
+### `archinit`
+
+```bash
+swift package --allow-writing-to-package-directory archinit
+```
+
+Crea `.archlint.yml`, `Features/`, copia el `AGENTS.md` de AppFoundation a la raíz del
+proyecto, añade (o crea) `CLAUDE.md` con una línea `@AGENTS.md`, e instala
+`.claude/skills/feature.md` (el skill `/feature` de Claude Code, que explica el generador
+y recuerda las reglas del linter). Nunca sobrescribe un fichero que ya exista.
+
 ## Notes
 
 - `ScreenContainer` is the public shell type; it depends on `ScreenViewModel`
