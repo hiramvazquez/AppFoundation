@@ -55,6 +55,21 @@ public struct PhaseView<Content: View>: View {
         self.content = content
     }
 
+    /// Creates a phase view observing a `ScreenState` (AF-05) — most often a
+    /// `BaseViewModel` subclass — without needing a `Binding` to its `phase` property.
+    /// `PhaseView` never writes back to `phase`, so this reads it directly.
+    public init(
+        observing state: some ScreenState,
+        backgroundColor: Color = .platformBackground,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(
+            phase: Binding(get: { state.phase }, set: { _ in }),
+            backgroundColor: backgroundColor,
+            content: content
+        )
+    }
+
     public var body: some View {
         ZStack {
             backgroundColor

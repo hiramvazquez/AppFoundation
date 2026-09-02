@@ -3,6 +3,9 @@
 /// AppFoundation bundles the pieces most greenfield apps need from day one:
 ///
 /// - `BaseViewModel` for primary screen state and secondary activity handling
+/// - `ScreenState` and `ActionHandling` for the screen ↔ shell contract: `ScreenContainer`
+///   depends on these protocols, never on the concrete `BaseViewModel` class, and a view's
+///   only way to act on a screen is `ActionSender<Action>` — never the view model itself
 /// - `Coordinator`, `Router`, and `CoordinatorView` for navigation
 /// - `Container` and `@Inject` for lightweight DI
 /// - `ScreenContainer` for shell UI and screen-state rendering

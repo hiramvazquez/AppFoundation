@@ -26,7 +26,7 @@ public struct LoadingConfiguration: Sendable {
 ///     }
 /// }
 ///
-/// ScreenContainer(viewModel: viewModel) { ContentView() }
+/// ScreenContainer(viewModel) { send in ContentView() }
 ///     .loadingViewStyle(BrandLoadingStyle())
 /// ```
 public protocol LoadingViewStyle {

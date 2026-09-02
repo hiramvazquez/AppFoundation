@@ -103,23 +103,27 @@ nonisolated enum ScreenPresentationLogic {
 /// - transient activity overlays (`activity`)
 /// - user feedback (`alert` via the native alert presentation, `banner` as an overlay)
 ///
+/// `ScreenContainer` depends on `ScreenViewModel` (`ScreenState & ActionHandling`, AF-05),
+/// never on the concrete `BaseViewModel` class: any `@Observable final class` that conforms
+/// works, whether or not it inherits from `BaseViewModel`. The content closure receives an
+/// `ActionSender<State.Action>` — never the view model itself — so a view cannot reach past
+/// `handle(_:)` to call a method directly (`ScreenContainer(vm) { send in ... }` simply does
+/// not compile unless `vm` conforms to `ActionHandling`; see `ActionHandlingTests` for the
+/// documented negative-compile example).
+///
 /// Chrome defaults to `.native` (AF-12/AF-13): the navigation bar is never hidden unless a
 /// screen opts into `chrome: .custom(...)`. Loading/error/empty/banner appearances come
 /// from `Environment` (`LoadingViewStyle`, `ErrorViewStyle`, `EmptyViewStyle`,
 /// `BannerViewStyle` — install with `.loadingViewStyle(_:)` etc.), so customizing them
 /// never needs type erasure at the call site (AF-15).
 ///
-/// Observation: the view-model initializer derives its bindings through `Bindable`, so
-/// reads go straight to the `@Observable` view model during body evaluation and updates
-/// are tracked automatically (A4 — no hand-rolled closures over an unobserved object).
-public struct ScreenContainer<Content: View>: View {
-    @Binding private var phase: ViewPhase
-    @Binding private var activity: ActivityState
-    @Binding private var alert: AlertState?
-    @Binding private var banner: BannerState?
-
+/// Observation: `state` is read directly during `body` evaluation (no `@Bindable`/`Binding`
+/// needed for reads — that's how `Observable` tracking works), so updates are tracked
+/// automatically (A4 — no hand-rolled closures over an unobserved object).
+public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
+    private let state: State
     private let chrome: ScreenChrome
-    private let content: () -> Content
+    private let content: (ActionSender<State.Action>) -> Content
     private let backgroundColor: Color
 
     @Environment(\.loadingViewStyle) private var loadingStyle
@@ -127,39 +131,19 @@ public struct ScreenContainer<Content: View>: View {
     @Environment(\.emptyViewStyle) private var emptyStyle
     @Environment(\.bannerViewStyle) private var bannerStyle
 
-    // MARK: - Initializers
+    // MARK: - Designated Initializer
 
-    /// Creates a screen container bound to a `BaseViewModel`.
+    /// Creates a screen container bound to a `ScreenViewModel`: observable state
+    /// (`ScreenState`) plus a single action entry point (`ActionHandling`). The content
+    /// closure receives an `ActionSender<State.Action>` — send an action with
+    /// `send(.load)`, never call a method on `state` directly.
     public init(
-        viewModel: BaseViewModel,
+        _ state: State,
         chrome: ScreenChrome = .native,
         backgroundColor: Color = .platformBackground,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
-        let bindable = Bindable(viewModel)
-        self._phase = bindable.phase
-        self._activity = bindable.activity
-        self._alert = bindable.alert
-        self._banner = bindable.banner
-        self.chrome = chrome
-        self.content = content
-        self.backgroundColor = backgroundColor
-    }
-
-    /// Creates a screen container using explicit bindings.
-    public init(
-        phase: Binding<ViewPhase>,
-        activity: Binding<ActivityState> = .constant(.none),
-        alert: Binding<AlertState?> = .constant(nil),
-        banner: Binding<BannerState?> = .constant(nil),
-        chrome: ScreenChrome = .native,
-        backgroundColor: Color = .platformBackground,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self._phase = phase
-        self._activity = activity
-        self._alert = alert
-        self._banner = banner
+        self.state = state
         self.chrome = chrome
         self.content = content
         self.backgroundColor = backgroundColor
@@ -169,10 +153,10 @@ public struct ScreenContainer<Content: View>: View {
 
     public var body: some View {
         chromeWrappedBody
-            .animation(.default, value: phase)
-            .animation(.default, value: activity)
-            .animation(.default, value: banner)
-            .onChange(of: banner) { _, newBanner in
+            .animation(.default, value: state.phase)
+            .animation(.default, value: state.activity)
+            .animation(.default, value: state.banner)
+            .onChange(of: state.banner) { _, newBanner in
                 guard let newBanner else { return }
                 // Accessibility: banners are transient — VoiceOver users hear them arrive.
                 AccessibilityNotification.Announcement(newBanner.message).post()
@@ -180,9 +164,9 @@ public struct ScreenContainer<Content: View>: View {
             // A15: alerts use the native presentation — there is no custom alert overlay
             // to opt into; a fully custom alert is a future `AlertViewStyle`, not a type-erased closure.
             .alert(
-                alert?.title ?? "",
+                state.alert?.title ?? "",
                 isPresented: isAlertPresented,
-                presenting: alert
+                presenting: state.alert
             ) { alertState in
                 alertButtons(for: alertState)
             } message: { alertState in
@@ -234,9 +218,9 @@ public struct ScreenContainer<Content: View>: View {
 
     private var isAlertPresented: Binding<Bool> {
         Binding(
-            get: { alert != nil },
+            get: { state.alert != nil },
             set: { isPresented in
-                if !isPresented { alert = nil }
+                if !isPresented { state.alert = nil }
             }
         )
     }
@@ -274,7 +258,7 @@ public struct ScreenContainer<Content: View>: View {
 
             activityOverlay
 
-            if banner != nil {
+            if state.banner != nil {
                 bannerOverlayView
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
@@ -284,8 +268,8 @@ public struct ScreenContainer<Content: View>: View {
 
     @ViewBuilder
     private var contentAreaView: some View {
-        let hidden = ScreenPresentationLogic.hidesContent(phase)
-        content()
+        let hidden = ScreenPresentationLogic.hidesContent(state.phase)
+        content(state.sender)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .opacity(hidden ? 0 : 1)
             .accessibilityHidden(hidden)
@@ -295,7 +279,7 @@ public struct ScreenContainer<Content: View>: View {
 
     @ViewBuilder
     private var primaryPhaseOverlay: some View {
-        switch ScreenPresentationLogic.phaseOverlay(for: phase) {
+        switch ScreenPresentationLogic.phaseOverlay(for: state.phase) {
         case .none:
             EmptyView()
         case .loading(let style):
@@ -314,7 +298,7 @@ public struct ScreenContainer<Content: View>: View {
 
     @ViewBuilder
     private var activityOverlay: some View {
-        if let style = ScreenPresentationLogic.activityIndicator(for: activity) {
+        if let style = ScreenPresentationLogic.activityIndicator(for: state.activity) {
             activityView(style: style)
                 .transition(.opacity)
         }
@@ -351,9 +335,9 @@ public struct ScreenContainer<Content: View>: View {
     @ViewBuilder
     private var bannerOverlayView: some View {
         VStack(spacing: 0) {
-            if let bannerState = banner {
+            if let bannerState = state.banner {
                 bannerStyle.makeBody(configuration: BannerConfiguration(banner: bannerState) {
-                    self.banner = nil
+                    state.banner = nil
                 })
             }
             Spacer()
@@ -362,19 +346,21 @@ public struct ScreenContainer<Content: View>: View {
     }
 }
 
+// MARK: - Convenience Initializers (custom chrome shorthands)
+
 public extension ScreenContainer {
     /// Convenience for a `.custom` chrome with just a title.
     ///
     /// Prefer `chrome: .native` with `.navigationTitle(_:)` for new screens.
     init(
-        viewModel: BaseViewModel,
+        _ state: State,
         title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         navigationPlacement: NavigationPlacement = .stack,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
         self.init(
-            viewModel: viewModel,
+            state,
             chrome: .custom(.title(title, style: style), placement: navigationPlacement),
             content: content
         )
@@ -385,15 +371,15 @@ public extension ScreenContainer {
     /// Prefer `chrome: .native` with `.navigationTitle(_:)` — the system back button and
     /// swipe-back come for free, with no `PopGestureEnabler` workaround needed.
     init(
-        viewModel: BaseViewModel,
+        _ state: State,
         title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         navigationPlacement: NavigationPlacement = .stack,
         onBack: @escaping Action,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
         self.init(
-            viewModel: viewModel,
+            state,
             chrome: .custom(.withBack(title: title, style: style, backAction: onBack), placement: navigationPlacement),
             content: content
         )
@@ -404,17 +390,17 @@ public extension ScreenContainer {
     /// Prefer `chrome: .native` with `.searchable(text:)` — it integrates with the
     /// system's search keyboard, tokens, suggestions and scopes.
     init(
-        viewModel: BaseViewModel,
+        _ state: State,
         title: LocalizedStringResource,
         searchText: Binding<String>,
         searchPlaceholder: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .solid,
         navigationPlacement: NavigationPlacement = .stack,
         onSearchSubmit: Action? = nil,
-        @ViewBuilder content: @escaping () -> Content
+        @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
         self.init(
-            viewModel: viewModel,
+            state,
             chrome: .custom(
                 .withSearch(
                     title: title,
@@ -427,6 +413,113 @@ public extension ScreenContainer {
             ),
             content: content
         )
+    }
+}
+
+// MARK: - Bindings-only and read-only initializers (no `ActionHandling` required)
+
+/// Backs `ScreenContainer(phase:activity:alert:banner:chrome:backgroundColor:content:)` —
+/// the "no object" shorthand kept for previews, tests, and any screen that has no view
+/// model at all. It has no actions of its own (`Action == Never`): the content closure for
+/// that initializer is a plain `() -> Content`, exactly as before AF-05.
+///
+/// Not exposed as public API on its own — only reachable through `ScreenContainer`'s
+/// bindings-only initializer, which is how `State` gets inferred to this type.
+@MainActor
+public final class BindingBackedState: ScreenState, ActionHandling {
+    private let phaseBinding: Binding<ViewPhase>
+    private let activityBinding: Binding<ActivityState>
+    private let alertBinding: Binding<AlertState?>
+    private let bannerBinding: Binding<BannerState?>
+
+    init(
+        phase: Binding<ViewPhase>,
+        activity: Binding<ActivityState>,
+        alert: Binding<AlertState?>,
+        banner: Binding<BannerState?>
+    ) {
+        self.phaseBinding = phase
+        self.activityBinding = activity
+        self.alertBinding = alert
+        self.bannerBinding = banner
+    }
+
+    public var phase: ViewPhase { phaseBinding.wrappedValue }
+    public var activity: ActivityState { activityBinding.wrappedValue }
+    public var alert: AlertState? {
+        get { alertBinding.wrappedValue }
+        set { alertBinding.wrappedValue = newValue }
+    }
+    public var banner: BannerState? {
+        get { bannerBinding.wrappedValue }
+        set { bannerBinding.wrappedValue = newValue }
+    }
+
+    public typealias Action = Never
+    public func handle(_ action: Never) {}
+}
+
+/// Backs `ScreenContainer(observing:chrome:backgroundColor:content:)` — a **read-only**
+/// screen: the shell renders `wrapped`'s phase/activity/alert/banner, but the content
+/// closure gets no `ActionSender` because `wrapped` may not conform to `ActionHandling` at
+/// all (it only needs `ScreenState`).
+///
+/// Not exposed as public API on its own — only reachable through `ScreenContainer`'s
+/// `observing:` initializer and the `.screen(_:chrome:)` modifier, which is how `State`
+/// gets inferred to this type.
+@MainActor
+public final class ObservingScreenState<Wrapped: ScreenState>: ScreenState, ActionHandling {
+    let wrapped: Wrapped
+
+    init(_ wrapped: Wrapped) {
+        self.wrapped = wrapped
+    }
+
+    public var phase: ViewPhase { wrapped.phase }
+    public var activity: ActivityState { wrapped.activity }
+    public var alert: AlertState? {
+        get { wrapped.alert }
+        set { wrapped.alert = newValue }
+    }
+    public var banner: BannerState? {
+        get { wrapped.banner }
+        set { wrapped.banner = newValue }
+    }
+
+    public typealias Action = Never
+    public func handle(_ action: Never) {}
+}
+
+public extension ScreenContainer where State == BindingBackedState {
+    /// Creates a screen container using explicit bindings, without a view model. Kept for
+    /// Xcode Previews and screens with no `ScreenViewModel` of their own — there is no
+    /// `ActionSender` here (`content` is a plain `() -> Content`) because there is no
+    /// `ActionHandling` to send to.
+    init(
+        phase: Binding<ViewPhase>,
+        activity: Binding<ActivityState> = .constant(.none),
+        alert: Binding<AlertState?> = .constant(nil),
+        banner: Binding<BannerState?> = .constant(nil),
+        chrome: ScreenChrome = .native,
+        backgroundColor: Color = .platformBackground,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        let state = BindingBackedState(phase: phase, activity: activity, alert: alert, banner: banner)
+        self.init(state, chrome: chrome, backgroundColor: backgroundColor) { _ in content() }
+    }
+}
+
+public extension ScreenContainer {
+    /// Creates a screen container for a **read-only** screen: `state` only needs to conform
+    /// to `ScreenState`, not `ActionHandling` — there is no `ActionSender` in `content`
+    /// because there is nothing to send to.
+    init<Wrapped: ScreenState>(
+        observing state: Wrapped,
+        chrome: ScreenChrome = .native,
+        backgroundColor: Color = .platformBackground,
+        @ViewBuilder content: @escaping () -> Content
+    ) where State == ObservingScreenState<Wrapped> {
+        self.init(ObservingScreenState(state), chrome: chrome, backgroundColor: backgroundColor) { _ in content() }
     }
 }
 
