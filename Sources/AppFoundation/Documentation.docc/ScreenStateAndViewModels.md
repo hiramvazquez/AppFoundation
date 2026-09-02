@@ -15,27 +15,7 @@ carga inicial o un fallo a pantalla completa; usa `activity` para todo lo demás
 `@Observable`, `open class`. Las propiedades de una subclase se observan automáticamente
 — sin `@Published`, sin `ObservableObject`.
 
-```swift
-final class ProfileViewModel: BaseViewModel, ActionHandling {
-    private(set) var profile: Profile?
-
-    enum Action: Sendable {
-        case load
-    }
-
-    func handle(_ action: Action) {
-        switch action {
-        case .load: load()
-        }
-    }
-
-    private func load() {
-        performLoad { vm in
-            vm.profile = try await vm.repository.fetchProfile()
-        }
-    }
-}
-```
+@Snippet(path: "AppFoundation/Snippets/quickstart-viewmodel")
 
 `work` recibe el view model como parámetro (`{ vm in ... }`) en vez de capturarlo. No es
 una preferencia de estilo: un closure que captura `self` en vez de usar `vm` puede recrear
