@@ -45,8 +45,22 @@ struct GenerateFeaturePlugin: CommandPlugin {
         guard let target = Self.selectTarget(context.package, named: targetOption) else {
             throw GenerateFeatureError.noTarget
         }
-        guard let testTarget = Self.testTarget(for: target, in: context.package) else {
-            throw GenerateFeatureError.noTestTarget(target.name)
+        // Un paquete recién creado declara `Tests/<Target>Tests` en Package.swift pero aún no
+        // tiene ficheros ahí, y SwiftPM no lo lista como target. Es justo el momento en que
+        // más se usa el generador, así que se cae al directorio convencional y se avisa.
+        let testDirectoryURL: URL
+        if let testTarget = Self.testTarget(for: target, in: context.package) {
+            testDirectoryURL = testTarget.directoryURL
+        } else {
+            testDirectoryURL = context.package.directoryURL
+                .appendingPathComponent("Tests")
+                .appendingPathComponent("\(target.name)Tests")
+            if !noTests {
+                print(
+                    "Aviso: no hay target de tests con ficheros para '\(target.name)'; los tests se generan en "
+                        + "Tests/\(target.name)Tests/ — asegúrate de que Package.swift declara ese testTarget."
+                )
+            }
         }
 
         let both = api && local
@@ -85,7 +99,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
         let featureSourceDir = target.directoryURL.appendingPathComponent(pathOption).appendingPathComponent(feature)
         let coreDir = module ? featureSourceDir.appendingPathComponent("\(feature)Core") : featureSourceDir
         let uiDir = module ? featureSourceDir.appendingPathComponent("\(feature)UI") : featureSourceDir
-        let featureTestDir = testTarget.directoryURL.appendingPathComponent(pathOption).appendingPathComponent(feature)
+        let featureTestDir = testDirectoryURL.appendingPathComponent(pathOption).appendingPathComponent(feature)
 
         var writes: [(url: URL, contents: String)] = []
 
@@ -315,7 +329,6 @@ enum GenerateFeatureError: Error, CustomStringConvertible {
     case templatesNotFound
     case templateMissing(String)
     case noTarget
-    case noTestTarget(String)
 
     var description: String {
         switch self {
@@ -327,8 +340,6 @@ enum GenerateFeatureError: Error, CustomStringConvertible {
             return "Falta la plantilla '\(name)' en AppFoundation/Templates."
         case .noTarget:
             return "No se encontró un target de origen (no-test) donde generar el feature. Usa --target NAME."
-        case .noTestTarget(let name):
-            return "No se encontró un target de tests para '\(name)'. Usa --no-tests para omitir los tests generados."
         }
     }
 }
