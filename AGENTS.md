@@ -1,55 +1,61 @@
 # AppFoundation — guía para agentes
 
 Arquitectura obligatoria de cualquier feature: **View → ViewModel → Logic → Services/Stores**.
-Un `Logic` por `ViewModel`. Todo entra por `init`, siempre como protocolo.
+Un `Logic` por `ViewModel`. Todo entra por `init`, siempre como protocolo. Nada de esto
+llama a `Container.shared`/`@Inject` por su cuenta: el composition root es el `XxxModule`.
 
 ## Capas
 
 - **View** (SwiftUI): recibe el `ViewModel`, renderiza con `ScreenContainer(vm) { send in … }`.
   Nunca importa `CoreNetworking`, nunca referencia `*Logic`/`*Service`/`*Store`.
-- **ViewModel**: `final class XxxViewModel: LogicViewModel<any XxxLogicProtocol>, ActionHandling`.
-  Orquesta: recibe `Action` en `handle(_:)`, llama a `logic`, actualiza `phase`/estado propio.
-  Nunca conoce `APIService`, `URLSession`, SwiftData ni un `*Service`/`*Store` concreto —
-  solo `logic`.
-- **Logic**: `protocol XxxLogicProtocol: Logic { … }` + `final class XxxLogic: XxxLogicProtocol`.
-  TODA la lógica de negocio. Sin `import SwiftUI`/`UIKit`. Sin referencias a `*ViewModel`.
+- **ViewModel** (`@MainActor`): `final class XxxViewModel: LogicViewModel<any XxxLogicProtocol>,
+  ActionHandling`. Orquesta: recibe `Action` en `handle(_:)`, llama a `logic`, actualiza
+  `phase`/estado propio, decide navegación (`Router`/`Coordinator`). Nunca conoce
+  `APIService`, `URLSession`, SwiftData ni un `*Service`/`*Store` concreto — solo `logic`.
+- **Logic** (`nonisolated`, métodos `async`): `protocol XxxLogicProtocol: Logic { … }` +
+  `final class XxxLogic: XxxLogicProtocol`. TODA la lógica de negocio; traduce el error del
+  Service/Store (`APIError`, SwiftData) a un error de dominio propio (`XxxError: DomainError`)
+  ANTES de devolverlo — el ViewModel y el `ErrorPresenting` nunca ven `APIError`. Sin
+  `import SwiftUI`/`UIKit`. Sin referencias a `*ViewModel`/`Router`/`Coordinator`.
   Dependencias por `init` como `any XxxServicing`/`any XxxStoring`.
-- **Service** (API): `protocol XxxServicing: Sendable` + una implementación que es la
-  ÚNICA que toca `APIServiceProtocol`/`BaseRequest`. Un Service = una llamada a API con su
-  propio `BaseRequest`. Conformar `EndpointService` (`CoreNetworking`) da `call(_:)` gratis.
-- **Store** (local): `protocol XxxStoring` + una implementación que es la ÚNICA que toca
-  SwiftData/CoreData/UserDefaults/Keychain/FileManager. Misma forma que un Service, distinto
-  origen.
+- **Service** (API, `struct Sendable`): `protocol XxxServicing: Sendable` + una
+  implementación que es la ÚNICA que toca `APIServiceProtocol`/`BaseRequest` y que devuelve
+  MODELOS DE DOMINIO (nunca el DTO/`Response` decodificado). Un Service = una llamada a API
+  con su propio `BaseRequest`. Conformar `EndpointService` (`CoreNetworking`) da `call(_:)`
+  gratis.
+- **Store** (local, `actor`/`@ModelActor` con SwiftData): `protocol XxxStoring` + una
+  implementación que es la ÚNICA que toca SwiftData/CoreData/UserDefaults/Keychain/
+  FileManager, y que igualmente devuelve modelos de dominio. Misma forma que un Service,
+  distinto origen.
 
 ## Las cuatro variantes (mismas reglas)
 
 | Variante | `Logic` depende de | Ejemplo |
 |---|---|---|
-| Solo API | `any XxxServicing` | `Examples/LoginApp` |
-| Solo local | `any XxxStoring` | `Examples/NotesApp` |
-| API + local | ambos (cache-then-network) | `Examples/CatalogApp` |
+| Solo API | `any XxxServicing` | `Examples/LoginApp` (+ `SessionStore`, logout global) |
+| Solo local | `any XxxStoring` | `Examples/NotesApp` (SwiftData) |
+| API + local | ambos (`cached()` + `refresh()`, cache-then-network) | `Examples/CatalogApp` |
 | Sin datos | nada | `Examples/CounterApp` |
 
 ## Piezas de este paquete
 
-- `Logic` (`Architecture/Logic/Logic.swift`): marcador `protocol Logic: AnyObject {}` que
-  toda `XxxLogicProtocol` extiende. Sin requisitos: documenta intención para humanos,
-  agentes y el futuro linter/generador (PRD-AF-08).
+- `Logic` (`Architecture/Logic/Logic.swift`): marcador `protocol Logic: AnyObject {}`.
+- `DomainError` (`Architecture/AppError/DomainError.swift`): `protocol DomainError: Error,
+  AppErrorConvertible, Sendable { var isRetryable: Bool { get } }` (default `false`) — lo
+  que un `Logic` lanza en vez de propagar el error de su Service/Store.
 - `LogicViewModel<L>` (`Architecture/ViewModels/LogicViewModel.swift`): `open class
-  LogicViewModel<L>: BaseViewModel` con `public let logic: L`. Hereda `phase`/`activity`/
-  `performLoad`/`performActivity` de `BaseViewModel`. NO conforma `ActionHandling` — cada
-  subclase declara su propio `enum Action` y `handle(_:)`.
+  LogicViewModel<L>: BaseViewModel` con `public let logic: L`. NO conforma `ActionHandling`
+  — cada subclase declara su propio `enum Action` y `handle(_:)`.
 - `AppFoundationTestSupport` (producto SEPARADO, nunca en el binario de producción):
-  `InMemoryStore<Key, Value>` (actor genérico para dobles de `*Storing`), `ManualClock`
-  (reloj determinista para tests), `SpyRecorder<Call>` (grabador de llamadas para spies).
+  `InMemoryStore<Key, Value>` (actor genérico para dobles de `*Storing`), `ManualClock`,
+  `SpyRecorder<Call>`.
 
 ## Cómo testear cada capa
 
-- **ViewModel**: `XxxLogicMock: XxxLogicProtocol` (spy, con `SpyRecorder`/contadores) →
-  `viewModel.handle(.acción)` → `await viewModel.inFlightLoad?.value` → assert sobre
-  `phase`/propiedades observables. Nunca llames al método `private` directamente.
+- **ViewModel**: `XxxLogicMock: XxxLogicProtocol` (spy) → `viewModel.handle(.acción)` →
+  `await viewModel.inFlightLoad?.value` → assert sobre `phase`/propiedades observables.
 - **Logic**: `XxxServiceMock`/`XxxStoreMock` (o `InMemoryStore`) → llama al método del
-  `Logic` directamente (sin SwiftUI, sin ViewModel).
+  `Logic` directamente; incluye un test por cada mapeo de error a `DomainError`.
 - **Service**: `MockAPIService` (stub por tipo de request) para el caso feliz/error, e
   `InMemoryTransport` para el pipeline real (retries, interceptores, refresh de token).
 - **Store**: `InMemoryStore`/`InMemoryXxxStore` en tests; SwiftData con `ModelContainer`
@@ -57,14 +63,12 @@ Un `Logic` por `ViewModel`. Todo entra por `init`, siempre como protocolo.
 
 ## Qué NO hacer
 
-- No inyectes un `APIService`, `URLSession` ni un `*Service`/`*Store` concreto en un
-  `ViewModel` o en el `init` de otro `Logic`/`Service`/`Store` — siempre `any XxxProtocol`.
-- No pongas lógica de negocio en el `ViewModel`: si decide algo más que "qué `Action` llama
-  a qué método de `logic`", pertenece al `Logic`.
-- No importes SwiftUI/UIKit en un `Logic`.
-- No construyas el `Logic` de un `ViewModel` con un tipo concreto codificado a mano en
-  producción sin pasar por `init(logic:)` — igual en tests: pasa el mock ahí, no mutando
-  propiedades después de construir.
+- No inyectes un tipo concreto de Service/Store/Logic en otra capa — siempre `any XxxProtocol`.
+- No dejes que `APIError`/un error de SwiftData llegue al ViewModel: mapéalo a `DomainError`
+  dentro del `Logic`.
+- No pongas lógica de negocio ni navegación en el `ViewModel`/`Logic` respectivamente.
+- No llames a `Container.shared`/`@Inject` desde ViewModel/Logic/Service/Store: regístralos
+  y resuélvelos desde el `XxxModule` (composition root).
 
 Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia)
 y `README.md` (instalación y resto de piezas del paquete).
