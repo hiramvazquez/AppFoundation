@@ -27,14 +27,27 @@ struct IntegrationTests {
         }
     }
 
-    final class TestViewModel: BaseViewModel {
+    final class TestViewModel: BaseViewModel, ActionHandling {
         let router: any Router<TestRoute>
         let dataService: DataService
+
+        /// AF-05: the single entry point a view — or a test standing in for one — uses.
+        enum Action: Sendable {
+            case loadData
+            case navigateToDetail(id: Int)
+        }
 
         init(router: any Router<TestRoute>, dataService: DataService) {
             self.router = router
             self.dataService = dataService
             super.init()
+        }
+
+        func handle(_ action: Action) {
+            switch action {
+            case .loadData: loadData()
+            case .navigateToDetail(let id): navigateToDetail(id: id)
+            }
         }
 
         @discardableResult
@@ -108,6 +121,20 @@ struct IntegrationTests {
         dataService.shouldFail = true
         await viewModel.loadData().value
         #expect(viewModel.currentError?.title == "Load Failed")
+    }
+
+    /// AF-05: the exact call a `ScreenContainer` content closure makes (`send(.loadData)`)
+    /// — `handle(_:)` is a fire-and-forget `Void`, so the test polls observable state
+    /// instead of awaiting a `Task`, the same way a UI test would.
+    @Test func handleLoadDataReachesContentThroughTheSingleEntryPoint() async throws {
+        viewModel.handle(.loadData)
+        try await waitUntil { viewModel.phase == .content }
+        #expect(dataService.callCount == 1)
+    }
+
+    @Test func handleNavigateToDetailPushesThroughTheSingleEntryPoint() {
+        viewModel.handle(.navigateToDetail(id: 7))
+        #expect(coordinator.mainStack.path == [.detail(id: 7)])
     }
 
     @Test func retryAfterFailureRecovers() async throws {

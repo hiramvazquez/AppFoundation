@@ -41,11 +41,19 @@ private enum READMEProjectFlowExamples {
 
     // MARK: - §5 Build a feature view model
 
-    final class ProfileViewModel: BaseViewModel {
+    final class ProfileViewModel: BaseViewModel, ActionHandling {
         private(set) var profile: Profile?
 
         private let repository: ProfileRepository
         private let router: any Router<AppRoute>
+
+        /// Every gesture this screen recognizes (AF-05) — `handle(_:)` is the only method
+        /// `ProfileView` calls; the three implementations below are `private`.
+        enum Action: Sendable {
+            case onAppear
+            case refresh
+            case openDetails
+        }
 
         init(
             repository: ProfileRepository,
@@ -56,7 +64,15 @@ private enum READMEProjectFlowExamples {
             super.init()
         }
 
-        func onAppear() {
+        func handle(_ action: Action) {
+            switch action {
+            case .onAppear: onAppear()
+            case .refresh: refresh()
+            case .openDetails: openDetails()
+            }
+        }
+
+        private func onAppear() {
             performLoad(successTransition: .preserveCurrentPhase) { vm in
                 let profile = try await vm.repository.fetchProfile()
                 vm.profile = profile
@@ -64,7 +80,7 @@ private enum READMEProjectFlowExamples {
             }
         }
 
-        func refresh() {
+        private func refresh() {
             performActivity(style: .overlay) { vm in
                 let profile = try await vm.repository.fetchProfile()
                 vm.profile = profile
@@ -72,7 +88,7 @@ private enum READMEProjectFlowExamples {
             }
         }
 
-        func openDetails() {
+        private func openDetails() {
             router.push(.profileDetails(id: "42"))
         }
     }
@@ -83,7 +99,7 @@ private enum READMEProjectFlowExamples {
         let viewModel: ProfileViewModel
 
         var body: some View {
-            ScreenContainer(viewModel: viewModel) {
+            ScreenContainer(viewModel) { send in
                 VStack(spacing: 20) {
                     if let profile = viewModel.profile {
                         Text(profile.name)
@@ -91,19 +107,19 @@ private enum READMEProjectFlowExamples {
                     }
 
                     Button("Refresh") {
-                        viewModel.refresh()
+                        send(.refresh)
                     }
 
                     Button("Open details") {
-                        viewModel.openDetails()
+                        send(.openDetails)
                     }
                 }
                 .padding()
+                .onAppear {
+                    send(.onAppear)
+                }
             }
             .navigationTitle("Profile")
-            .onAppear {
-                viewModel.onAppear()
-            }
         }
     }
 
@@ -118,9 +134,9 @@ private enum READMEProjectFlowExamples {
 
         var body: some View {
             ScreenContainer(
-                viewModel: viewModel,
+                viewModel,
                 chrome: .custom(.withBack(title: "Profile") {})
-            ) {
+            ) { _ in
                 ProfileContent()
             }
         }
@@ -151,7 +167,9 @@ struct READMEProjectFlowTests {
         let coordinator = Coordinator<Fixtures.AppRoute>(root: .home)
         let viewModel = Fixtures.ProfileViewModel(repository: LiveProfileRepository(), router: coordinator)
 
-        viewModel.onAppear()
+        // The same call `ProfileView` makes through `send(.onAppear)` — no private method
+        // reached through `@testable import` (AF-05).
+        viewModel.handle(.onAppear)
         try await waitUntil { viewModel.phase == .content }
 
         #expect(viewModel.profile?.name == "Hiram")
@@ -161,7 +179,7 @@ struct READMEProjectFlowTests {
         let coordinator = Coordinator<Fixtures.AppRoute>(root: .home)
         let viewModel = Fixtures.ProfileViewModel(repository: LiveProfileRepository(), router: coordinator)
 
-        viewModel.openDetails()
+        viewModel.handle(.openDetails)
 
         #expect(coordinator.mainStack.path == [.profileDetails(id: "42")])
     }
@@ -170,7 +188,7 @@ struct READMEProjectFlowTests {
         let coordinator = Coordinator<Fixtures.AppRoute>(root: .home)
         let viewModel = Fixtures.ProfileViewModel(repository: LiveProfileRepository(), router: coordinator)
 
-        viewModel.refresh()
+        viewModel.handle(.refresh)
         try await waitUntil { viewModel.profile != nil }
 
         #expect(viewModel.profile?.name == "Hiram")
@@ -201,7 +219,7 @@ struct READMEProjectFlowTests {
 
         _ = Fixtures.ProfileView(viewModel: viewModel)
         _ = Fixtures.CustomBarProfileView(viewModel: viewModel)
-        _ = ScreenContainer(viewModel: viewModel) { Fixtures.ProfileContent() }
+        _ = ScreenContainer(viewModel) { _ in Fixtures.ProfileContent() }
             .errorViewStyle(Fixtures.BrandErrorStyle())
     }
 }
