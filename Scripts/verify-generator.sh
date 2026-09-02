@@ -19,7 +19,7 @@ if [ -d "$REPO_ROOT/AppFoundation" ] && [ -d "$REPO_ROOT/CoreNetworking" ]; then
     CORENETWORKING_DEP=".package(path: \"$REPO_ROOT/CoreNetworking\")"
 else
     APPFOUNDATION_DIR="$REPO_ROOT"
-    CORENETWORKING_DEP="${CORENETWORKING_DEP:-.package(url: \"https://github.com/hiramvazquez/CoreNetworking.git\", branch: \"main\")}"
+    CORENETWORKING_DEP="${CORENETWORKING_DEP:-.package(url: \"https://github.com/hiramvazquez/CoreNetworking.git\", from: \"1.0.0\")}"
 fi
 WORK_DIR="$(mktemp -d /tmp/spm-pro-af08-verify.XXXXXX)"
 DEMO_DIR="$WORK_DIR/DemoApp"
