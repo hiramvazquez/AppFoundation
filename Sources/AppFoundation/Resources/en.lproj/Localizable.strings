@@ -21,3 +21,9 @@
 
 /* Search cancel button */
 "Cancel" = "Cancel";
+
+/* Accessibility label of the custom navigation bar's back button */
+"Back" = "Back";
+
+/* Accessibility label of the custom navigation bar's close button */
+"Close" = "Close";

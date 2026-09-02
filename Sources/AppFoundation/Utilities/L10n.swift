@@ -17,4 +17,10 @@ nonisolated enum L10n {
 
     /// "Search" — default search placeholder.
     static var search: String { String(localized: "Search", bundle: .module) }
+
+    /// "Back" — accessibility label of the custom bar's back button.
+    static var back: String { String(localized: "Back", bundle: .module) }
+
+    /// "Close" — accessibility label of the custom bar's close button.
+    static var close: String { String(localized: "Close", bundle: .module) }
 }

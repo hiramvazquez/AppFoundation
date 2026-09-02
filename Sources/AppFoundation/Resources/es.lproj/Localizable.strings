@@ -21,3 +21,9 @@
 
 /* Botón cancelar de la búsqueda */
 "Cancel" = "Cancelar";
+
+/* Etiqueta de accesibilidad del botón atrás de la barra personalizada */
+"Back" = "Atrás";
+
+/* Etiqueta de accesibilidad del botón cerrar de la barra personalizada */
+"Close" = "Cerrar";
