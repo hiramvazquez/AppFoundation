@@ -23,9 +23,9 @@ Requires **Swift 6.2** (tools), **iOS 17 / macOS 14**. The package builds with
   - `DependencyModule` + `Container.register(modules:)`
   - `@Inject` (`@MainActor`)
 - **UI**
-  - `ScreenContainer`
-  - `CustomNavigationBar`
-  - `NavigationBarItem` (stable identity + semantic roles)
+  - `ScreenContainer` (native navigation chrome by default — `ScreenChrome.custom` is opt-in)
+  - `LoadingViewStyle` / `ErrorViewStyle` / `EmptyViewStyle` / `BannerViewStyle` (`Environment`-propagated, no `AnyView`)
+  - `CustomNavigationBar` / `NavigationBarItem` (stable identity + semantic roles; opt-in via `ScreenChrome.custom`)
 - **Utilities**
   - `Debouncer` / `Throttler` (injectable `Clock`)
   - `WrappedError` (`AppErrorConvertible`)
@@ -237,17 +237,17 @@ automatically — no `@Published`, no `ObservableObject`.
 
 ### 6. Render with `ScreenContainer`
 
+`ScreenContainer(chrome:)` defaults to `.native`: the system navigation bar stays visible,
+and the screen drives it the ordinary SwiftUI way — `navigationTitle`, `toolbar`,
+`searchable`. That means large titles, scroll-edge effects, and (importantly)
+swipe-back all keep working for free, on every OS release:
+
 ```swift
 struct ProfileView: View {
     let viewModel: ProfileViewModel
 
     var body: some View {
-        ScreenContainer(
-            viewModel: viewModel,
-            navigation: .withBack(title: "Profile") {
-                // Usually delegated back to router/coordinator owner
-            }
-        ) {
+        ScreenContainer(viewModel: viewModel) {
             VStack(spacing: 20) {
                 if let profile = viewModel.profile {
                     Text(profile.name)
@@ -264,6 +264,7 @@ struct ProfileView: View {
             }
             .padding()
         }
+        .navigationTitle("Profile")
         .onAppear {
             viewModel.onAppear()
         }
@@ -273,6 +274,46 @@ struct ProfileView: View {
 
 Alerts present through the native `.alert` by default; banners auto-dismiss after their
 duration and are announced to VoiceOver.
+
+Loading/error/empty/banner appearances are pluggable through `Environment`, the same
+pattern SwiftUI uses for `ButtonStyle`/`ProgressViewStyle` — no `AnyView` at the call site:
+
+```swift
+struct BrandErrorStyle: ErrorViewStyle {
+    func makeBody(configuration: ErrorConfiguration) -> some View {
+        VStack {
+            Text(configuration.error.title).font(.headline)
+            Text(configuration.error.message)
+            if let retry = configuration.error.retry {
+                Button("Try again", action: retry)
+            }
+        }
+    }
+}
+
+ScreenContainer(viewModel: viewModel) { ContentView() }
+    .errorViewStyle(BrandErrorStyle())
+```
+
+#### Opt-in custom navigation bar
+
+Reach for `chrome: .custom(...)` only when the native bar genuinely can't do the job (e.g.
+a header with an avatar and a greeting). Hiding the native bar also disables
+`UINavigationController`'s interactive pop gesture — `ScreenContainer` installs the
+`PopGestureEnabler` workaround automatically whenever chrome is `.custom`, but you should
+still verify swipe-back manually on a simulator/device, since that can't be covered by a
+unit test:
+
+```swift
+ScreenContainer(
+    viewModel: viewModel,
+    chrome: .custom(.withBack(title: "Profile") {
+        // Usually delegated back to router/coordinator owner
+    })
+) {
+    ProfileContent()
+}
+```
 
 ## `BaseViewModel` guidance
 
