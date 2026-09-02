@@ -428,7 +428,23 @@ public extension ScreenContainer {
 ///
 /// Not exposed as public API on its own — only reachable through `ScreenContainer`'s
 /// bindings-only initializer, which is how `State` gets inferred to this type.
+///
+/// ## Why this observes correctly without `@Observable` doing any work (DC-AF-4)
+///
+/// `@Observable` is applied above for documentation and future-proofing, but it has no
+/// effect here: the macro only instruments *stored* properties, and every property this
+/// class exposes (`phase`, `activity`, `alert`, `banner`) is computed, forwarding straight
+/// to a `Binding`'s `wrappedValue`. Re-rendering doesn't come from the Observation
+/// framework at all — it comes from SwiftUI's own dependency tracking for `Binding`/`@State`,
+/// which fires whenever `ScreenContainer.body` reads through one of these bindings during
+/// evaluation, exactly as it would for any other `Binding` read in a view body. The
+/// contract this type relies on is: never cache a binding's `wrappedValue` outside of
+/// `body` evaluation, and never introduce a stored property that needs tracking — if one
+/// is ever added, it must be observable through `@Observable`'s stored-property
+/// instrumentation, not silently rely on this class's `Observable` conformance (inherited,
+/// unconditionally, from `ScreenState`) to do it for free.
 @MainActor
+@Observable
 public final class BindingBackedState: ScreenState, ActionHandling {
     private let phaseBinding: Binding<ViewPhase>
     private let activityBinding: Binding<ActivityState>
@@ -470,7 +486,22 @@ public final class BindingBackedState: ScreenState, ActionHandling {
 /// Not exposed as public API on its own — only reachable through `ScreenContainer`'s
 /// `observing:` initializer and the `.screen(_:chrome:)` modifier, which is how `State`
 /// gets inferred to this type.
+///
+/// ## Why this observes correctly without `@Observable` doing any work (DC-AF-4)
+///
+/// `@Observable` is applied above for documentation and future-proofing, but — like
+/// `BindingBackedState` — it has no effect here: `phase`/`activity`/`alert`/`banner` are
+/// computed properties that forward to `wrapped`, never stored ones the macro could
+/// instrument. Observation tracking happens on `wrapped` itself: `wrapped` is guaranteed
+/// `Observable` by the `ScreenState` protocol it conforms to (`BaseViewModel` gets this
+/// from its own `@Observable`), so reading `wrapped.phase` during `ScreenContainer.body`
+/// evaluation registers the access against `wrapped`'s registrar exactly as if the view
+/// had read the wrapped view model directly — this class is a transparent pass-through
+/// for tracking purposes, not a second source of truth. `ObservingScreenState` itself
+/// never needs to be `@Observable`-instrumented because it stores no observable state of
+/// its own (only a `let wrapped: Wrapped` reference, immutable after `init`).
 @MainActor
+@Observable
 public final class ObservingScreenState<Wrapped: ScreenState>: ScreenState, ActionHandling {
     let wrapped: Wrapped
 
