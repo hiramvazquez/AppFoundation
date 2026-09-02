@@ -2,21 +2,27 @@
 //  CustomNavigationBar.swift
 //  AppFoundation
 //
-//  Custom navigation bar component that replaces the native iOS navigation bar.
-//  This ensures consistent appearance across iOS versions, including iOS 26+ Liquid Glass.
+//  Custom navigation bar component — opt-in via `ScreenChrome.custom` (AF-12/AF-13).
+//  Prefer the native bar (`ScreenChrome.native` + `navigationTitle`/`toolbar`/`searchable`)
+//  for new screens; reach for this only when the native chrome genuinely can't do the job
+//  (e.g. a header with an avatar and a greeting, immune to per-OS bar changes).
 //
 
 #if canImport(SwiftUI)
 import SwiftUI
 
-/// A custom navigation bar that replaces the native iOS NavigationBar.
+/// A custom navigation bar — opt-in replacement for the native iOS navigation bar.
 ///
 /// This component provides:
-/// - Consistent appearance across all iOS versions
-/// - Full control over styling (not affected by iOS 26 Liquid Glass)
+/// - Full control over styling, independent of system chrome changes
 /// - Proper Safe Area handling for all iPhone models
 /// - Badge support for icons
 /// - Integrated search bar support
+///
+/// Prefer the native bar (`ScreenChrome.native`) unless you need the above. When you do use
+/// this, `ScreenContainer(chrome: .custom(...))` installs it together with the workaround
+/// that keeps swipe-back working (`PopGestureEnabler`) — using `CustomNavigationBar`
+/// directly does not.
 ///
 /// ## Example
 /// ```swift
@@ -40,8 +46,15 @@ public struct CustomNavigationBar: View {
     @State private var isSearchFocused = false
     @State private var backButtonVisible = false
 
+    // A11y/Dynamic Type (AF-16): the bar's height scales with the user's text size
+    // setting instead of staying pinned at a fixed 44pt. The base value comes from
+    // `configuration.style.height`, so `relativeTo: .headline` is supplied — and the
+    // wrapper initialized — in `init(configuration:)` below.
+    @ScaledMetric private var barHeight: CGFloat
+
     public init(configuration: NavigationBarConfiguration) {
         self.configuration = configuration
+        self._barHeight = ScaledMetric(wrappedValue: configuration.style.height, relativeTo: .headline)
     }
 
     public var body: some View {
@@ -51,7 +64,7 @@ public struct CustomNavigationBar: View {
                 if let customContent = configuration.customContent {
                     customContent
                         .frame(maxWidth: .infinity)
-                        .frame(height: configuration.style.height)
+                        .frame(height: barHeight)
                 } else {
                     HStack(spacing: 0) {
                         // Left items
@@ -70,9 +83,8 @@ public struct CustomNavigationBar: View {
                         rightItemsView
                             .frame(minWidth: 50, alignment: .trailing)
                     }
-                    .frame(height: configuration.style.height)
+                    .frame(height: barHeight)
                 }
-                //.padding(.horizontal, 16)
 
                 // Accessory view or search bar (below title row)
                 if let accessoryView = configuration.accessoryView {
@@ -114,12 +126,17 @@ public struct CustomNavigationBar: View {
                     // animation is the system's job, not an artificial 0.15s wait.
                     Button(action: item.action) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(configuration.style.tintColor)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(configuration.style.tintColor)
                             .frame(width: 44, height: 44)
                     }
                     .buttonStyle(NavigationBarButtonStyle())
                     .opacity(backButtonVisible ? 1 : 0)
+                    // AF-13/AF-16: VoiceOver read "chevron left" before this — a
+                    // localized label and the button trait make it announce as a
+                    // real, actionable "Back" button.
+                    .accessibilityLabel(L10n.back)
+                    .accessibilityAddTraits(.isButton)
                 } else {
                     NavigationBarItemView(
                         item: item,
@@ -151,11 +168,11 @@ public struct CustomNavigationBar: View {
         case .none:
             EmptyView()
 
-        case .text(let text), .largeText(let text):
+        case .text(let text):
             Text(text)
                 .font(.headline)
                 .fontWeight(.semibold)
-                .foregroundColor(configuration.style.titleColor)
+                .foregroundStyle(configuration.style.titleColor)
                 .lineLimit(1)
 
         case .custom(let view):
@@ -196,6 +213,8 @@ struct NavigationBarItemView: View {
             itemContent
         }
         .buttonStyle(NavigationBarButtonStyle())
+        .accessibilityAddTraits(.isButton)
+        .modifier(CloseButtonAccessibility(isClose: item.role == .close))
     }
 
     @ViewBuilder
@@ -211,7 +230,7 @@ struct NavigationBarItemView: View {
             Text(text)
                 .font(.body)
                 .fontWeight(.medium)
-                .foregroundColor(tintColor)
+                .foregroundStyle(tintColor)
 
         case .view(let view):
             view
@@ -223,8 +242,8 @@ struct NavigationBarItemView: View {
         // A11: emphasis keys off the item's ROLE, not off the icon being "chevron.left".
         ZStack(alignment: .topTrailing) {
             Image(systemName: systemName).renderingMode(.template)
-                .font(.system(size: emphasized ? 20 : 17, weight: .semibold))
-                .foregroundColor(tintColor)
+                .font(emphasized ? .headline.weight(.semibold) : .subheadline.weight(.semibold))
+                .foregroundStyle(tintColor)
                 .frame(width: 44, height: 44)
 
             if let badge = badge, badge > 0 {
@@ -241,13 +260,28 @@ struct NavigationBarItemView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 24, height: 24)
-                .foregroundColor(tintColor)
+                .foregroundStyle(tintColor)
                 .frame(width: 44, height: 44)
 
             if let badge = badge, badge > 0 {
                 BadgeView(count: badge)
                     .offset(x: 8, y: -4)
             }
+        }
+    }
+}
+
+/// Adds the localized "Close" accessibility label to close-role items (AF-13/AF-16); a
+/// no-op `ViewModifier` for every other role so `NavigationBarItemView` doesn't need a
+/// type-erased branch to apply it conditionally.
+private struct CloseButtonAccessibility: ViewModifier {
+    let isClose: Bool
+
+    func body(content: Content) -> some View {
+        if isClose {
+            content.accessibilityLabel(L10n.close)
+        } else {
+            content
         }
     }
 }
@@ -261,7 +295,7 @@ struct BadgeView: View {
     var body: some View {
         Text(count > 99 ? "99+" : "\(count)")
             .font(.system(size: 10, weight: .bold))
-            .foregroundColor(.white)
+            .foregroundStyle(Color.white)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(Color.red)
@@ -285,7 +319,9 @@ struct NavigationBarButtonStyle: ButtonStyle {
 
 /// A custom search bar component for the navigation bar.
 ///
-/// This replaces the native `.searchable()` modifier which is affected by iOS 26 Liquid Glass.
+/// This replaces the native `.searchable()` modifier — only relevant together with
+/// `CustomNavigationBar`; screens using the native bar should prefer `.searchable()`
+/// directly, which already handles keyboard, tokens, suggestions and scopes for free.
 struct NavigationSearchBar: View {
     let configuration: SearchBarConfiguration
     let tintColor: Color
@@ -297,13 +333,18 @@ struct NavigationSearchBar: View {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                    .accessibilityHidden(true)
 
                 TextField(configuration.placeholder, text: configuration.text)
                     .font(.body)
                     .focused($textFieldFocused)
                     .submitLabel(.search)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .accessibilityLabel(Text(configuration.placeholder))
                     .onSubmit {
                         configuration.onSubmit?()
                     }
@@ -319,15 +360,16 @@ struct NavigationSearchBar: View {
                         configuration.text.wrappedValue = ""
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 15))
+                            .foregroundStyle(.secondary)
+                            .font(.subheadline)
                     }
+                    .accessibilityLabel(L10n.close)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(Color.platformFill)
-            .cornerRadius(10)
+            .clipShape(.rect(cornerRadius: 10))
 
             // Cancel button
             if configuration.showsCancelButton && isFocused {
@@ -339,7 +381,7 @@ struct NavigationSearchBar: View {
                     Text("Cancel", bundle: .module)
                 }
                 .font(.body)
-                .foregroundColor(tintColor)
+                .foregroundStyle(tintColor)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -350,13 +392,11 @@ struct NavigationSearchBar: View {
 // MARK: - Preview
 
 #if DEBUG
-struct CustomNavigationBar_Previews: PreviewProvider {
-    static var previews: some View {
-        NavigationBarPreviewWrapper()
-    }
+#Preview {
+    NavigationBarPreviewWrapper()
 }
 
-struct NavigationBarPreviewWrapper: View {
+private struct NavigationBarPreviewWrapper: View {
     @State private var searchText = ""
 
     var body: some View {
