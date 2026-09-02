@@ -65,10 +65,11 @@ open class LogicViewModel<L>: BaseViewModel {
         clock: (any Clock<Duration>)? = nil
     ) {
         self.logic = logic
-        super.init(
-            errorPresenter: errorPresenter,
-            cancellationRecognizer: cancellationRecognizer,
-            clock: clock
-        )
+        super
+            .init(
+                errorPresenter: errorPresenter,
+                cancellationRecognizer: cancellationRecognizer,
+                clock: clock
+            )
     }
 }

@@ -43,11 +43,12 @@ struct DomainErrorTests {
 
     @Test("A DomainError is also an AppErrorConvertible — DefaultErrorPresenter resolves it")
     func domainErrorPresentsItself() {
-        let presented = DefaultErrorPresenter().screenError(
-            for: SampleError.retryable,
-            fallbackTitle: "Fallback",
-            retry: nil
-        )
+        let presented = DefaultErrorPresenter()
+            .screenError(
+                for: SampleError.retryable,
+                fallbackTitle: "Fallback",
+                retry: nil
+            )
 
         #expect(presented.title == "Retryable")
         #expect(presented.message == "Try again.")
