@@ -14,7 +14,7 @@ entrada (`handle(_:)`), un `Container` de inyección de dependencias `@MainActor
 Sobre esa base, el paquete añade un kit de arquitectura completo: `Logic` y
 `LogicViewModel<L>` separan la orquestación de pantalla de la lógica de negocio,
 `DomainError` fija cómo cruza un error de capa a capa, y dos plugins de SwiftPM
-(``generate-feature`` y `ArchitectureLint`) generan el cascarón de un feature y hacen
+(`generate-feature` y `ArchitectureLint`) generan el cascarón de un feature y hacen
 fallar el build si alguien se sale de la arquitectura.
 
 Compila con Swift 6.2 en modo `defaultIsolation(MainActor)`, sin dependencias externas.

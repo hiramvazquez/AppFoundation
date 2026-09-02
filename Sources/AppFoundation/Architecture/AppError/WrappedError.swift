@@ -209,6 +209,8 @@ public nonisolated extension Error {
     /// - Parameters:
     ///   - context: Description of the operation that failed.
     ///   - code: Optional error code for analytics and tracking.
+    ///   - file: Call site file (`#fileID`), filled in automatically.
+    ///   - line: Call site line (`#line`), filled in automatically.
     /// - Returns: A WrappedError containing this error and the context.
     ///
     /// ## Example
