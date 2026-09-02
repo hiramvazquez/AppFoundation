@@ -595,6 +595,26 @@ struct DashboardView: View {
 `PhaseView` has the same read-only shape: `PhaseView(observing: viewModel) { ... }` reads
 `phase` directly, without a `Binding`.
 
+### Why `BindingBackedState`/`ObservingScreenState` observe correctly without `@Observable` doing any work
+
+Both of `ScreenContainer`'s no-view-model backing types — `BindingBackedState` (the
+bindings-only initializer) and `ObservingScreenState` (the read-only `observing:`
+initializer) — carry `@Observable` for documentation, but the macro has nothing to
+instrument on either: every property they expose (`phase`, `activity`, `alert`, `banner`)
+is computed, forwarding straight through to a `Binding` or to a wrapped `ScreenState`,
+never a stored property the macro could wrap. Reading them during `ScreenContainer.body`'s
+evaluation still triggers the right invalidation:
+
+- `BindingBackedState` forwards to a `Binding` — reactivity comes from SwiftUI's own
+  `Binding`/`@State` dependency tracking, the same mechanism that updates a view for any
+  other `Binding` read in its `body`, entirely separate from the `Observation` framework.
+- `ObservingScreenState<Wrapped>` forwards to `wrapped: Wrapped`, which the `ScreenState`
+  protocol already guarantees is `Observable` (`BaseViewModel` gets that from its own
+  `@Observable`) — reading `wrapped.phase` registers the access against `wrapped`'s own
+  registrar, exactly as if the view had read the wrapped view model directly.
+
+Both types' doc comments carry the full rationale (`ScreenContainer.swift`).
+
 ## `BaseViewModel` guidance
 
 `performLoad`/`performActivity`/`load`/`activity` come from `LoadableViewModel`, which
@@ -659,6 +679,37 @@ Both helpers return their `Task` — await it instead of sleeping:
 ```swift
 await viewModel.performLoad { vm in try await vm.repository.fetch() }.value
 #expect(viewModel.phase == .content)
+```
+
+When the call you're testing goes through `handle(_:)` instead — the normal case for a
+`ScreenContainer` content closure, or any test written against `ActionHandling`'s single
+entry point — there's no returned `Task` to await, since `handle(_:)` is `Void` by
+contract (AF-05). `BaseViewModel` exposes the `Task` it's currently running instead, as
+`inFlightLoad`/`inFlightActivity: Task<Void, Never>?` (read-only, `nil` once the load/
+activity finishes):
+
+```swift
+viewModel.handle(.load)
+await viewModel.inFlightLoad?.value
+#expect(viewModel.phase == .content)
+```
+
+Use `inFlightLoad` for anything that goes through `performLoad`/`load(_:)`, and
+`inFlightActivity` for `performActivity`/`activity(_:)` — including a retry (`retry` calls
+`performLoad` again internally, so `inFlightLoad` picks up the new `Task`). Never poll
+`phase`/`hasError` in a loop to detect completion — sleeping in a spin loop to wait out
+async work is exactly what these properties exist to make unnecessary.
+
+`clock` and `cancellationRecognizer` follow `errorPresenter`'s precedence: an instance
+override (through `init`) beats `BaseViewModel.clock`/`BaseViewModel.cancellationRecognizer`
+(the `static var`s, meant for app-wide configuration at startup). Tests inject their own
+`Clock`/`CancellationRecognizing` conformance per instance instead of mutating the static —
+a `static var` mutated by one test is visible to every other test running in parallel,
+which is exactly the kind of flake `inFlightLoad`/`inFlightActivity` are also trying to
+eliminate:
+
+```swift
+let viewModel = BaseViewModel(clock: someManualClockConformance)
 ```
 
 ## Dependency injection
