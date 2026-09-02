@@ -5,6 +5,15 @@ AppFoundation is a single Swift Package for new SwiftUI apps. It gives every pro
 Requires **Swift 6.2** (tools), **iOS 17 / macOS 14**. The package builds with
 `defaultIsolation(MainActor)` (Approachable Concurrency) and warnings as errors.
 
+## Arquitectura
+
+Toda app construida sobre este paquete sigue View → ViewModel → Logic → Services/Stores
+(`LogicViewModel<L>`, marcador `Logic`, `AppFoundationTestSupport`). Reglas, naming y las
+cuatro variantes (solo API, solo local, API + local, sin datos) están en
+[`AGENTS.md`](AGENTS.md); el código de referencia — un ejemplo completo por variante,
+con tests de cada capa — vive en [`Examples/`](Examples/). El rediseño completo de este
+README (DocC, Snippets) es alcance de PRD-X-03.
+
 ## What it includes
 
 - **Architecture**

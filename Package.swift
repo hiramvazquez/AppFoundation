@@ -47,6 +47,14 @@ let package = Package(
         .library(
             name: "AppFoundation",
             targets: ["AppFoundation"]
+        ),
+        // Mocks y helpers de test (`InMemoryStore`, `ManualClock`, `SpyRecorder`): producto
+        // SEPARADO, como `CoreNetworkingTestSupport` en CoreNetworking, para que jamás
+        // viajen en el binario de producción. Solo lo enlazan test targets y previews —
+        // NUNCA aparece como dependencia del producto `AppFoundation` (PRD-AF-07).
+        .library(
+            name: "AppFoundationTestSupport",
+            targets: ["AppFoundationTestSupport"]
         )
     ],
     targets: [
@@ -58,9 +66,14 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
+        .target(
+            name: "AppFoundationTestSupport",
+            path: "Sources/AppFoundationTestSupport",
+            swiftSettings: swiftSettings
+        ),
         .testTarget(
             name: "AppFoundationTests",
-            dependencies: ["AppFoundation"],
+            dependencies: ["AppFoundation", "AppFoundationTestSupport"],
             path: "Tests/AppFoundationTests",
             swiftSettings: swiftSettings
         )
