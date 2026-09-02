@@ -76,17 +76,41 @@ public struct NavigationBarItem: Identifiable {
     }
 
     /// Creates a button with a system SF Symbol.
-    public static func icon(_ systemName: String, badge: Int? = nil, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(id: id ?? "system:\(systemName)", role: .plain, content: .systemIcon(systemName, badge: badge), action: action)
+    public static func icon(
+        _ systemName: String,
+        badge: Int? = nil,
+        id: String? = nil,
+        action: @escaping Action
+    ) -> NavigationBarItem {
+        NavigationBarItem(
+            id: id ?? "system:\(systemName)",
+            role: .plain,
+            content: .systemIcon(systemName, badge: badge),
+            action: action
+        )
     }
 
     /// Creates a button with a custom image from assets.
-    public static func customIcon(_ imageName: String, badge: Int? = nil, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
-        NavigationBarItem(id: id ?? "icon:\(imageName)", role: .plain, content: .icon(imageName, badge: badge), action: action)
+    public static func customIcon(
+        _ imageName: String,
+        badge: Int? = nil,
+        id: String? = nil,
+        action: @escaping Action
+    ) -> NavigationBarItem {
+        NavigationBarItem(
+            id: id ?? "icon:\(imageName)",
+            role: .plain,
+            content: .icon(imageName, badge: badge),
+            action: action
+        )
     }
 
     /// Creates a text button (localized resource; literals localize through the app's catalog).
-    public static func text(_ text: LocalizedStringResource, id: String? = nil, action: @escaping Action) -> NavigationBarItem {
+    public static func text(
+        _ text: LocalizedStringResource,
+        id: String? = nil,
+        action: @escaping Action
+    ) -> NavigationBarItem {
         let resolved = String(localized: text)
         return NavigationBarItem(id: id ?? "text:\(resolved)", role: .plain, content: .text(resolved), action: action)
     }
@@ -95,7 +119,8 @@ public struct NavigationBarItem: Identifiable {
     ///
     /// Custom views cannot derive a content-based id — pass `id:` when a bar hosts
     /// more than one custom item.
-    public static func custom<V: View>(_ view: V, id: String = "custom", action: @escaping Action) -> NavigationBarItem {
+    public static func custom<V: View>(_ view: V, id: String = "custom", action: @escaping Action) -> NavigationBarItem
+    {
         NavigationBarItem(id: id, role: .plain, content: .view(ErasedView(view)), action: action)
     }
 }
@@ -302,7 +327,10 @@ public struct NavigationBarConfiguration {
     // MARK: - Convenience Initializers
 
     /// Creates a configuration with just a title.
-    public static func title(_ text: LocalizedStringResource, style: NavigationBarStyle = .default) -> NavigationBarConfiguration {
+    public static func title(
+        _ text: LocalizedStringResource,
+        style: NavigationBarStyle = .default
+    ) -> NavigationBarConfiguration {
         NavigationBarConfiguration(title: .title(text), style: style)
     }
 

@@ -1,9 +1,11 @@
-import Testing
 import Foundation
+import Testing
+
+@testable import AppFoundation
+
 #if canImport(SwiftUI)
 import SwiftUI
 #endif
-@testable import AppFoundation
 
 // MARK: - AF-05: ScreenState, ActionHandling, ActionSender
 
@@ -53,7 +55,6 @@ private final class RecordingHandler: ActionHandling {
 
 @Suite("ActionHandling / ActionSender (AF-05)")
 struct ActionHandlingTests {
-
     // MARK: - ActionSender forwards to handle(_:)
 
     @Test func senderForwardsEveryActionToHandle() {

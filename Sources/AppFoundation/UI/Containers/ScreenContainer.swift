@@ -190,7 +190,8 @@ public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
     }
 
     @ViewBuilder
-    private func customChromeStack(navigation: NavigationBarConfiguration, placement: NavigationPlacement) -> some View {
+    private func customChromeStack(navigation: NavigationBarConfiguration, placement: NavigationPlacement) -> some View
+    {
         Group {
             switch placement {
             case .stack:
@@ -336,9 +337,11 @@ public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
     private var bannerOverlayView: some View {
         VStack(spacing: 0) {
             if let bannerState = state.banner {
-                bannerStyle.makeBody(configuration: BannerConfiguration(banner: bannerState) {
-                    state.banner = nil
-                })
+                bannerStyle.makeBody(
+                    configuration: BannerConfiguration(banner: bannerState) {
+                        state.banner = nil
+                    }
+                )
             }
             Spacer()
         }

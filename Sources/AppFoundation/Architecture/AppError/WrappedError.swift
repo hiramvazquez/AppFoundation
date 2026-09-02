@@ -101,18 +101,18 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
     /// Detailed description for debugging.
     public var description: String {
         var desc = """
-        WrappedError:
-          Context: \(context)
-        """
+            WrappedError:
+              Context: \(context)
+            """
         if let code = code {
             desc += "\n  Code: \(code)"
         }
         desc += """
 
-          Underlying: \(underlying)
-          File: \(file):\(line)
-          Time: \(timestamp)
-        """
+              Underlying: \(underlying)
+              File: \(file):\(line)
+              Time: \(timestamp)
+            """
         return desc
     }
 
@@ -124,7 +124,7 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
         }
         return current
     }
-    
+
     /// Chain of contexts from outermost to innermost.
     public var contextChain: [String] {
         var chain = [context]
@@ -160,9 +160,8 @@ nonisolated extension WrappedError: AppErrorConvertible {
 /// anything that needs a precise identity check.
 nonisolated extension WrappedError: Equatable {
     public static func == (lhs: WrappedError, rhs: WrappedError) -> Bool {
-        lhs.context == rhs.context &&
-        lhs.code == rhs.code &&
-        lhs.underlying.localizedDescription == rhs.underlying.localizedDescription
+        lhs.context == rhs.context && lhs.code == rhs.code
+            && lhs.underlying.localizedDescription == rhs.underlying.localizedDescription
     }
 }
 
@@ -192,11 +191,11 @@ nonisolated extension WrappedError: LocalizedError {
     public var errorDescription: String? {
         message
     }
-    
+
     public var failureReason: String? {
         underlying.localizedDescription
     }
-    
+
     public var recoverySuggestion: String? {
         (underlying as? LocalizedError)?.recoverySuggestion
     }

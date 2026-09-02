@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AppFoundation
 
 @Suite("Container")

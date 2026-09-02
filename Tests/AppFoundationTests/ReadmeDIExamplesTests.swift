@@ -1,5 +1,6 @@
-import Testing
 import SwiftUI
+import Testing
+
 @testable import AppFoundation
 
 // README «Recommended project flow §1» and «Dependency injection», copied as they appear

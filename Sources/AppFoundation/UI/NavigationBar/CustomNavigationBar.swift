@@ -342,7 +342,7 @@ struct NavigationSearchBar: View {
                     .focused($textFieldFocused)
                     .submitLabel(.search)
                     #if os(iOS)
-                    .textInputAutocapitalization(.never)
+                .textInputAutocapitalization(.never)
                     #endif
                     .accessibilityLabel(Text(configuration.placeholder))
                     .onSubmit {
@@ -408,7 +408,7 @@ private struct NavigationBarPreviewWrapper: View {
 
             // With back button
             CustomNavigationBar(
-                configuration: .withBack(title: "Details", style: .solid) { }
+                configuration: .withBack(title: "Details", style: .solid) {}
             )
 
             // With search bar
@@ -424,10 +424,10 @@ private struct NavigationBarPreviewWrapper: View {
             CustomNavigationBar(
                 configuration: NavigationBarConfiguration(
                     title: .text("Messages"),
-                    leftItems: [.back { }],
+                    leftItems: [.back {}],
                     rightItems: [
-                        .icon("bell", badge: 5) { },
-                        .icon("gear") { }
+                        .icon("bell", badge: 5) {},
+                        .icon("gear") {}
                     ],
                     style: .solid
                 )
@@ -437,8 +437,8 @@ private struct NavigationBarPreviewWrapper: View {
             CustomNavigationBar(
                 configuration: NavigationBarConfiguration(
                     title: .text("Catalog"),
-                    leftItems: [.back { }],
-                    rightItems: [.icon("slider.horizontal.3") { }],
+                    leftItems: [.back {}],
+                    rightItems: [.icon("slider.horizontal.3") {}],
                     searchBar: SearchBarConfiguration(
                         text: $searchText,
                         placeholder: "Search..."

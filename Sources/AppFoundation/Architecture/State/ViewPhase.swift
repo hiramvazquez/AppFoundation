@@ -112,4 +112,3 @@ public nonisolated struct ScreenError: Equatable, Sendable {
         lhs.title == rhs.title && lhs.message == rhs.message
     }
 }
-

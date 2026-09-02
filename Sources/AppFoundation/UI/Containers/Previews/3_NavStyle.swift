@@ -39,17 +39,23 @@ import SwiftUI
 #Preview("style · transparent") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(NavigationBarConfiguration(
-            title: .text("Transparent"),
-            leftItems: [.back(action: {})],
-            style: .transparent
-        )),
+        chrome: .custom(
+            NavigationBarConfiguration(
+                title: .text("Transparent"),
+                leftItems: [.back(action: {})],
+                style: .transparent
+            )
+        ),
         backgroundColor: .clear
     ) {
         ZStack {
             LinearGradient(colors: [.purple, .blue, .cyan], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
-            VStack { Spacer(); Text("Contenido full-bleed").foregroundStyle(Color.white).font(.title3.weight(.semibold)); Spacer() }
+            VStack {
+                Spacer()
+                Text("Contenido full-bleed").foregroundStyle(Color.white).font(.title3.weight(.semibold))
+                Spacer()
+            }
         }
     }
     .frame(width: 390, height: 700)
@@ -58,12 +64,14 @@ import SwiftUI
 #Preview("style · solid custom") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(NavigationBarConfiguration(
-            title: .text("Custom Color"),
-            leftItems: [.back(action: {})],
-            rightItems: [.icon("ellipsis", action: {})],
-            style: NavigationBarStyle(background: .solid(.indigo), titleColor: .white, tintColor: .white)
-        ))
+        chrome: .custom(
+            NavigationBarConfiguration(
+                title: .text("Custom Color"),
+                leftItems: [.back(action: {})],
+                rightItems: [.icon("ellipsis", action: {})],
+                style: NavigationBarStyle(background: .solid(.indigo), titleColor: .white, tintColor: .white)
+            )
+        )
     ) {
         PreviewSampleList()
     }
@@ -73,15 +81,19 @@ import SwiftUI
 #Preview("style · gradient") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(NavigationBarConfiguration(
-            title: .text("Gradient"),
-            leftItems: [.back(action: {})],
-            style: NavigationBarStyle(
-                background: .gradient(LinearGradient(colors: [.purple, .indigo], startPoint: .leading, endPoint: .trailing)),
-                titleColor: .white,
-                tintColor: .white
+        chrome: .custom(
+            NavigationBarConfiguration(
+                title: .text("Gradient"),
+                leftItems: [.back(action: {})],
+                style: NavigationBarStyle(
+                    background: .gradient(
+                        LinearGradient(colors: [.purple, .indigo], startPoint: .leading, endPoint: .trailing)
+                    ),
+                    titleColor: .white,
+                    tintColor: .white
+                )
             )
-        ))
+        )
     ) {
         PreviewSampleList()
     }

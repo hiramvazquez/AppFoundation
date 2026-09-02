@@ -1,4 +1,5 @@
 import Foundation
+
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -27,7 +28,6 @@ import UIKit
 ///     : "https://staging-api.myapp.com"
 /// ```
 public nonisolated enum AppEnvironment {
-
     // MARK: - Environment Detection
 
     /// Detects if running under TestFlight.
@@ -43,8 +43,20 @@ public nonisolated enum AppEnvironment {
         legacySandboxReceiptCheck
     }
 
-    @available(iOS, introduced: 17.0, deprecated: 18.0, message: "Bundle.appStoreReceiptURL is deprecated; migrate to StoreKit 2 AppTransaction when isTestFlight can become async")
-    @available(macOS, introduced: 14.0, deprecated: 15.0, message: "Bundle.appStoreReceiptURL is deprecated; migrate to StoreKit 2 AppTransaction when isTestFlight can become async")
+    @available(
+        iOS,
+        introduced: 17.0,
+        deprecated: 18.0,
+        message:
+            "Bundle.appStoreReceiptURL is deprecated; migrate to StoreKit 2 AppTransaction when isTestFlight can become async"
+    )
+    @available(
+        macOS,
+        introduced: 14.0,
+        deprecated: 15.0,
+        message:
+            "Bundle.appStoreReceiptURL is deprecated; migrate to StoreKit 2 AppTransaction when isTestFlight can become async"
+    )
     private static var legacySandboxReceiptCheck: Bool {
         Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
     }

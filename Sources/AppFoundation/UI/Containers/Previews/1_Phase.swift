@@ -75,11 +75,15 @@ import SwiftUI
 
 #Preview("phase · error · con retry") {
     ScreenContainer(
-        phase: .constant(.error(ScreenError(
-            title: "Sin conexión",
-            message: "Comprueba tu conexión e inténtalo de nuevo.",
-            retry: {}
-        ))),
+        phase: .constant(
+            .error(
+                ScreenError(
+                    title: "Sin conexión",
+                    message: "Comprueba tu conexión e inténtalo de nuevo.",
+                    retry: {}
+                )
+            )
+        ),
         chrome: .custom(.title("Error", style: .solid))
     ) {
         PreviewSampleList()
@@ -89,10 +93,14 @@ import SwiftUI
 
 #Preview("phase · error · sin retry") {
     ScreenContainer(
-        phase: .constant(.error(ScreenError(
-            title: "Sin permiso",
-            message: "No tienes acceso a este contenido."
-        ))),
+        phase: .constant(
+            .error(
+                ScreenError(
+                    title: "Sin permiso",
+                    message: "No tienes acceso a este contenido."
+                )
+            )
+        ),
         chrome: .custom(.title("Error", style: .solid))
     ) {
         PreviewSampleList()

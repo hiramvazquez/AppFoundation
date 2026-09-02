@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AppFoundation
 
 // MARK: - Fase 4 (A13): el String Catalog ES+EN existe y resuelve
@@ -18,7 +19,8 @@ import Foundation
 /// of asserting a compilation step that is outside this package's control.
 private func localizedValue(forKey key: String, language: String) throws -> String {
     if let lprojPath = L10n.bundle.path(forResource: language, ofType: "lproj"),
-       let compiled = Bundle(path: lprojPath) {
+        let compiled = Bundle(path: lprojPath)
+    {
         return compiled.localizedString(forKey: key, value: nil, table: nil)
     }
 
@@ -62,8 +64,10 @@ struct LocalizationTests {
     }
 
     @Test func englishCatalogCoversEveryDefaultString() throws {
-        for key in ["Error", "OK", "Retry", "Updating…", "Nothing to show yet", "Search", "Cancel", "Back", "Close",
-                        "Something went wrong. Please try again."] {
+        for key in [
+            "Error", "OK", "Retry", "Updating…", "Nothing to show yet", "Search", "Cancel", "Back", "Close",
+            "Something went wrong. Please try again."
+        ] {
             #expect(try localizedValue(forKey: key, language: "en") == key)
         }
     }
@@ -77,9 +81,12 @@ struct LocalizationTests {
         #expect(["Search", "Buscar"].contains(L10n.search))
         #expect(["Back", "Atrás"].contains(L10n.back))
         #expect(["Close", "Cerrar"].contains(L10n.close))
-        #expect([
-            "Something went wrong. Please try again.",
-            "Algo ha ido mal. Inténtalo de nuevo."
-        ].contains(L10n.genericErrorMessage))
+        #expect(
+            [
+                "Something went wrong. Please try again.",
+                "Algo ha ido mal. Inténtalo de nuevo."
+            ]
+            .contains(L10n.genericErrorMessage)
+        )
     }
 }

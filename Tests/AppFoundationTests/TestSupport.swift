@@ -1,4 +1,5 @@
 import Foundation
+
 @testable import AppFoundation
 
 /// Polls `condition` until it is true or `timeout` elapses.

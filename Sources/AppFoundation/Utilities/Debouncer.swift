@@ -158,7 +158,7 @@ public final class Debouncer {
             do {
                 try await clock.sleep(for: delay)
             } catch {
-                return // Cancelled: nothing to run.
+                return  // Cancelled: nothing to run.
             }
             guard let self, !Task.isCancelled else { return }
             lastExecutionTime = stopwatch.now
@@ -170,7 +170,7 @@ public final class Debouncer {
     /// - Returns: `true` if the operation was started.
     private func executeLeadingIfReady(_ operation: @escaping @MainActor () async -> Void) -> Bool {
         if let lastTime = lastExecutionTime, stopwatch.now - lastTime < delay {
-            return false // Still in cooldown.
+            return false  // Still in cooldown.
         }
 
         lastExecutionTime = stopwatch.now
@@ -191,7 +191,7 @@ public final class Debouncer {
             do {
                 try await clock.sleep(for: delay)
             } catch {
-                return // Cancelled: nothing to run.
+                return  // Cancelled: nothing to run.
             }
             guard let self, !Task.isCancelled, let pending = pendingOperation else { return }
             pendingOperation = nil
@@ -273,7 +273,7 @@ public final class Throttler {
     @discardableResult
     public func throttle(_ operation: @MainActor () async -> Void) async -> Bool {
         if let lastTime = lastExecutionTime, stopwatch.now - lastTime < interval {
-            return false // Throttled
+            return false  // Throttled
         }
 
         lastExecutionTime = stopwatch.now

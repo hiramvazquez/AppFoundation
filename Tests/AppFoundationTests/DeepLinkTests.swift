@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AppFoundation
 
 // MARK: - Fase 3.6: deep links conectados (A12)

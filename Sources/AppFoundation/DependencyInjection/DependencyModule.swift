@@ -38,6 +38,8 @@ public extension Container {
     ///
     /// - Parameter modules: Modules to register, applied in array order.
     func register(modules: [DependencyModule]) {
-        modules.forEach { $0.register(in: self) }
+        for module in modules {
+            module.register(in: self)
+        }
     }
 }

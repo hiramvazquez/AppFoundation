@@ -56,15 +56,17 @@ import SwiftUI
 #Preview("chrome · custom · rightItems + badge") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(NavigationBarConfiguration(
-            title: .text("Mensajes"),
-            leftItems: [.back(action: {})],
-            rightItems: [
-                .icon("bell", badge: 3, action: {}),
-                .icon("square.and.pencil", action: {})
-            ],
-            style: .solid
-        ))
+        chrome: .custom(
+            NavigationBarConfiguration(
+                title: .text("Mensajes"),
+                leftItems: [.back(action: {})],
+                rightItems: [
+                    .icon("bell", badge: 3, action: {}),
+                    .icon("square.and.pencil", action: {})
+                ],
+                style: .solid
+            )
+        )
     ) {
         PreviewSampleList()
     }
@@ -74,12 +76,14 @@ import SwiftUI
 #Preview("chrome · custom · withSearch") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(.withSearch(
-            title: "Explorar",
-            searchText: .constant(""),
-            searchPlaceholder: "Buscar...",
-            style: .solid
-        ))
+        chrome: .custom(
+            .withSearch(
+                title: "Explorar",
+                searchText: .constant(""),
+                searchPlaceholder: "Buscar...",
+                style: .solid
+            )
+        )
     ) {
         PreviewSampleList()
     }
@@ -89,12 +93,14 @@ import SwiftUI
 #Preview("chrome · custom · withBackAndSearch") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(.withBackAndSearch(
-            title: "Catálogo",
-            searchText: .constant("Swift"),
-            style: .solid,
-            backAction: {}
-        ))
+        chrome: .custom(
+            .withBackAndSearch(
+                title: "Catálogo",
+                searchText: .constant("Swift"),
+                style: .solid,
+                backAction: {}
+            )
+        )
     ) {
         PreviewSampleList()
     }
@@ -104,26 +110,28 @@ import SwiftUI
 #Preview("chrome · custom · withBackAndAccessory") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(.withBackAndAccessory(
-            title: "Jugadores",
-            style: .solid,
-            backAction: {}
-        ) {
-            HStack(spacing: 8) {
-                ForEach(["Todos", "Activos", "Inactivos"], id: \.self) { tag in
-                    Text(tag)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(tag == "Todos" ? Color.accentColor : Color.secondary.opacity(0.15))
-                        .foregroundStyle(tag == "Todos" ? .white : .primary)
-                        .clipShape(Capsule())
+        chrome: .custom(
+            .withBackAndAccessory(
+                title: "Jugadores",
+                style: .solid,
+                backAction: {}
+            ) {
+                HStack(spacing: 8) {
+                    ForEach(["Todos", "Activos", "Inactivos"], id: \.self) { tag in
+                        Text(tag)
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(tag == "Todos" ? Color.accentColor : Color.secondary.opacity(0.15))
+                            .foregroundStyle(tag == "Todos" ? .white : .primary)
+                            .clipShape(Capsule())
+                    }
+                    Spacer()
                 }
-                Spacer()
+                .padding(.horizontal, 16)
+                .padding(.bottom, 4)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 4)
-        })
+        )
     ) {
         PreviewSampleList()
     }
@@ -133,26 +141,29 @@ import SwiftUI
 #Preview("chrome · custom · custom content") {
     ScreenContainer(
         phase: .constant(.content),
-        chrome: .custom(.custom(style: .solid) {
-            HStack(spacing: 12) {
-                Circle()
-                    .fill(Color.accentColor.opacity(0.2))
-                    .frame(width: 36, height: 36)
-                    .overlay(
-                        Text("JD").font(.caption.weight(.bold)).foregroundStyle(Color.accentColor)
-                    )
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Buenos días,").font(.caption).foregroundStyle(.secondary)
-                    Text("John Doe").font(.subheadline.weight(.semibold))
+        chrome: .custom(
+            .custom(style: .solid) {
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(Color.accentColor.opacity(0.2))
+                        .frame(width: 36, height: 36)
+                        .overlay(
+                            Text("JD").font(.caption.weight(.bold)).foregroundStyle(Color.accentColor)
+                        )
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Buenos días,").font(.caption).foregroundStyle(.secondary)
+                        Text("John Doe").font(.subheadline.weight(.semibold))
+                    }
+                    Spacer()
+                    Button {
+                    } label: {
+                        Image(systemName: "bell.badge").font(.title3)
+                    }
                 }
-                Spacer()
-                Button {} label: {
-                    Image(systemName: "bell.badge").font(.title3)
-                }
+                .padding(.horizontal, 16)
+                .frame(height: 44)
             }
-            .padding(.horizontal, 16)
-            .frame(height: 44)
-        })
+        )
     ) {
         PreviewSampleList()
     }

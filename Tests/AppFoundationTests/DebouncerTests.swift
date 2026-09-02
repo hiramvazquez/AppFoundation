@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AppFoundation
 
 // MARK: - Fase 3.7 (C13): Debouncer/Throttler con clock inyectable

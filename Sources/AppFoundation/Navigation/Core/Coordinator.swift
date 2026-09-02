@@ -131,14 +131,14 @@ public final class Coordinator<Route: Hashable>: Router {
         modal?.style == .fullScreenCover ? modal?.stack : nil
     }
 
-#if DEBUG
+    #if DEBUG
     /// Navigation history for debugging (only in DEBUG builds).
     ///
     /// Internal on purpose (AF-14): an API whose existence depends on the build
     /// configuration would break a consumer that references it in Release.
     @ObservationIgnored
     private(set) var navigationHistory: [String] = []
-#endif
+    #endif
 
     // MARK: - Initialization
 
@@ -242,7 +242,7 @@ public final class Coordinator<Route: Hashable>: Router {
     /// logged with `privacy: .private` so user-identifying route parameters (ids, names)
     /// are redacted outside of debugging sessions.
     private func log(_ operation: String, payload: String? = nil) {
-#if DEBUG
+        #if DEBUG
         if let payload {
             AppFoundationLogger.navigation.debug("\(operation, privacy: .public) \(payload, privacy: .private)")
             navigationHistory.append("\(operation) \(payload)")
@@ -250,6 +250,6 @@ public final class Coordinator<Route: Hashable>: Router {
             AppFoundationLogger.navigation.debug("\(operation, privacy: .public)")
             navigationHistory.append(operation)
         }
-#endif
+        #endif
     }
 }

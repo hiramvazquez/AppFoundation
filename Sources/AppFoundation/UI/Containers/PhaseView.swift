@@ -148,11 +148,13 @@ public struct PhaseView<Content: View>: View {
 #Preview("PhaseView · error") {
     PhaseView(
         phase: .constant(
-            .error(ScreenError(
-                title: "Network Error",
-                message: "Unable to connect. Please try again.",
-                retry: {}
-            ))
+            .error(
+                ScreenError(
+                    title: "Network Error",
+                    message: "Unable to connect. Please try again.",
+                    retry: {}
+                )
+            )
         )
     ) {
         Text("Hidden content")

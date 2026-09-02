@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AppFoundation
 
 @Suite("BaseViewModel")
@@ -102,21 +103,29 @@ struct BaseViewModelTests {
 
     @Test func confirmationAlertRunsConfirmAction() {
         var confirmWasCalled = false
-        viewModel.showAlert(.confirmation(
-            title: "Confirm?", message: "Are you sure?",
-            confirm: "Yes", cancel: "No",
-            onConfirm: { confirmWasCalled = true }
-        ))
+        viewModel.showAlert(
+            .confirmation(
+                title: "Confirm?",
+                message: "Are you sure?",
+                confirm: "Yes",
+                cancel: "No",
+                onConfirm: { confirmWasCalled = true }
+            )
+        )
         viewModel.alert?.primaryButton.action()
         #expect(confirmWasCalled)
     }
 
     @Test func destructiveAlertHasDestructiveRole() {
-        viewModel.showAlert(.destructive(
-            title: "Delete?", message: "Cannot undo",
-            confirm: "Delete", cancel: "Cancel",
-            onConfirm: {}
-        ))
+        viewModel.showAlert(
+            .destructive(
+                title: "Delete?",
+                message: "Cannot undo",
+                confirm: "Delete",
+                cancel: "Cancel",
+                onConfirm: {}
+            )
+        )
         #expect(viewModel.alert?.primaryButton.role == .destructive)
     }
 
@@ -215,7 +224,10 @@ struct BaseViewModelTests {
         #expect(viewModel.isIdle)
 
         viewModel.setLoading()
-        #expect(viewModel.isLoading && !viewModel.isContent && !viewModel.isEmpty && !viewModel.hasError && !viewModel.isIdle)
+        #expect(
+            viewModel.isLoading && !viewModel.isContent && !viewModel.isEmpty && !viewModel.hasError
+                && !viewModel.isIdle
+        )
 
         viewModel.setContent()
         #expect(viewModel.isContent && !viewModel.isLoading)

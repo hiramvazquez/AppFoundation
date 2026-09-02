@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import AppFoundation
 
 // MARK: - AF-01 / AF-03: la fuga verificada por la auditoría, cerrada
@@ -10,7 +11,6 @@ import Foundation
 /// el VM como parámetro — nunca lo captura — así que el ciclo no puede formarse.
 @Suite("BaseViewModel — memoria (AF-01 / AF-03)")
 struct BaseViewModelMemoryTests {
-
     /// (a) Un VM que termina en fase `.error` (con su acción de retry construida y
     /// guardada en `phase`) se libera al salir de scope.
     @Test func viewModelInErrorPhaseIsDeallocated() async throws {
@@ -45,14 +45,15 @@ struct BaseViewModelMemoryTests {
         var vm: BaseViewModel? = BaseViewModel()
         weakVM = vm
 
-        let task = vm!.performLoad { _ in
-            do {
-                try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
-            } catch {
-                recorder.record(Task.isCancelled ? "cancelled" : "other")
-                throw error
+        let task = vm!
+            .performLoad { _ in
+                do {
+                    try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
+                } catch {
+                    recorder.record(Task.isCancelled ? "cancelled" : "other")
+                    throw error
+                }
             }
-        }
 
         await clock.waitForSleepers()
         vm = nil  // última referencia externa, soltada con el load en vuelo

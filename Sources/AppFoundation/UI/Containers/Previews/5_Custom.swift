@@ -32,7 +32,8 @@ private struct BrandErrorStyle: ErrorViewStyle {
         VStack(spacing: 20) {
             Image(systemName: "wifi.slash").font(.system(size: 56)).foregroundStyle(.red.opacity(0.8))
             Text(configuration.error.title).font(.title2.weight(.bold))
-            Text(configuration.error.message).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 32)
+            Text(configuration.error.message).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
             if let retry = configuration.error.retry {
                 Button(action: retry) { Label("Reintentar", systemImage: "arrow.clockwise") }
                     .buttonStyle(.borderedProminent).controlSize(.large)

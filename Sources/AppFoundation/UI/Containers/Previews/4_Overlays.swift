@@ -29,10 +29,12 @@ import SwiftUI
 #Preview("alert · info") {
     ScreenContainer(
         phase: .constant(.content),
-        alert: .constant(.info(
-            title: "Actualización disponible",
-            message: "Hay una nueva versión. Actualiza para continuar."
-        )),
+        alert: .constant(
+            .info(
+                title: "Actualización disponible",
+                message: "Hay una nueva versión. Actualiza para continuar."
+            )
+        ),
         chrome: .custom(.title("Alert", style: .solid))
     ) {
         PreviewSampleList()
@@ -43,13 +45,15 @@ import SwiftUI
 #Preview("alert · confirmation") {
     ScreenContainer(
         phase: .constant(.content),
-        alert: .constant(.confirmation(
-            title: "¿Enviar reporte?",
-            message: "Se enviará al equipo de moderación.",
-            confirm: "Enviar",
-            cancel: "Cancelar",
-            onConfirm: {}
-        )),
+        alert: .constant(
+            .confirmation(
+                title: "¿Enviar reporte?",
+                message: "Se enviará al equipo de moderación.",
+                confirm: "Enviar",
+                cancel: "Cancelar",
+                onConfirm: {}
+            )
+        ),
         chrome: .custom(.title("Alert", style: .solid))
     ) {
         PreviewSampleList()
@@ -60,13 +64,15 @@ import SwiftUI
 #Preview("alert · destructive") {
     ScreenContainer(
         phase: .constant(.content),
-        alert: .constant(.destructive(
-            title: "¿Eliminar cuenta?",
-            message: "Esta acción es irreversible. Se eliminará toda tu información.",
-            confirm: "Eliminar",
-            cancel: "Cancelar",
-            onConfirm: {}
-        )),
+        alert: .constant(
+            .destructive(
+                title: "¿Eliminar cuenta?",
+                message: "Esta acción es irreversible. Se eliminará toda tu información.",
+                confirm: "Eliminar",
+                cancel: "Cancelar",
+                onConfirm: {}
+            )
+        ),
         chrome: .custom(.title("Alert", style: .solid))
     ) {
         PreviewSampleList()

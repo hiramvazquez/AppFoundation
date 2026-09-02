@@ -120,8 +120,10 @@ public final class Container {
         lifecycle: Lifecycle = .singleton,
         factory: @escaping @MainActor (Container) -> T
     ) {
-        store(Registration(typeName: String(reflecting: type), lifecycle: lifecycle, factory: factory),
-              for: ObjectIdentifier(type))
+        store(
+            Registration(typeName: String(reflecting: type), lifecycle: lifecycle, factory: factory),
+            for: ObjectIdentifier(type)
+        )
     }
 
     /// Registers an already-built instance as a singleton for `type`.
@@ -135,15 +137,19 @@ public final class Container {
     ///     a protocol to register it as an abstraction.
     public func register<T>(instance: T, as type: T.Type = T.self) {
         let key = ObjectIdentifier(type)
-        store(Registration(typeName: String(reflecting: type), lifecycle: .singleton, factory: { _ in instance }),
-              for: key)
+        store(
+            Registration(typeName: String(reflecting: type), lifecycle: .singleton, factory: { _ in instance }),
+            for: key
+        )
         singletons[key] = instance
     }
 
     private func store(_ registration: Registration, for key: ObjectIdentifier) {
         if registrations[key] != nil {
             #if DEBUG
-            AppFoundationLogger.di.warning("Re-registering '\(registration.typeName, privacy: .public)'. Overwriting previous registration.")
+            AppFoundationLogger.di.warning(
+                "Re-registering '\(registration.typeName, privacy: .public)'. Overwriting previous registration."
+            )
             #endif
             singletons.removeValue(forKey: key)
         }
@@ -165,7 +171,9 @@ public final class Container {
             return instance
         }
         let name = String(reflecting: type)
-        AppFoundationLogger.di.error("Dependency '\(name, privacy: .public)' not registered. Use Container.register() to register this type.")
+        AppFoundationLogger.di.error(
+            "Dependency '\(name, privacy: .public)' not registered. Use Container.register() to register this type."
+        )
         preconditionFailure("Dependency '\(name)' not registered. Use Container.register() to register this type.")
     }
 
@@ -238,18 +246,19 @@ public final class Container {
     ///
     /// - Parameter types: Array of required types to validate.
     public func validateRegistrations(_ types: [Any.Type]) {
-        let missing = types
+        let missing =
+            types
             .filter { !canResolve(erased: $0) }
             .map { String(reflecting: $0) }
 
         if !missing.isEmpty {
             let message = """
-            Missing Dependencies Detected:
-            \(missing.map { "  - \($0)" }.joined(separator: "\n"))
+                Missing Dependencies Detected:
+                \(missing.map { "  - \($0)" }.joined(separator: "\n"))
 
-            These dependencies are required but not registered.
-            Please register them in your DependencyModule before using.
-            """
+                These dependencies are required but not registered.
+                Please register them in your DependencyModule before using.
+                """
             AppFoundationLogger.di.warning("\(message, privacy: .public)")
             assertionFailure(message)
         }
@@ -277,9 +286,9 @@ struct ResolutionStack {
         if let start = entries.firstIndex(where: { $0.key == key }) {
             let chain = (entries[start...].map(\.name) + [name]).joined(separator: " → ")
             return """
-            Dependency cycle detected while resolving '\(name)': \(chain). \
-            Factories must not resolve each other; pass one side through its initializer instead.
-            """
+                Dependency cycle detected while resolving '\(name)': \(chain). \
+                Factories must not resolve each other; pass one side through its initializer instead.
+                """
         }
         entries.append((key, name))
         return nil

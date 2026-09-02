@@ -53,19 +53,20 @@ extension LoadableViewModel {
         successTransition: LoadSuccessTransition = .setContent,
         _ work: @escaping @MainActor (Self) async throws -> Void
     ) -> Task<Void, Never> {
-        _performLoad(
+        let retry: Action = { [weak self] in
+            guard let self else { return }
+            self.performLoad(
+                style: style,
+                errorTitle: errorTitle,
+                successTransition: successTransition,
+                work
+            )
+        }
+        return _performLoad(
             style: style,
             errorTitle: errorTitle,
             successTransition: successTransition,
-            retry: { [weak self] in
-                guard let self else { return }
-                self.performLoad(
-                    style: style,
-                    errorTitle: errorTitle,
-                    successTransition: successTransition,
-                    work
-                )
-            }
+            retry: retry
         ) { [weak self] in
             guard let self else { throw CancellationError() }
             try await work(self)
