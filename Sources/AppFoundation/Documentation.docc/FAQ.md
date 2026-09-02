@@ -11,11 +11,11 @@ cancela el trabajo en vuelo. Ver <doc:ScreenStateAndViewModels>.
 
 ## Localización: `Bundle.module` devuelve la cadena por defecto en vez de la traducida
 
-Si un `.build` de antes de que el paquete migrara a `Localizable.xcstrings` sigue en disco,
-`Bundle.module` puede encontrar `en.lproj`/`es.lproj` compilados de esa build anterior
-junto al bundle de recursos del catálogo actual — un desajuste que solo se nota como una
-búsqueda de cadena inesperada, nunca como un error de compilación. Un build limpio
-(`rm -rf .build`, o "Clean Build Folder" en Xcode) lo resuelve; no es un bug del catálogo.
+Un `.build` stale puede tener `en.lproj`/`es.lproj` compilados de una build vieja junto al
+bundle de recursos del catálogo actual (`Localizable.xcstrings`) — `Bundle.module`
+encuentra los dos, y el desajuste solo se nota como una búsqueda de cadena inesperada,
+nunca como un error de compilación. Un build limpio (`rm -rf .build`, o "Clean Build
+Folder" en Xcode) lo resuelve; no es un bug del catálogo.
 
 La SwiftPM CLI (`swift build`/`swift test`) no compila el `.xcstrings` a `.lproj` — envía
 el catálogo crudo tal cual; Xcode sí lo compila al construir la app. Ambos caminos exponen

@@ -30,7 +30,7 @@ fuera de este catálogo de documentación:
 
 ### Tests deterministas del ViewModel: nunca sondear `phase`
 
-`handle(_:)` devuelve `Void` (AF-05: es el único punto de entrada). En vez de sondear
+`handle(_:)` devuelve `Void` — es el único punto de entrada de `ActionHandling`. En vez de sondear
 `phase`/`hasError` en un bucle con `Task.sleep`, espera el `Task` que el view model ya
 está corriendo:
 
