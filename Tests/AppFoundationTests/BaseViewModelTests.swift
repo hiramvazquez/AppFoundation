@@ -244,15 +244,15 @@ struct BaseViewModelAuditBugTests {
 
     /// A3: la duration del banner debe producir un auto-dismiss REAL.
     @Test func bannerAutoDismissesAfterItsDuration() async throws {
-        viewModel.showBanner(BannerState(message: "Bye", style: .info, duration: .seconds(0.05)))
+        viewModel.showBanner(BannerState(message: "Bye", style: .info, duration: .milliseconds(50)))
         #expect(viewModel.banner != nil)
         try await waitUntil { viewModel.banner == nil }
         #expect(viewModel.banner == nil)
     }
 
-    /// A3: un banner .indefinite NO se auto-descarta.
+    /// A3: un banner sin duration (nil = indefinido) NO se auto-descarta.
     @Test func indefiniteBannerStaysUntilDismissed() async throws {
-        viewModel.showBanner(BannerState(message: "Stay", style: .info, duration: .indefinite))
+        viewModel.showBanner(BannerState(message: "Stay", style: .info, duration: nil))
         try await Task.sleep(for: .milliseconds(150))
         #expect(viewModel.banner != nil)
         viewModel.dismissBanner()
