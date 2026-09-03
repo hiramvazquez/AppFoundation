@@ -33,7 +33,29 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
 - **Store** (local, `actor`/`@ModelActor` con SwiftData): `protocol XxxStoring` + una
   implementación que es la ÚNICA que toca SwiftData/CoreData/UserDefaults/Keychain/
   FileManager, y que igualmente devuelve modelos de dominio. Misma forma que un Service,
-  distinto origen.
+  distinto origen. Un `actor` que recibe por `init` un valor no-`Sendable`
+  (`UserDefaults`, `FileManager`, un cliente de Keychain) y conforma inline a su
+  `XxxStoring: Sendable` no compila bajo `defaultIsolation(MainActor)` — declara la
+  conformidad en una `extension` (o inyecta un valor `Sendable`):
+
+  ```swift
+  // No compila: conformidad inline + propiedad no-Sendable asignada en el init.
+  actor UserDefaultsSettingsStore: SettingsStoring {
+      private let defaults: UserDefaults
+      init(defaults: UserDefaults = .standard) { self.defaults = defaults }   // error
+  }
+
+  // Compila: la conformidad va en una extension separada.
+  actor UserDefaultsSettingsStore {
+      private let defaults: UserDefaults
+      init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+  }
+  extension UserDefaultsSettingsStore: SettingsStoring {}
+  ```
+
+  Repro completo, error exacto del compilador y todas las variantes probadas en
+  `docs/repros/actor-inline-conformance.md`; ejemplo real en `Examples/NotesApp`
+  (`Stores/NotesSettingsStore.swift`).
 
 ## Las cuatro variantes (mismas reglas)
 

@@ -32,7 +32,21 @@ Features/Login/
    y su implementación; dependencias por `init` como protocolos.
 3. **Service** declara `*Servicing` + implementación; solo él toca
    `APIServiceProtocol`/`BaseRequest`. **Store** declara `*Storing` + implementación; solo
-   él toca SwiftData/CoreData/UserDefaults/Keychain/FileManager.
+   él toca SwiftData/CoreData/UserDefaults/Keychain/FileManager. Un `actor` que recibe por
+   `init` un valor no-`Sendable` (`UserDefaults`, `FileManager`, un cliente de Keychain) y
+   conforma inline a su `*Storing: Sendable` no compila bajo `defaultIsolation(MainActor)`
+   — declara la conformidad en una `extension` (o inyecta un valor `Sendable`):
+
+   ```swift
+   actor UserDefaultsSettingsStore {
+       private let defaults: UserDefaults
+       init(defaults: UserDefaults = .standard) { self.defaults = defaults }   // compila
+   }
+   extension UserDefaultsSettingsStore: SettingsStoring {}
+   ```
+
+   Repro completo y todas las variantes probadas en `docs/repros/actor-inline-conformance.md`;
+   ejemplo real en `Examples/NotesApp/Sources/NotesApp/Features/Notes/Stores/NotesSettingsStore.swift`.
 4. **View** no referencia `*Logic`/`*Service`/`*Store`/`APIService`; recibe el ViewModel y
    usa `ActionSender`.
 5. Cada `XxxViewModel.swift` tiene su `XxxLogic.swift`.
