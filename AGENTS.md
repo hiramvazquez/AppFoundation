@@ -133,6 +133,47 @@ escribir código de una capa a mano, repasa la tabla de reglas en el artículo `
 que un `APIError`/DTO llegue al ViewModel (R7/R8), o llamar a `Container.shared` fuera
 del `XxxModule` (R10) hacen fallar el build, no solo el code review.
 
+## Definition of Done
+
+Nada está terminado hasta que estos comandos se han EJECUTADO y su salida real aparece
+en el informe. «Compila» o «en verde» sin la salida pegada no cuenta; ha ocurrido más de
+una vez que un agente reportó 0 errores sin haber medido y había cientos.
+
+En un proyecto que consume este paquete (desde la raíz del paquete local, p. ej.
+`AppStarterKit/`):
+
+```bash
+swift build                                      # compila, y con ello corre ArchitectureLint (R1-R12)
+swift test                                       # unitarios por capa: ViewModel, Logic, Service, Store
+swift package archlint                           # comprobación explícita; debe imprimir "0 errors"
+# Si el proyecto tiene app de Xcode y XCUITests:
+xcodebuild test -scheme <App> -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -skipPackagePluginValidation
+```
+
+Reglas del informe:
+
+1. Pega la ÚLTIMA línea de cada comando (`Test run with N tests … passed`, `archlint: 0
+   errors`, `** TEST SUCCEEDED **`). Si un comando no se ejecutó, dilo y explica por qué.
+2. Un test que se saltó, un warning que se silenció o un `--path`/`-only-testing` que
+   reduce el alcance se declara explícitamente.
+3. Cada feature nueva trae su test por capa (ver «Cómo testear cada capa»); una feature
+   sin tests no está terminada aunque compile.
+4. Si un fallo se diagnostica por lectura de código sin reproducirlo (trazas, test que
+   falla), el informe lo marca como hipótesis, no como causa confirmada.
+
+Al desarrollar el propio paquete (contribuciones a AppFoundation), la lista es la del CI:
+
+```bash
+swift format lint --strict --recursive Sources Tests Examples Plugins Snippets
+SWIFT_STRICT_WARNINGS=1 swift build --build-tests
+swift test --parallel
+for e in CounterApp NotesApp LoginApp CatalogApp; do (cd Examples/$e && swift test); done
+Scripts/check-doc-snippets.sh
+Scripts/verify-generator.sh
+xcodebuild build -scheme AppFoundation -destination 'generic/platform=iOS Simulator' -quiet
+xcodebuild docbuild -scheme AppFoundation -destination 'generic/platform=iOS Simulator' -derivedDataPath "$(mktemp -d)"   # sin "warning:"
+```
+
 Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia),
 `README.md` (instalación y los seis pasos mínimos), `Sources/AppFoundation/Documentation.docc/`
 (Xcode: **Product ▸ Build Documentation**) para la referencia completa por pieza, con

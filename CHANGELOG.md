@@ -6,6 +6,17 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-03
+
+### Documentación
+
+- Sección «Definition of Done» en `AGENTS.md` (y por tanto en el `AGENTS.md` que
+  `archinit` copia a cada proyecto): los comandos exactos que hay que ejecutar y cuya
+  última línea hay que pegar antes de dar algo por terminado, tanto en un proyecto
+  consumidor (`swift build`, `swift test`, `swift package archlint`, `xcodebuild test`)
+  como al contribuir al paquete (la lista del CI). Nace de la experiencia con agentes
+  que reportaban «en verde» sin haber medido.
+
 ## [1.0.1] - 2026-09-03
 
 Versión de mantenimiento a partir de las fricciones de la app de referencia
