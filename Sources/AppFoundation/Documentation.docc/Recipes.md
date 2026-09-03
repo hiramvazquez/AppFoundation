@@ -109,13 +109,17 @@ final class ItemsViewModel: BaseViewModel, ActionHandling {
 }
 
 struct ItemsView: View {
-    let viewModel: ItemsViewModel
+    @State private var viewModel: ItemsViewModel
+
+    init(viewModel: ItemsViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
 
     var body: some View {
         ScreenContainer(viewModel) { send in
             List(viewModel.items, id: \.self) { Text($0) }
                 .refreshable { await viewModel.refresh() }
-                .onAppear { send(.load) }
+                .task { send(.load) }
         }
     }
 }

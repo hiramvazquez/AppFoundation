@@ -35,12 +35,19 @@ final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, Action
 }
 
 struct GreetingView: View {
-    let viewModel: GreetingViewModel
+    // El composition root construye el view model; la vista lo RETIENE con `@State`
+    // (con `let`, SwiftUI puede sustituir la instancia que recibió `.load` al reejecutar
+    // este init durante un push, y la que queda en pantalla nunca carga).
+    @State private var viewModel: GreetingViewModel
+
+    init(viewModel: GreetingViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
 
     var body: some View {
         ScreenContainer(viewModel) { send in
             Text(viewModel.message)
-                .onAppear { send(.load(name: "Hiram")) }
+                .task { send(.load(name: "Hiram")) }
         }
         .navigationTitle("Saludo")
     }

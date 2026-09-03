@@ -82,7 +82,11 @@ final class ProfileViewModel: BaseViewModel, ActionHandling {
 }
 
 struct ProfileScreen: View {
-    let viewModel: ProfileViewModel
+    @State private var viewModel: ProfileViewModel
+
+    init(viewModel: ProfileViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
 
     var body: some View {
         ScreenContainer(viewModel) { _ in Text("Perfil") }
