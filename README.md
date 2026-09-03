@@ -102,6 +102,15 @@ struct GreetingView: View {
 El generador escribe este mismo cascarón (View/ViewModel/Logic/Service/Store + tests) en
 segundos: `swift package --allow-writing-to-package-directory generate-feature Login --api`.
 
+## App de referencia
+
+[AppStarter](https://github.com/hiramvazquez/AppStarter) — app real sobre DummyJSON:
+login/refresh de token, lista paginada, detalle, favoritos con SwiftData, búsqueda;
+XCUITests offline con fixtures registrados; plantilla de arranque (paquete local + app
+cáscara de Xcode) lista para clonar. Ver el artículo `GettingStarted` de DocC, sección
+«Desde un proyecto Xcode», para lo que ese repo enseñó sobre integrar este kit fuera de un
+paquete SPM puro.
+
 ## Más
 
 - [`AGENTS.md`](AGENTS.md) — arquitectura, naming y qué NO hacer, para agentes y humanos.

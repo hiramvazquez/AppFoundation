@@ -134,8 +134,9 @@ que un `APIError`/DTO llegue al ViewModel (R7/R8), o llamar a `Container.shared`
 del `XxxModule` (R10) hacen fallar el build, no solo el code review.
 
 Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia),
-`README.md` (instalación y los seis pasos mínimos) y `Sources/AppFoundation/Documentation.docc/`
+`README.md` (instalación y los seis pasos mínimos), `Sources/AppFoundation/Documentation.docc/`
 (Xcode: **Product ▸ Build Documentation**) para la referencia completa por pieza, con
-ejemplos que compilan (`Snippets/`).
+ejemplos que compilan (`Snippets/`), y [AppStarter](https://github.com/hiramvazquez/AppStarter)
+— app real sobre DummyJSON con ambos paquetes, plantilla de arranque.
 
 Los ejemplos de DocC están sincronizados con `Snippets/` por CI (`Scripts/check-doc-snippets.sh`, job `docs`).
