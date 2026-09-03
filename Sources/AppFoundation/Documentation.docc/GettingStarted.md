@@ -261,6 +261,161 @@ import Testing
 **Resultado esperado**: `swift test` compila y corre 1 test, en verde. `inFlightLoad`
 evita sondear `phase` en un bucle — ver <doc:Testing>.
 
+## Desde un proyecto Xcode
+
+Lo de arriba asume un paquete SwiftPM puro. Un proyecto Xcode real (xcodegen, o cualquier
+otro generador de `.xcodeproj`) tiene fricciones adicionales — las nueve de abajo son las
+que encontró integrar este kit en
+[AppStarter](https://github.com/hiramvazquez/AppStarter) (app real sobre DummyJSON,
+`docs/INFORME-INTEGRACION.md` de ese repo tiene el detalle completo con trazas). Cada
+punto: el síntoma, la solución, el fragmento mínimo.
+
+### 1. El generador y el linter necesitan un `Package.swift`
+
+**Síntoma**: `generate-feature`/`archinit`/`archlint` son *command plugins* de SwiftPM —
+un `.xcodeproj` de xcodegen, por sí solo, no tiene ningún `Package.swift` sobre el que
+corran. **Solución**: paquete local con TODAS las features (`AppStarterKit/`, con su
+propio `Package.swift`, dependiendo de AppFoundation/CoreNetworking por URL exactamente
+como cualquier consumidor) + un target de app cáscara (xcodegen) que solo tiene `@main`,
+la vista raíz y la composición de `DependencyModule`s.
+
+```yaml
+# project.yml (xcodegen), simplificado
+packages:
+  MiAppKit:
+    path: MiAppKit
+targets:
+  MiApp:
+    type: application
+    sources: [MiApp]
+    dependencies:
+      - package: MiAppKit
+        product: MiAppKit
+```
+
+### 2. Xcode exige aprobar el plugin antes de compilar
+
+**Síntoma**: el primer build falla con `Validate plug-in "ArchitectureLint" in package
+"appfoundation"` — Xcode pide confiar en el plugin con un diálogo interactivo, que no
+existe en CI. **Solución**: `-skipPackagePluginValidation` en cada invocación no
+interactiva de `xcodebuild`; en Xcode, aprobarlo una vez desde el diálogo.
+
+```bash
+xcodebuild -scheme MiApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+    -skipPackagePluginValidation test
+```
+
+### 3. Un target no hereda productos de una dependencia DE una dependencia
+
+**Síntoma**: el target de la app enlaza solo el paquete local (`MiAppKit`), pero si algún
+fichero de la app (`MiAppApp.swift`, un fixture offline) hace `import AppFoundation` o
+`import CoreNetworkingTestSupport` directamente, `xcodebuild test` (no `build`) falla en el
+linker con `Undefined symbol`. **Solución**: declarar también `AppFoundation`/
+`CoreNetworking` como paquetes del target de la app en `project.yml`, con la MISMA URL y
+versión que `MiAppKit/Package.swift` ya fija — SwiftPM deduplica por identidad de paquete,
+no descarga un segundo checkout.
+
+```yaml
+packages:
+  AppFoundation:
+    url: https://github.com/hiramvazquez/AppFoundation.git
+    from: 1.0.0
+targets:
+  MiApp:
+    dependencies:
+      - package: MiAppKit
+        product: MiAppKit
+      - package: AppFoundation
+        product: AppFoundation
+```
+
+### 4. xcodegen no referencia el test target de un paquete local desde un scheme
+
+**Síntoma**: añadir el test target del paquete local (`MiAppKitTests`) a la acción `test`
+de un scheme xcodegen falla con `Spec validation error: ... invalid test target`.
+**Solución**: correrlo aparte — `swift test` dentro del paquete local, como un paso
+distinto de `xcodebuild test` (que cubre solo los test targets nativos de Xcode) — en
+local y en CI.
+
+```bash
+xcodebuild -scheme MiApp -destination '...' -skipPackagePluginValidation test
+cd MiAppKit && swift test
+```
+
+### 5. `.accessibilityIdentifier` en un contenedor pisa el de sus hijos
+
+**Síntoma**: un `.accessibilityIdentifier` en un `VStack`/contenedor se propaga a TODOS
+sus hijos en el árbol de accesibilidad — incluso a uno que ya tiene su propio identificador
+explícito, que queda pisado. **Solución**: poner `.accessibilityIdentifier` solo en las
+hojas (`Text`, `Button`), nunca en un contenedor que también tiene hijos identificados.
+
+### 6. Variables de entorno de la shell no llegan al test runner de XCUITest
+
+**Síntoma**: `MI_FLAG=1 xcodebuild test`, leída con `ProcessInfo.processInfo.environment`
+dentro del target de XCUITests, funciona de forma intermitente — el proceso del test
+runner que el simulador lanza no es un hijo directo de `xcodebuild` y no hereda de forma
+fiable el entorno de la shell que invocó el comando. **Solución**: hornear la variable en
+el `.xcscheme` vía la interpolación de xcodegen (que lee el entorno en el momento de
+`xcodegen generate`, un proceso síncrono normal — sí fiable), no leerla del entorno en
+tiempo de test. `XCTestConfigurationFilePath`, en cambio, SÍ llega de forma fiable al
+entorno del PROCESO DE LA APP bajo prueba (no al del test runner) — útil para que la app
+detecte "estoy corriendo bajo XCUITest" sin depender de una variable horneada (punto 7).
+
+```yaml
+schemes:
+  MiApp:
+    test:
+      environmentVariables:
+        MI_FLAG: "${MI_FLAG}"
+```
+
+### 7. El diálogo "¿Guardar contraseña?" interrumpe los XCUITests en un momento impredecible
+
+**Síntoma**: tras el primer envío exitoso de un formulario con `SecureField`, el simulador
+puede ofrecer guardar la contraseña en cualquier momento — un `Sheet` del sistema que
+bloquea cualquier tap posterior sin que `XCUIElement.tap()` reporte más que "not
+hittable". **Solución de dos capas**: la View desactiva `.textContentType(.password)`
+cuando detecta `XCTestConfigurationFilePath` en el entorno (punto 6); como red de
+seguridad, cada ayudante de navegación de los XCUITests comprueba y descarta el diálogo
+(`"Ahora no"`/`"Not Now"`) antes y durante cada espera, no solo una vez tras el login.
+
+```swift
+SecureField("Contraseña", text: $password)
+    .textContentType(isRunningUITests ? nil : .password)
+
+private var isRunningUITests: Bool {
+    ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+}
+```
+
+### 8. XCUITests sin red: `InMemoryTransport` con fixtures registrados antes del primer request
+
+**Síntoma**: unos XCUITests que dependen de la API real son lentos y frágiles en CI.
+**Solución**: un modo offline (`-UITestOffline` en `launchArguments`) que construye la app
+con `InMemoryTransport` (`CoreNetworkingTestSupport`) y registra cada respuesta ANTES de
+que `RootView` renderice y salga el primer request — el `init()` de una `App` SwiftUI no
+puede ser `async`, así que registrar (una `actor`, `async`) necesita puentearse a síncrono
+en ese punto (un `DispatchSemaphore` alrededor de un `Task`, ver
+`AppStarter/OfflineFixtures.swift`).
+
+### 9. El runner de CI arranca con un Xcode cuyo `swift-tools` es menor que 6.2
+
+**Síntoma**: `macos-15` en GitHub Actions no siempre trae seleccionado por defecto el
+Xcode más reciente disponible en la imagen — `swift-tools-version: 6.2` de este paquete
+no resuelve. **Solución**: seleccionar explícitamente el Xcode más nuevo instalado antes
+de cualquier paso que use `xcodebuild`/`swift`.
+
+```yaml
+- name: Select the newest available Xcode (swift-tools 6.2 mínimo)
+  run: |
+    LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+    sudo xcode-select -s "${LATEST:-/Applications/Xcode.app}"
+    xcodebuild -version
+```
+
+El `.github/workflows/ci.yml` completo de AppStarter tiene los tres jobs (lint + unit,
+`xcodebuild test`, integración real) con estos nueve puntos aplicados.
+
 ## De aquí en adelante
 
 - Una Logic que depende de una API o de datos locales: <doc:Architecture>.
