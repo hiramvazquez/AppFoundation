@@ -278,9 +278,18 @@ open class BaseViewModel {
 
         loadGeneration &+= 1
         let generation = loadGeneration
+        let typeName = String(describing: type(of: self))
 
         let task = Task { [weak self] in
-            guard let self else { return }
+            // The view model was released before this task got to run (`deinit` already
+            // cancelled it): nothing to do — but say so in DEBUG (A7), because the usual
+            // cause is a View holding its view model with `let` instead of `@State`.
+            guard let self else {
+                AppFoundationDiagnostics.reportDrop(
+                    "performLoad work skipped: \(typeName) was deallocated before it ran"
+                )
+                return
+            }
             await self._runLoad(
                 style: style,
                 errorTitle: errorTitle,
@@ -332,9 +341,16 @@ open class BaseViewModel {
 
         activityGeneration &+= 1
         let generation = activityGeneration
+        let typeName = String(describing: type(of: self))
 
         let task = Task { [weak self] in
-            guard let self else { return }
+            // Same deallocation diagnostic as `_performLoad`'s.
+            guard let self else {
+                AppFoundationDiagnostics.reportDrop(
+                    "performActivity work skipped: \(typeName) was deallocated before it ran"
+                )
+                return
+            }
             await self._runActivity(style: style, errorHandling: errorHandling, work)
             // Same non-clobbering guard as `_performLoad`'s.
             if self.activityGeneration == generation {

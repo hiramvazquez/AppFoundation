@@ -18,4 +18,9 @@ nonisolated enum AppFoundationLogger {
     /// are neither `AppErrorConvertible` nor `LocalizedError`. The technical detail goes
     /// here (`.private`), never to the screen.
     static let errors = Logger(subsystem: subsystem, category: "Errors")
+
+    /// Actions dropped by `ActionSender` and `performLoad`/`performActivity` work skipped
+    /// because the view model was already deallocated (`AppFoundationDiagnostics`, A7).
+    /// DEBUG only.
+    static let actionSender = Logger(subsystem: subsystem, category: "ActionSender")
 }

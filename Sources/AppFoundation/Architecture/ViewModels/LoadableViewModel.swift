@@ -44,6 +44,12 @@ extension LoadableViewModel {
     /// which is why `work` must not capture `self`: the retry closure only captures the
     /// view model weakly, so a rejected screen releases cleanly.
     ///
+    /// If the view model is deallocated before `work` gets to run (its `Task` holds the
+    /// view model weakly until then), the work is skipped as a cancellation — no error
+    /// reaches the screen — and, in `DEBUG` builds, the skip is logged at `.error` level
+    /// and reported through ``AppFoundationDiagnostics``: the usual cause is a View
+    /// holding its view model with `let` instead of `@State`.
+    ///
     /// - Returns: The load `Task`. Await it in tests for deterministic sequencing, or
     ///   discard it — the view model retains and manages it either way.
     @discardableResult
@@ -53,6 +59,7 @@ extension LoadableViewModel {
         successTransition: LoadSuccessTransition = .setContent,
         _ work: @escaping @MainActor (Self) async throws -> Void
     ) -> Task<Void, Never> {
+        let typeName = String(describing: Self.self)
         let retry: Action = { [weak self] in
             guard let self else { return }
             self.performLoad(
@@ -68,7 +75,12 @@ extension LoadableViewModel {
             successTransition: successTransition,
             retry: retry
         ) { [weak self] in
-            guard let self else { throw CancellationError() }
+            guard let self else {
+                AppFoundationDiagnostics.reportDrop(
+                    "performLoad work skipped: \(typeName) was deallocated before it ran"
+                )
+                throw CancellationError()
+            }
             try await work(self)
         }
     }
@@ -78,6 +90,9 @@ extension LoadableViewModel {
     /// Ideal for refresh, pagination, form submit, and background sync work. Starting a
     /// new activity cancels the in-flight one; a cancelled activity never mutates state.
     ///
+    /// Same deallocation diagnostic as `performLoad`: work skipped because the view model
+    /// is already gone is reported through ``AppFoundationDiagnostics`` in `DEBUG` builds.
+    ///
     /// - Returns: The activity `Task`. Await it in tests for deterministic sequencing.
     @discardableResult
     public func performActivity(
@@ -85,8 +100,14 @@ extension LoadableViewModel {
         errorHandling: BaseViewModel.ActivityErrorHandling = .banner,
         _ work: @escaping @MainActor (Self) async throws -> Void
     ) -> Task<Void, Never> {
-        _performActivity(style: style, errorHandling: errorHandling) { [weak self] in
-            guard let self else { throw CancellationError() }
+        let typeName = String(describing: Self.self)
+        return _performActivity(style: style, errorHandling: errorHandling) { [weak self] in
+            guard let self else {
+                AppFoundationDiagnostics.reportDrop(
+                    "performActivity work skipped: \(typeName) was deallocated before it ran"
+                )
+                throw CancellationError()
+            }
             try await work(self)
         }
     }

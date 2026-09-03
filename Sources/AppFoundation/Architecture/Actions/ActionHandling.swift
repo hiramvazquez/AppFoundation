@@ -60,9 +60,23 @@ extension ActionHandling {
     /// `handle(_:)` behind a `weak` reference to `self`, so a view can hold on to a sender
     /// without keeping the view model alive — the same memory contract `performLoad`
     /// already upholds (see `BaseViewModelMemoryTests`).
+    ///
+    /// An action sent after the view model was deallocated is dropped — never a crash —
+    /// but never silently either: in `DEBUG` builds it is logged at `.error` level
+    /// (`AppFoundation`/`ActionSender`) and reported through `AppFoundationDiagnostics`,
+    /// because the usual cause is a View holding its view model with `let` instead of
+    /// `@State` (see ``AppFoundationDiagnostics``).
     public var sender: ActionSender<Action> {
-        ActionSender { [weak self] action in
-            self?.handle(action)
+        let typeName = String(describing: Self.self)
+        return ActionSender { [weak self] action in
+            guard let self else {
+                AppFoundationDiagnostics.reportDrop(
+                    "Action \(action) dropped: its ViewModel (\(typeName)) was deallocated"
+                        + " — retain the ViewModel with @State in the View"
+                )
+                return
+            }
+            self.handle(action)
         }
     }
 }
