@@ -10,7 +10,7 @@ struct NotesLogicTests {
     @Test("addNote(text:) with only whitespace throws NotesError.emptyText before touching the store")
     func blankTextNeverReachesTheStore() async {
         let store = InMemoryNotesStore()
-        let logic = NotesLogic(notesStore: store)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub())
 
         await #expect(throws: NotesError.emptyText) {
             _ = try await logic.addNote(text: "   \n")
@@ -22,7 +22,7 @@ struct NotesLogicTests {
     @Test("addNote(text:) trims and persists valid text")
     func addNoteTrimsAndPersists() async throws {
         let store = InMemoryNotesStore()
-        let logic = NotesLogic(notesStore: store)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub())
 
         let note = try await logic.addNote(text: "  Buy milk  ")
 
@@ -34,7 +34,7 @@ struct NotesLogicTests {
     @Test("loadNotes() returns what the store has")
     func loadNotesReturnsStoredNotes() async throws {
         let store = InMemoryNotesStore()
-        let logic = NotesLogic(notesStore: store)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub())
         _ = try await logic.addNote(text: "First")
         _ = try await logic.addNote(text: "Second")
 
@@ -46,7 +46,7 @@ struct NotesLogicTests {
     @Test("deleteNote(id:) removes the note from the store")
     func deleteNoteRemovesFromStore() async throws {
         let store = InMemoryNotesStore()
-        let logic = NotesLogic(notesStore: store)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub())
         let note = try await logic.addNote(text: "To delete")
 
         try await logic.deleteNote(id: note.id)
@@ -59,10 +59,38 @@ struct NotesLogicTests {
     func storeFailureMapsToDomainError() async {
         struct SomeStorageError: Error {}
         let store = InMemoryNotesStore(failureToThrow: SomeStorageError())
-        let logic = NotesLogic(notesStore: store)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub())
 
         await #expect(throws: NotesError.storageFailure) {
             _ = try await logic.addNote(text: "Anything")
         }
+    }
+
+    @Test("loadNotes() sorts oldest-first when NotesSettingsStoring says so")
+    func loadNotesHonorsSortSetting() async throws {
+        let store = InMemoryNotesStore()
+        let older = Note(text: "Older", createdAt: Date(timeIntervalSince1970: 0))
+        let newer = Note(text: "Newer", createdAt: Date(timeIntervalSince1970: 1000))
+        try await store.save(newer)
+        try await store.save(older)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub(sortOldestFirst: true))
+
+        let notes = try await logic.loadNotes()
+
+        #expect(notes == [older, newer])
+    }
+
+    @Test("loadNotes() keeps the store's own order when the setting is off")
+    func loadNotesKeepsStoreOrderByDefault() async throws {
+        let store = InMemoryNotesStore()
+        let older = Note(text: "Older", createdAt: Date(timeIntervalSince1970: 0))
+        let newer = Note(text: "Newer", createdAt: Date(timeIntervalSince1970: 1000))
+        try await store.save(newer)
+        try await store.save(older)
+        let logic = NotesLogic(notesStore: store, notesSettingsStore: NotesSettingsStoreStub(sortOldestFirst: false))
+
+        let notes = try await logic.loadNotes()
+
+        #expect(notes == [newer, older])
     }
 }

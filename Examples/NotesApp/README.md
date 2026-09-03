@@ -15,7 +15,8 @@ Sources/NotesApp/
     ├── NotesViewModel.swift       LogicViewModel<any NotesLogicProtocol>, ActionHandling
     ├── NotesLogic.swift           NotesLogicProtocol + NotesLogic (nonisolated, M5); Note; NotesError: DomainError (M1)
     └── Stores/
-        └── NotesStore.swift       NoteRecord (@Model, private to this file — M2) + NotesStoring + SwiftDataNotesStore (@ModelActor, M5)
+        ├── NotesStore.swift           NoteRecord (@Model, private to this file — M2) + NotesStoring + SwiftDataNotesStore (@ModelActor, M5)
+        └── NotesSettingsStore.swift   NotesSettingsStoring + UserDefaultsNotesSettingsStore (actor, UserDefaults, conformance in an `extension` — docs/repros/actor-inline-conformance.md)
 ```
 
 `Tests/NotesAppTests/Features/Notes/` mirrors the same shape: `NotesViewModelTests.swift`
@@ -37,6 +38,13 @@ Sources/NotesApp/
    on the way in. `@ModelActor` (M5) — SwiftData's `ModelContext` is not `Sendable` and its
    initializer is main-actor-isolated, which is exactly what the macro's generated
    `init(modelContainer:)` accounts for.
+5. **`Stores/NotesSettingsStore.swift`** — a plain hand-written `actor` Store (no
+   `@ModelActor`, no SwiftData) over `UserDefaults` for the sort-order preference.
+   `UserDefaultsNotesSettingsStore` conforms to `NotesSettingsStoring` in a separate
+   `extension`, not inline on the `actor` declaration — inline breaks the `init` under this
+   package's `defaultIsolation(MainActor)` whenever the actor's stored property isn't
+   itself `Sendable` (`UserDefaults` here). Full repro in
+   `docs/repros/actor-inline-conformance.md`.
 
 ## Tests, by layer
 
@@ -45,6 +53,7 @@ Sources/NotesApp/
 | `NotesViewModel` | `NotesLogicMock` (spy) | `handle(.add(text))`/`handle(.delete(id))` call the right `logic` method and update `notes`; `.content` vs `.empty` follows whether the list is empty |
 | `NotesLogic` | `InMemoryNotesStore` (`AppFoundationTestSupport.InMemoryStore`) | blank text is rejected before the store is touched; a store failure maps to `NotesError.storageFailure` |
 | `SwiftDataNotesStore` | none — a REAL `ModelContainer`, in-memory only | save/fetch/delete round-trip through actual SwiftData, newest-first ordering |
+| `UserDefaultsNotesSettingsStore` | none — a REAL `UserDefaults(suiteName:)`, isolated per test | the sort-order flag round-trips and persists across instances over the same `UserDefaults` |
 
 ## Arquitectura
 

@@ -59,20 +59,29 @@ public protocol NotesLogicProtocol: Logic {
 /// actor calls them.
 public nonisolated final class NotesLogic: NotesLogicProtocol {
     private let notesStore: any NotesStoring
+    private let notesSettingsStore: any NotesSettingsStoring
 
-    /// - Parameter notesStore: The ONLY dependency this feature has — injected as a
-    ///   protocol, never the concrete `SwiftDataNotesStore`/`InMemoryNotesStore`
-    ///   (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 3).
-    public init(notesStore: any NotesStoring) {
+    /// - Parameters:
+    ///   - notesStore: Where notes themselves live — injected as a protocol, never the
+    ///     concrete `SwiftDataNotesStore`/`InMemoryNotesStore`
+    ///     (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 3).
+    ///   - notesSettingsStore: The sort-order preference, a second local Store over a
+    ///     different mechanism (`UserDefaults`, `Stores/NotesSettingsStore.swift`) — same
+    ///     rule, same reason: `NotesLogic` only ever sees it through its protocol.
+    public init(notesStore: any NotesStoring, notesSettingsStore: any NotesSettingsStoring) {
         self.notesStore = notesStore
+        self.notesSettingsStore = notesSettingsStore
     }
 
     public func loadNotes() async throws -> [Note] {
+        let notes: [Note]
         do {
-            return try await notesStore.fetchAll()
+            notes = try await notesStore.fetchAll()
         } catch {
             throw NotesError.storageFailure
         }
+        guard await notesSettingsStore.sortOldestFirst() else { return notes }
+        return notes.sorted { $0.createdAt < $1.createdAt }
     }
 
     public func addNote(text: String) async throws -> Note {

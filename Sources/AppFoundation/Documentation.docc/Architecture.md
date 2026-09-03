@@ -32,9 +32,28 @@ Features/Login/
    y su implementación; dependencias por `init` como protocolos.
 3. **Service** declara `*Servicing` + implementación; solo él toca
    `APIServiceProtocol`/`BaseRequest`. **Store** declara `*Storing` + implementación; solo
-   él toca SwiftData/CoreData/UserDefaults/Keychain/FileManager.
+   él toca SwiftData/CoreData/UserDefaults/Keychain/FileManager. Un `actor` que recibe por
+   `init` un valor no-`Sendable` (`UserDefaults`, `FileManager`, un cliente de Keychain) y
+   conforma inline a su `*Storing: Sendable` no compila bajo `defaultIsolation(MainActor)`
+   — declara la conformidad en una `extension` (o inyecta un valor `Sendable`):
+
+   ```swift
+   actor UserDefaultsSettingsStore {
+       private let defaults: UserDefaults
+       init(defaults: UserDefaults = .standard) { self.defaults = defaults }   // compila
+   }
+   extension UserDefaultsSettingsStore: SettingsStoring {}
+   ```
+
+   Repro completo y todas las variantes probadas en `docs/repros/actor-inline-conformance.md`;
+   ejemplo real en `Examples/NotesApp/Sources/NotesApp/Features/Notes/Stores/NotesSettingsStore.swift`.
 4. **View** no referencia `*Logic`/`*Service`/`*Store`/`APIService`; recibe el ViewModel y
-   usa `ActionSender`.
+   usa `ActionSender`. El composition root construye el ViewModel; la View lo retiene con
+   `@State private var viewModel: XxxViewModel` + `_viewModel = State(initialValue:
+   viewModel)` en el `init`, nunca `let viewModel:`. Causa: SwiftUI reejecuta el builder de
+   destino de navegación durante un push; con `let`, esa reejecución sustituye la instancia
+   que ya recibió `.load` (vía `.task`) — se libera (`performLoad` captura `[weak self]`,
+   sin error) y la instancia que queda en pantalla nunca lo recibe. Ver <doc:FAQ>.
 5. Cada `XxxViewModel.swift` tiene su `XxxLogic.swift`.
 6. Ninguna clase concreta de Service/Store/Logic aparece en un `init` de otra capa: siempre
    `any XxxProtocol`.
@@ -182,3 +201,4 @@ generador y en el linter.
 - <doc:Generator>
 - <doc:Lint>
 - <doc:Recipes>
+- <doc:FAQ>

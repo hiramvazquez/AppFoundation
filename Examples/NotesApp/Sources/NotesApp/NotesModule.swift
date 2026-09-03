@@ -24,8 +24,11 @@ public struct NotesModule: DependencyModule {
         container.register(NotesStoring.self) { [modelContainer] _ in
             SwiftDataNotesStore(modelContainer: modelContainer)
         }
+        container.register(NotesSettingsStoring.self) { _ in
+            UserDefaultsNotesSettingsStore()
+        }
         container.register(NotesLogicProtocol.self) { c in
-            NotesLogic(notesStore: c.resolve())
+            NotesLogic(notesStore: c.resolve(), notesSettingsStore: c.resolve())
         }
         container.register(NotesViewModel.self, lifecycle: .transient) { c in
             NotesViewModel(logic: c.resolve())

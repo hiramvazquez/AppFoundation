@@ -14,7 +14,17 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
 ## Capas
 
 - **View** (SwiftUI): recibe el `ViewModel`, renderiza con `ScreenContainer(vm) { send in … }`.
-  Nunca importa `CoreNetworking`, nunca referencia `*Logic`/`*Service`/`*Store`.
+  Nunca importa `CoreNetworking`, nunca referencia `*Logic`/`*Service`/`*Store`. El
+  composition root lo construye; la View lo retiene con `@State private var viewModel:
+  XxxViewModel` + `_viewModel = State(initialValue: viewModel)` en el `init` — nunca `let
+  viewModel:`. SwiftUI reejecuta el builder del destino de navegación durante un push; con
+  `let` esa reejecución sustituye la instancia que ya recibió `.load` (vía `.task`), esa
+  instancia se libera (`performLoad` captura `[weak self]`, sin error) y la que queda en
+  pantalla nunca lo recibe — pantalla vacía sin spinner ni error. En DEBUG, `ActionSender`
+  y `performLoad`/`performActivity` registran en `os_log` (subsystem `AppFoundation`) cada
+  acción descartada porque su ViewModel ya no existe, configurable vía
+  `AppFoundationDiagnostics`; `ArchitectureLint` (R12) avisa de `let viewModel:` en un
+  `*View.swift`.
 - **ViewModel** (`@MainActor`): `final class XxxViewModel: LogicViewModel<any XxxLogicProtocol>,
   ActionHandling`. Orquesta: recibe `Action` en `handle(_:)`, llama a `logic`, actualiza
   `phase`/estado propio, decide navegación (`Router`/`Coordinator`). Nunca conoce
@@ -33,7 +43,29 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
 - **Store** (local, `actor`/`@ModelActor` con SwiftData): `protocol XxxStoring` + una
   implementación que es la ÚNICA que toca SwiftData/CoreData/UserDefaults/Keychain/
   FileManager, y que igualmente devuelve modelos de dominio. Misma forma que un Service,
-  distinto origen.
+  distinto origen. Un `actor` que recibe por `init` un valor no-`Sendable`
+  (`UserDefaults`, `FileManager`, un cliente de Keychain) y conforma inline a su
+  `XxxStoring: Sendable` no compila bajo `defaultIsolation(MainActor)` — declara la
+  conformidad en una `extension` (o inyecta un valor `Sendable`):
+
+  ```swift
+  // No compila: conformidad inline + propiedad no-Sendable asignada en el init.
+  actor UserDefaultsSettingsStore: SettingsStoring {
+      private let defaults: UserDefaults
+      init(defaults: UserDefaults = .standard) { self.defaults = defaults }   // error
+  }
+
+  // Compila: la conformidad va en una extension separada.
+  actor UserDefaultsSettingsStore {
+      private let defaults: UserDefaults
+      init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+  }
+  extension UserDefaultsSettingsStore: SettingsStoring {}
+  ```
+
+  Repro completo, error exacto del compilador y todas las variantes probadas en
+  `docs/repros/actor-inline-conformance.md`; ejemplo real en `Examples/NotesApp`
+  (`Stores/NotesSettingsStore.swift`).
 
 ## Las cuatro variantes (mismas reglas)
 
@@ -102,8 +134,9 @@ que un `APIError`/DTO llegue al ViewModel (R7/R8), o llamar a `Container.shared`
 del `XxxModule` (R10) hacen fallar el build, no solo el code review.
 
 Ver también: [Examples/](Examples/) (los cuatro ejemplos de variante, código de referencia),
-`README.md` (instalación y los seis pasos mínimos) y `Sources/AppFoundation/Documentation.docc/`
+`README.md` (instalación y los seis pasos mínimos), `Sources/AppFoundation/Documentation.docc/`
 (Xcode: **Product ▸ Build Documentation**) para la referencia completa por pieza, con
-ejemplos que compilan (`Snippets/`).
+ejemplos que compilan (`Snippets/`), y [AppStarter](https://github.com/hiramvazquez/AppStarter)
+— app real sobre DummyJSON con ambos paquetes, plantilla de arranque.
 
 Los ejemplos de DocC están sincronizados con `Snippets/` por CI (`Scripts/check-doc-snippets.sh`, job `docs`).
