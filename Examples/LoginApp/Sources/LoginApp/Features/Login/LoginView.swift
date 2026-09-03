@@ -11,10 +11,12 @@ import SwiftUI
 /// `APIService` (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 4) — only `viewModel` (for
 /// reads) and `send` (for actions).
 public struct LoginView: View {
-    let viewModel: LoginViewModel
+    // The composition root builds the view model; the view RETAINS it (`@State`), so the
+    // same instance survives SwiftUI re-running this initializer (PRD-X-05 A3).
+    @State private var viewModel: LoginViewModel
 
     public init(viewModel: LoginViewModel) {
-        self.viewModel = viewModel
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
@@ -84,14 +86,16 @@ import CoreNetworkingTestSupport
 /// A `LoginView` wired to `MockAPIService` instead of a live `APIService` — what an
 /// integrator's own preview looks like, no test target or network required.
 struct LoginPreview: View {
-    let viewModel: LoginViewModel
+    // Same ownership rule as `LoginView`: whoever holds a view model in a `View` retains
+    // it with `@State`, never `let` (PRD-X-05 A3).
+    @State private var viewModel: LoginViewModel
 
     init(token: String = "preview-token") {
         let mock = MockAPIService()
         mock.stub(LoginRequest.self, returning: LoginRequest.Response(token: token))
         let service = LoginService(api: mock)
         let logic = LoginLogic(loginService: service, sessionStore: SessionStore())
-        self.viewModel = LoginViewModel(logic: logic)
+        _viewModel = State(initialValue: LoginViewModel(logic: logic))
     }
 
     var body: some View {

@@ -8,10 +8,12 @@ import SwiftUI
 /// (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 4) — only `viewModel` (for reads) and `send`
 /// (for actions).
 public struct CounterView: View {
-    let viewModel: CounterViewModel
+    // The composition root builds the view model; the view RETAINS it (`@State`), so the
+    // same instance survives SwiftUI re-running this initializer (PRD-X-05 A3).
+    @State private var viewModel: CounterViewModel
 
     public init(viewModel: CounterViewModel) {
-        self.viewModel = viewModel
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {

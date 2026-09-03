@@ -7,10 +7,14 @@ import SwiftUI
 /// través de `ScreenContainer` — nunca referencia `{{Feature}}Logic`{{#api}}, `{{Feature}}Service`{{/api}}{{#local}}, `{{Feature}}Store`{{/local}}
 /// ni `APIService`.
 public struct {{Feature}}View: View {
-    let viewModel: {{Feature}}ViewModel
+    // The composition root builds the view model; the view RETAINS it. `@State` keeps the
+    // same instance alive when SwiftUI re-runs this initializer (a navigation destination
+    // builder during a push does) — with `let`, the instance that received `.load` could
+    // be replaced by one that never does, leaving the screen empty with no error.
+    @State private var viewModel: {{Feature}}ViewModel
 
     public init(viewModel: {{Feature}}ViewModel) {
-        self.viewModel = viewModel
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
@@ -18,7 +22,7 @@ public struct {{Feature}}View: View {
             List(viewModel.items) { item in
                 Text(item.title)
             }
-            .onAppear {
+            .task {
                 send(.load)
             }
         }

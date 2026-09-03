@@ -7,11 +7,14 @@ import SwiftUI
 /// list, and `send(.add(text))`. Never references `NotesLogic`/`NotesStore`/SwiftData
 /// (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 4).
 public struct NotesView: View {
-    let viewModel: NotesViewModel
+    // The composition root builds the view model; the view RETAINS it (`@State`), so the
+    // instance that receives `.load` is the one that stays on screen even if SwiftUI
+    // re-runs this initializer during a push (PRD-X-05 A3).
+    @State private var viewModel: NotesViewModel
     @State private var draftText = ""
 
     public init(viewModel: NotesViewModel) {
-        self.viewModel = viewModel
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
@@ -39,7 +42,7 @@ public struct NotesView: View {
                 }
                 .padding()
             }
-            .onAppear {
+            .task {
                 send(.load)
             }
         }

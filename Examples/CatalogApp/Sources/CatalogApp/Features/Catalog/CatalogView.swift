@@ -8,10 +8,13 @@ import SwiftUI
 /// references `CatalogLogic`/`CatalogService`/`CatalogStore`
 /// (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 4).
 public struct CatalogView: View {
-    let viewModel: CatalogViewModel
+    // The composition root builds the view model; the view RETAINS it (`@State`), so the
+    // instance that receives `.load` is the one that stays on screen even if SwiftUI
+    // re-runs this initializer during a push (PRD-X-05 A3).
+    @State private var viewModel: CatalogViewModel
 
     public init(viewModel: CatalogViewModel) {
-        self.viewModel = viewModel
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
@@ -19,7 +22,7 @@ public struct CatalogView: View {
             List(viewModel.items) { item in
                 Text(item.title)
             }
-            .onAppear {
+            .task {
                 send(.load)
             }
         }
