@@ -121,6 +121,32 @@ public protocol {{Feature}}LogicProtocol: Logic {
     func load() async throws -> [{{Feature}}Item]
 {{/both}}
 }
+{{#noService}}
+
+// MARK: - Servicing (pendiente — generate-feature --no-service)
+
+// TODO: generado con --no-service: este protocolo es un placeholder solo para que
+// {{Feature}}Logic compile. Dale una conformidad concreta y regístrala en {{Feature}}Module
+// (ver su // TODO), o vuelve a generar con --service-from <FeatureExistente> para reutilizar
+// un Servicing real en su lugar.
+public protocol {{Feature}}Servicing: Sendable {
+    func fetchItems() async throws(APIError) -> [{{Feature}}Item]
+}
+{{/noService}}
+{{#noStore}}
+
+// MARK: - Storing (pendiente — generate-feature --no-store)
+
+// TODO: generado con --no-store: este protocolo es un placeholder solo para que
+// {{Feature}}Logic compile. Dale una conformidad concreta y regístrala en {{Feature}}Module
+// (ver su // TODO), o vuelve a generar con --store-from <FeatureExistente> para reutilizar
+// un Storing real en su lugar.
+public protocol {{Feature}}Storing: Sendable {
+    func fetchAll() async throws -> [{{Feature}}Item]
+
+    func save(_ item: {{Feature}}Item) async throws
+}
+{{/noStore}}
 
 /// Toda la lógica de negocio de este feature — nunca en el ViewModel (que solo orquesta) ni
 {{#api}}
@@ -139,10 +165,10 @@ public protocol {{Feature}}LogicProtocol: Logic {
 /// actor de quien la llama.
 public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
 {{#api}}
-    private let {{feature}}Service: any {{Feature}}Servicing
+    private let {{feature}}Service: any {{ServicingType}}
 {{/api}}
 {{#local}}
-    private let {{feature}}Store: any {{Feature}}Storing
+    private let {{feature}}Store: any {{StoringType}}
 {{/local}}
 
 {{#both}}
@@ -151,21 +177,43 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
     ///   - {{feature}}Store: La caché local. Inyectada como protocolo — nunca el
     ///     `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store` concreto
     ///.
-    public init({{feature}}Service: any {{Feature}}Servicing, {{feature}}Store: any {{Feature}}Storing) {
+    public init({{feature}}Service: any {{ServicingType}}, {{feature}}Store: any {{StoringType}}) {
         self.{{feature}}Service = {{feature}}Service
         self.{{feature}}Store = {{feature}}Store
     }
 
     public func cached() async -> [{{Feature}}Item] {
+{{#storeFrom}}
+        // {{feature}}Store is `any {{StoringType}}` (--store-from {{StoreFeature}}): it returns
+        // `[{{StoreFeature}}Item]`, mapped field-by-field into this feature's own
+        // `{{Feature}}Item` — every domain item this generator produces is `{ id, title }`-
+        // shaped, so this always compiles; widen it by hand once either type grows real
+        // fields of its own.
+        (try? await {{feature}}Store.fetchAll())?.map { {{Feature}}Item(id: $0.id, title: $0.title) } ?? []
+{{/storeFrom}}
+{{^storeFrom}}
         (try? await {{feature}}Store.fetchAll()) ?? []
+{{/storeFrom}}
     }
 
     public func refresh() async throws -> [{{Feature}}Item] {
         do {
+{{#serviceFrom}}
+            // {{feature}}Service is `any {{ServicingType}}` (--service-from {{ServiceFeature}}):
+            // same `{ id, title }` mapping as cached() above, on the way in this time.
+            let items = try await {{feature}}Service.fetchItems().map { {{Feature}}Item(id: $0.id, title: $0.title) }
+{{/serviceFrom}}
+{{^serviceFrom}}
             let items = try await {{feature}}Service.fetchItems()
+{{/serviceFrom}}
             // Best-effort: los items frescos se devuelven aunque falle persistirlos — un
             // fallo de caché no debe convertir un refresh exitoso en un error.
+{{#storeFrom}}
+            try? await {{feature}}Store.replaceAll(items.map { {{StoreFeature}}Item(id: $0.id, title: $0.title) })
+{{/storeFrom}}
+{{^storeFrom}}
             try? await {{feature}}Store.replaceAll(items)
+{{/storeFrom}}
             return items
         } catch {
             throw Self.mapError(error)
@@ -185,13 +233,23 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
     /// - Parameter {{feature}}Service: La única llamada a red de este feature. Inyectada
     ///   como protocolo — nunca `{{Feature}}Service` directamente
     ///.
-    public init({{feature}}Service: any {{Feature}}Servicing) {
+    public init({{feature}}Service: any {{ServicingType}}) {
         self.{{feature}}Service = {{feature}}Service
     }
 
     public func load() async throws -> [{{Feature}}Item] {
         do {
+{{#serviceFrom}}
+            // {{feature}}Service is `any {{ServicingType}}` (--service-from {{ServiceFeature}}): it
+            // returns `[{{ServiceFeature}}Item]`, mapped field-by-field into this feature's own
+            // `{{Feature}}Item` — every domain item this generator produces is `{ id, title }`-
+            // shaped, so this always compiles; widen it by hand once either type grows real
+            // fields of its own.
+            return try await {{feature}}Service.fetchItems().map { {{Feature}}Item(id: $0.id, title: $0.title) }
+{{/serviceFrom}}
+{{^serviceFrom}}
             return try await {{feature}}Service.fetchItems()
+{{/serviceFrom}}
         } catch {
             throw Self.mapError(error)
         }
@@ -209,13 +267,20 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
     /// - Parameter {{feature}}Store: La única dependencia de este feature. Inyectada como
     ///   protocolo — nunca `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store`
     ///   directamente.
-    public init({{feature}}Store: any {{Feature}}Storing) {
+    public init({{feature}}Store: any {{StoringType}}) {
         self.{{feature}}Store = {{feature}}Store
     }
 
     public func load() async throws -> [{{Feature}}Item] {
         do {
+{{#storeFrom}}
+            // {{feature}}Store is `any {{StoringType}}` (--store-from {{StoreFeature}}): same
+            // `{ id, title }` mapping as the api-only variant does for its Service.
+            return try await {{feature}}Store.fetchAll().map { {{Feature}}Item(id: $0.id, title: $0.title) }
+{{/storeFrom}}
+{{^storeFrom}}
             return try await {{feature}}Store.fetchAll()
+{{/storeFrom}}
         } catch {
             throw {{Feature}}Error.storageFailure
         }

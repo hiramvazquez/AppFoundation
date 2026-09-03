@@ -90,4 +90,74 @@ struct TemplateEngineTests {
         #expect(!result.contains("store.fetchAll()"))
         #expect(!result.contains("cached()"))
     }
+
+    // MARK: - A4 (PRD-X-05): --service-from / --store-from / --no-service / --no-store
+    //
+    // The plugin computes `ServicingType`/`StoringType`/`ServiceMockType`/`StoreMockType` as
+    // whole substitution strings (e.g. "ProductsServicing" instead of "DetailServicing") —
+    // these tests prove the engine renders those precomputed types into a Logic.swift.txt-
+    // shaped fragment exactly like a hardcoded `{{Feature}}Servicing` would, and that the
+    // `noService`/`serviceTestable` flags gate the right blocks.
+
+    @Test("--service-from: a reused ServicingType renders instead of the feature's own")
+    func rendersReusedServicingType() {
+        let template = "private let detailService: any {{ServicingType}}"
+        let result = TemplateEngine.render(
+            template,
+            substitutions: ["ServicingType": "ProductsServicing"],
+            flags: [:]
+        )
+        #expect(result == "private let detailService: any ProductsServicing")
+    }
+
+    @Test("--no-service: a placeholder Servicing protocol renders with its TODO, and only then")
+    func rendersNoServicePlaceholder() {
+        let template = """
+            {{#noService}}
+            // TODO: placeholder
+            public protocol {{Feature}}Servicing: Sendable {}
+            {{/noService}}
+            """
+        let generated = TemplateEngine.render(
+            template,
+            substitutions: ["Feature": "Detail"],
+            flags: ["noService": true]
+        )
+        #expect(generated.contains("TODO"))
+        #expect(generated.contains("protocol DetailServicing"))
+
+        let reused = TemplateEngine.render(
+            template,
+            substitutions: ["Feature": "Detail"],
+            flags: ["noService": false]
+        )
+        #expect(reused.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    @Test("serviceTestable gates LogicTests between a real mock and a TODO comment")
+    func rendersServiceTestableGate() {
+        let template = """
+            {{#serviceTestable}}
+            let service = {{ServiceMockType}}()
+            {{/serviceTestable}}
+            {{^serviceTestable}}
+            // TODO: no mock available
+            {{/serviceTestable}}
+            """
+        let reused = TemplateEngine.render(
+            template,
+            substitutions: ["ServiceMockType": "ProductsServiceMock"],
+            flags: ["serviceTestable": true]
+        )
+        #expect(reused.contains("ProductsServiceMock()"))
+        #expect(!reused.contains("TODO"))
+
+        let pending = TemplateEngine.render(
+            template,
+            substitutions: ["ServiceMockType": "DetailServiceMock"],
+            flags: ["serviceTestable": false]
+        )
+        #expect(pending.contains("TODO"))
+        #expect(!pending.contains("DetailServiceMock"))
+    }
 }

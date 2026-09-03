@@ -1,10 +1,10 @@
 import AppFoundation
-{{#api}}
+{{#newService}}
 import CoreNetworking
-{{/api}}
-{{#local}}
+{{/newService}}
+{{#newStore}}
 import SwiftData
-{{/local}}
+{{/newStore}}
 import Foundation
 
 /// Registra el feature {{Feature}} en un `Container`: el composition root es el único
@@ -13,54 +13,59 @@ import Foundation
 /// cuenta (`ArchLint.R10`).
 ///
 /// ```swift
-{{#api}}
+{{#newService}}
+{{#newStore}}
+/// Container.shared.register(modules: [try! {{Feature}}Module(baseURL: URL(string: "https://api.example.com")!)])
+{{/newStore}}
+{{^newStore}}
 /// Container.shared.register(modules: [{{Feature}}Module(baseURL: URL(string: "https://api.example.com")!)])
-{{/api}}
-{{^api}}
-{{#local}}
+{{/newStore}}
+{{/newService}}
+{{^newService}}
+{{#newStore}}
 /// Container.shared.register(modules: [try! {{Feature}}Module()])
-{{/local}}
-{{^local}}
+{{/newStore}}
+{{^newStore}}
 /// Container.shared.register(modules: [{{Feature}}Module()])
-{{/local}}
-{{/api}}
+{{/newStore}}
+{{/newService}}
 /// // Vista raíz:
 /// {{Feature}}View(viewModel: Container.shared.resolve())
 /// ```
 public struct {{Feature}}Module: DependencyModule {
-{{#api}}
+{{#newService}}
     private let baseURL: URL
-{{/api}}
-{{#local}}
+{{/newService}}
+{{#newStore}}
     private let modelContainer: ModelContainer
-{{/local}}
+{{/newStore}}
 
-{{#api}}
-{{#local}}
+{{#newService}}
+{{#newStore}}
     public init(baseURL: URL, modelContainer: ModelContainer? = nil) throws {
         self.baseURL = baseURL
         self.modelContainer = try modelContainer ?? ModelContainer(for: {{Feature}}Record.self)
     }
-{{/local}}
-{{^local}}
+{{/newStore}}
+{{^newStore}}
     public init(baseURL: URL) {
         self.baseURL = baseURL
     }
-{{/local}}
-{{/api}}
-{{^api}}
-{{#local}}
+{{/newStore}}
+{{/newService}}
+{{^newService}}
+{{#newStore}}
     public init(modelContainer: ModelContainer? = nil) throws {
         self.modelContainer = try modelContainer ?? ModelContainer(for: {{Feature}}Record.self)
     }
-{{/local}}
-{{^local}}
+{{/newStore}}
+{{^newStore}}
     public init() {}
-{{/local}}
-{{/api}}
+{{/newStore}}
+{{/newService}}
 
     public func register(in container: Container) {
-{{#api}}
+{{#newService}}
         // MARK: Networking wiring
         container.register(APIServiceProtocol.self) { [baseURL] _ in
             APIService(configuration: NetworkingConfiguration(baseURL: baseURL))
@@ -70,14 +75,40 @@ public struct {{Feature}}Module: DependencyModule {
         container.register({{Feature}}Servicing.self) { c in
             {{Feature}}Service(api: c.resolve())
         }
-{{/api}}
-{{#local}}
+{{/newService}}
+{{#serviceFrom}}
+        // MARK: Service (reutilizado)
+        // {{Feature}}Logic depende de 'any {{ServiceFeature}}Servicing' — {{ServiceFeature}}Module ya
+        // lo registra, así que aquí no hay nada que registrar. Recuerda registrar también
+        // {{ServiceFeature}}Module en el Container.
+{{/serviceFrom}}
+{{#noService}}
+        // MARK: Service (pendiente)
+        // TODO: registra {{Feature}}Servicing.self — {{Feature}}Logic no resuelve sin una
+        // implementación concreta (o vuelve a generar con --service-from <FeatureExistente>
+        // para reutilizar una real).
+{{/noService}}
+{{#newStore}}
 
         // MARK: Store
         container.register({{Feature}}Storing.self) { [modelContainer] _ in
             SwiftData{{Feature}}Store(modelContainer: modelContainer)
         }
-{{/local}}
+{{/newStore}}
+{{#storeFrom}}
+
+        // MARK: Store (reutilizado)
+        // {{Feature}}Logic depende de 'any {{StoreFeature}}Storing' — {{StoreFeature}}Module ya lo
+        // registra, así que aquí no hay nada que registrar. Recuerda registrar también
+        // {{StoreFeature}}Module en el Container.
+{{/storeFrom}}
+{{#noStore}}
+
+        // MARK: Store (pendiente)
+        // TODO: registra {{Feature}}Storing.self — {{Feature}}Logic no resuelve sin una
+        // implementación concreta (o vuelve a generar con --store-from <FeatureExistente>
+        // para reutilizar una real).
+{{/noStore}}
 
         // MARK: Logic
 {{#both}}

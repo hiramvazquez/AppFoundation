@@ -72,6 +72,6 @@ let viewModel = ProfileViewModel(logic: LogicMock(), clock: ManualClock())
 ### `ArchLintTests`/`GenerateFeatureSupportTests`
 
 Los propios plugins (<doc:Generator>, <doc:Lint>) tienen su suite: `ArchLintTests` corre
-`archlint` contra fixtures `Good`/`Bad` por regla (R1-R11); `GenerateFeatureSupportTests`
+`archlint` contra fixtures `Good`/`Bad` por regla (R1-R12); `GenerateFeatureSupportTests`
 prueba el motor de plantillas (`{{Feature}}`, bloques `{{#flag}}…{{/flag}}`) contra el
 mismo fichero que usa el plugin — un symlink, no una copia, así que nunca se desincronizan.

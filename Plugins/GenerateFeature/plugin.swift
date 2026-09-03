@@ -9,19 +9,29 @@ import PackagePlugin
 
 /// `swift package --allow-writing-to-package-directory generate-feature <Nombre> [--api]
 /// [--local] [--module] [--analytics] [--no-logic] [--no-tests] [--path Features]
-/// [--dry-run] [--target NAME] [--route AppRoute.xxx]`
+/// [--dry-run] [--target NAME] [--route AppRoute.xxx] [--no-service] [--no-store]
+/// [--service-from <Feature>] [--store-from <Feature>]`
 /// (`AGENTS.md`).
 ///
 /// Genera el cascarón completo View → ViewModel → Logic → Services/Stores de una feature
 /// desde las plantillas de texto en `AppFoundation/Templates/` — nunca desde código Swift
 /// embebido, para que sigan siendo legibles (y editables) por un humano o un agente que
 /// prefiera copiar a mano.
+///
+/// `--no-service`/`--no-store` (PRD-X-05, A4): la Logic sigue dependiendo de `any
+/// XxxServicing`/`any XxxStoring`, pero no se genera el `XxxService`/`XxxStore` concreto ni
+/// sus mocks/tests — el `XxxModule` deja un `// TODO` donde iría el registro.
+/// `--service-from <Feature>`/`--store-from <Feature>` reutilizan el `Servicing`/`Storing`
+/// de OTRO feature ya generado (misma idea, pero con una implementación real: nada de TODO,
+/// el `XxxModule` no registra nada porque el feature reutilizado ya lo hace). Ninguna de las
+/// dos combina con su opuesta (`--no-service` + `--service-from` es un error), y ambas
+/// implican `--api`/`--local` respectivamente.
 @main
 struct GenerateFeaturePlugin: CommandPlugin {
     func performCommand(context: PluginContext, arguments: [String]) async throws {
         var extractor = ArgumentExtractor(arguments)
-        let api = extractor.extractFlag(named: "api") > 0
-        let local = extractor.extractFlag(named: "local") > 0
+        let rawApi = extractor.extractFlag(named: "api") > 0
+        let rawLocal = extractor.extractFlag(named: "local") > 0
         let module = extractor.extractFlag(named: "module") > 0
         let analytics = extractor.extractFlag(named: "analytics") > 0
         let noLogic = extractor.extractFlag(named: "no-logic") > 0
@@ -30,6 +40,10 @@ struct GenerateFeaturePlugin: CommandPlugin {
         let pathOption = extractor.extractOption(named: "path").first ?? "Features"
         let targetOption = extractor.extractOption(named: "target").first
         let routeOption = extractor.extractOption(named: "route").first
+        let noServiceFlag = extractor.extractFlag(named: "no-service") > 0
+        let noStoreFlag = extractor.extractFlag(named: "no-store") > 0
+        let serviceFromRaw = extractor.extractOption(named: "service-from").first
+        let storeFromRaw = extractor.extractOption(named: "store-from").first
         let remaining = extractor.remainingArguments
 
         guard let rawName = remaining.first, !rawName.isEmpty else {
@@ -37,6 +51,25 @@ struct GenerateFeaturePlugin: CommandPlugin {
         }
         let feature = Self.pascalCase(rawName)
         let featureLower = Self.camelCase(feature)
+
+        if noServiceFlag, serviceFromRaw != nil { throw GenerateFeatureError.conflictingServiceOptions }
+        if noStoreFlag, storeFromRaw != nil { throw GenerateFeatureError.conflictingStoreOptions }
+        let serviceFrom = serviceFromRaw.map(Self.pascalCase)
+        let storeFrom = storeFromRaw.map(Self.pascalCase)
+
+        // --no-service/--service-from only mean something once the Logic is api-shaped —
+        // and symmetrically for --no-store/--store-from and --local — so they imply it
+        // instead of requiring it spelled out twice.
+        let api = rawApi || noServiceFlag || serviceFrom != nil
+        let local = rawLocal || noStoreFlag || storeFrom != nil
+        // `both` (api && local) generates tests that exercise the service AND the store
+        // together in the same @Test — there is no mock at all to test against for a bare
+        // --no-service/--no-store, so that combination is refused rather than silently
+        // generating LogicTests with a hole in them. --service-from/--store-from (reused,
+        // real mocks) have no such problem and combine with `both` freely.
+        if (noServiceFlag || noStoreFlag), api, local {
+            throw GenerateFeatureError.noServiceOrStoreWithBoth
+        }
 
         guard let templatesDirectory = Self.findTemplatesDirectory(in: context.package) else {
             throw GenerateFeatureError.templatesNotFound
@@ -65,18 +98,58 @@ struct GenerateFeaturePlugin: CommandPlugin {
 
         let both = api && local
         let none = !api && !local
+        // "new" = this run generates a concrete Xxx{Service,Store} of its own (with its
+        // mock/tests). False for both --no-service/--no-store (nothing generated, a TODO
+        // instead) and --service-from/--store-from (an existing one is reused).
+        let newService = api && !noServiceFlag && serviceFrom == nil
+        let newStore = local && !noStoreFlag && storeFrom == nil
         let flags: [String: Bool] = [
             "api": api,
             "local": local,
             "both": both,
             "none": none,
             "module": module,
-            "analytics": analytics
+            "analytics": analytics,
+            "newService": newService,
+            "newStore": newStore,
+            "serviceFrom": serviceFrom != nil,
+            "storeFrom": storeFrom != nil,
+            "noService": noServiceFlag,
+            "noStore": noStoreFlag,
+            // Whether a LogicTests block can actually construct a mock for this side —
+            // true for a freshly-generated Service/Store AND for one reused with
+            // --service-from/--store-from, false only for a bare --no-service/--no-store.
+            "serviceTestable": newService || serviceFrom != nil,
+            "storeTestable": newStore || storeFrom != nil
         ]
+        // `any XxxServicing`/`any XxxStoring` by default; `any <ServiceFeature>Servicing`/
+        // `any <StoreFeature>Storing` when reused. The Logic/Module/LogicTests templates
+        // reference these instead of hardcoding `{{Feature}}Servicing`/`{{Feature}}Storing`
+        // so the same template renders both the normal and the reuse case.
+        let servicingType = serviceFrom.map { "\($0)Servicing" } ?? "\(feature)Servicing"
+        let storingType = storeFrom.map { "\($0)Storing" } ?? "\(feature)Storing"
+        let serviceMockType = serviceFrom.map { "\($0)ServiceMock" } ?? "\(feature)ServiceMock"
+        let storeMockType = storeFrom.map { "InMemory\($0)Store" } ?? "InMemory\(feature)Store"
+        // What `{{feature}}Service.fetchItems()`/`{{feature}}Store.fetchAll()` actually
+        // return: `{{ServiceFeature}}Item`/`{{StoreFeature}}Item` when reused, this
+        // feature's own `{{Feature}}Item` otherwise. LogicTests builds its mock inputs with
+        // this type — Logic itself maps back to `{{Feature}}Item` field-by-field (both
+        // domain items are always `{ id, title }`-shaped, since this generator produces
+        // both).
+        let serviceItemType = serviceFrom.map { "\($0)Item" } ?? "\(feature)Item"
+        let storeItemType = storeFrom.map { "\($0)Item" } ?? "\(feature)Item"
         let substitutions: [String: String] = [
             "Feature": feature,
             "feature": featureLower,
-            "Module": target.moduleName
+            "Module": target.moduleName,
+            "ServiceItemType": serviceItemType,
+            "StoreItemType": storeItemType,
+            "ServiceFeature": serviceFrom ?? "",
+            "StoreFeature": storeFrom ?? "",
+            "ServicingType": servicingType,
+            "StoringType": storingType,
+            "ServiceMockType": serviceMockType,
+            "StoreMockType": storeMockType
         ]
 
         let engine = TemplateEngine.self
@@ -128,7 +201,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
                 (uiDir.appendingPathComponent("\(feature)ViewModel.swift"), try render("ViewModel.swift.txt"))
             )
             writes.append((coreDir.appendingPathComponent("\(feature)Logic.swift"), try render("Logic.swift.txt")))
-            if api {
+            if newService {
                 writes.append(
                     (
                         coreDir.appendingPathComponent("Services").appendingPathComponent("\(feature)Service.swift"),
@@ -136,7 +209,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
                     )
                 )
             }
-            if local {
+            if newStore {
                 writes.append(
                     (
                         coreDir.appendingPathComponent("Stores").appendingPathComponent("\(feature)Store.swift"),
@@ -168,7 +241,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
                         try render("LogicTests.swift.txt")
                     )
                 )
-                if api {
+                if newService {
                     writes.append(
                         (
                             featureTestDir.appendingPathComponent("Mocks")
@@ -184,7 +257,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
                         )
                     )
                 }
-                if local {
+                if newStore {
                     writes.append(
                         (
                             featureTestDir.appendingPathComponent("Mocks")
@@ -226,7 +299,11 @@ struct GenerateFeaturePlugin: CommandPlugin {
             module: module,
             noLogic: noLogic,
             route: routeOption,
-            targetName: target.name
+            targetName: target.name,
+            noService: noServiceFlag,
+            noStore: noStoreFlag,
+            serviceFrom: serviceFrom,
+            storeFrom: storeFrom
         )
     }
 
@@ -290,7 +367,11 @@ struct GenerateFeaturePlugin: CommandPlugin {
         module: Bool,
         noLogic: Bool,
         route: String?,
-        targetName: String
+        targetName: String,
+        noService: Bool,
+        noStore: Bool,
+        serviceFrom: String?,
+        storeFrom: String?
     ) {
         print("")
         print("Pasos manuales — generate-feature nunca edita el .xcodeproj ni el enum AppRoute:")
@@ -321,6 +402,32 @@ struct GenerateFeaturePlugin: CommandPlugin {
             print("--no-logic: \(feature)ViewModel hereda de BaseViewModel directamente, sin Logic —")
             print("usa esto solo para una pantalla realmente sin regla de negocio propia.")
         }
+        if noService {
+            print("")
+            print("--no-service: no se generó \(feature)Service — \(feature)Logic depende de 'any")
+            print("\(feature)Servicing', declarado como placeholder en \(feature)Logic.swift. Define un tipo")
+            print("concreto y regístralo en \(feature)Module (deja un // TODO ahí mismo), o vuelve a")
+            print("generar con --service-from <FeatureExistente> para reutilizar uno real.")
+        }
+        if noStore {
+            print("")
+            print("--no-store: no se generó \(feature)Store — \(feature)Logic depende de 'any")
+            print("\(feature)Storing', declarado como placeholder en \(feature)Logic.swift. Define un tipo")
+            print("concreto y regístralo en \(feature)Module (deja un // TODO ahí mismo), o vuelve a")
+            print("generar con --store-from <FeatureExistente> para reutilizar uno real.")
+        }
+        if let serviceFrom {
+            print("")
+            print("--service-from \(serviceFrom): \(feature)Logic depende de 'any \(serviceFrom)Servicing' —")
+            print("asegúrate de que \(serviceFrom)Module también está registrado en el Container (es quien")
+            print("provee esa dependencia; \(feature)Module no la registra).")
+        }
+        if let storeFrom {
+            print("")
+            print("--store-from \(storeFrom): \(feature)Logic depende de 'any \(storeFrom)Storing' —")
+            print("asegúrate de que \(storeFrom)Module también está registrado en el Container (es quien")
+            print("provee esa dependencia; \(feature)Module no la registra).")
+        }
     }
 }
 
@@ -329,17 +436,34 @@ enum GenerateFeatureError: Error, CustomStringConvertible {
     case templatesNotFound
     case templateMissing(String)
     case noTarget
+    case conflictingServiceOptions
+    case conflictingStoreOptions
+    case noServiceOrStoreWithBoth
 
     var description: String {
         switch self {
         case .missingFeatureName:
-            return "Falta el nombre del feature: swift package generate-feature <Nombre> [--api] [--local] …"
+            return
+                "Falta el nombre del feature: swift package generate-feature <Nombre> [--api] [--local] "
+                + "[--no-service] [--no-store] [--service-from <Feature>] [--store-from <Feature>] …"
         case .templatesNotFound:
             return "No se encontró AppFoundation/Templates — ¿AppFoundation es una dependencia de este paquete?"
         case .templateMissing(let name):
             return "Falta la plantilla '\(name)' en AppFoundation/Templates."
         case .noTarget:
             return "No se encontró un target de origen (no-test) donde generar el feature. Usa --target NAME."
+        case .conflictingServiceOptions:
+            return "--no-service y --service-from son mutuamente excluyentes: no generar un Service nuevo, "
+                + "o reutilizar uno existente — nunca las dos cosas."
+        case .conflictingStoreOptions:
+            return "--no-store y --store-from son mutuamente excluyentes: no generar un Store nuevo, o "
+                + "reutilizar uno existente — nunca las dos cosas."
+        case .noServiceOrStoreWithBoth:
+            return
+                "--no-service/--no-store no se admiten junto con --api --local a la vez: los tests de "
+                + "Logic generados para esa combinación ejercitan el Service y el Store juntos en el mismo "
+                + "@Test, y no hay mock contra el que probar el lado omitido. Usa --service-from/"
+                + "--store-from (reutiliza uno real) en su lugar, o genera solo --api o solo --local."
         }
     }
 }

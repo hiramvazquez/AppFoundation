@@ -30,6 +30,23 @@ hueco para inyectar un tracker en la Logic), `--no-logic` (solo para una pantall
 regla de negocio propia — úsalo poco), `--no-tests`, `--path Features` (carpeta destino),
 `--dry-run` (lista lo que generaría sin escribir nada).
 
+¿La pantalla necesita el Service/Store de OTRO feature ya generado (p. ej. el detalle de un
+producto reutilizando `ProductsServicing`)? `--service-from <Feature>`/`--store-from
+<Feature>` en vez de generar uno nuevo: la Logic depende de `any <Feature>Servicing`/`any
+<Feature>Storing`, y no se genera `XxxService`/`XxxStore` — recuerda registrar también el
+`Module` del feature reutilizado.
+
+```bash
+swift package --allow-writing-to-package-directory generate-feature Products --api
+swift package --allow-writing-to-package-directory generate-feature Detail --api --service-from Products
+```
+
+Si todavía no hay ningún feature del que reutilizar, pero tampoco quieres un
+`XxxService`/`XxxStore` generado ahora mismo: `--no-service`/`--no-store` — la Logic recibe
+igualmente `any XxxServicing`/`any XxxStoring` (como placeholder con un `// TODO`), sin
+generar el tipo concreto ni sus mocks/tests. No combina con `--api --local` a la vez (usa
+`--service-from`/`--store-from` para ese caso).
+
 Ejemplo real:
 
 ```bash

@@ -30,19 +30,43 @@ struct ArchLintConfig {
     var storeSuffix = "Store"
     var moduleSuffix = "Module"
     var disabledRules: Set<String> = []
+    /// The user-facing ignore list. These are the defaults; a file that sets `ignore:`
+    /// REPLACES them (see `parse`). Build products and dependency checkouts are not in
+    /// here on purpose — they live in `alwaysIgnoreGlobs`, which no `ignore:` can drop.
     var ignoreGlobs: [String] = [
         "**/Tests/**",
         "**/*Tests.swift",
         "**/*Mock.swift",
         "**/*Mocks.swift",
         "**/*Spy.swift",
-        "**/*Stub.swift",
-        "**/.build/**",
-        "**/.swiftpm/**"
+        "**/*Stub.swift"
     ]
     var strict = false
 
+    /// Globs applied on EVERY run, before and regardless of `ignoreGlobs`: SwiftPM's build
+    /// directory (`.build/checkouts` holds every dependency's sources — AppFoundation's own
+    /// "bad" lint fixtures among them), `.swiftpm`, Xcode's `DerivedData` and the VCS
+    /// directory. Kept apart from `ignoreGlobs` because an explicit `ignore:` replaces that
+    /// list, and when `.build`/`.swiftpm` lived there a consumer whose `.archlint.yml`
+    /// listed anything at all (the one `archinit` writes does) silently lost them — so
+    /// `swift package archlint` without `--path` walked into `.build/checkouts` and failed
+    /// on someone else's code (PRD-X-05, A1).
+    static let alwaysIgnoreGlobs: [String] = [
+        "**/.build/**",
+        "**/.swiftpm/**",
+        "**/DerivedData/**",
+        "**/.git/**"
+    ]
+
     func isEnabled(_ rule: String) -> Bool { !disabledRules.contains(rule) }
+
+    /// Whether `relativePath` (relative to `--root`, or absolute when the file lives
+    /// outside it) is excluded from analysis: matched by `alwaysIgnoreGlobs` or by the
+    /// (default or user-provided) `ignoreGlobs`.
+    func isIgnored(relativePath: String) -> Bool {
+        Self.alwaysIgnoreGlobs.contains { Glob.matches($0, path: relativePath) }
+            || ignoreGlobs.contains { Glob.matches($0, path: relativePath) }
+    }
 
     static let empty = ArchLintConfig()
 
@@ -61,6 +85,7 @@ struct ArchLintConfig {
         var config = ArchLintConfig()
         // A file that sets `ignore:` explicitly replaces the built-in defaults rather than
         // appending to them — otherwise there would be no way to un-ignore `Tests/**`.
+        // `alwaysIgnoreGlobs` is untouched by this: it is not part of `ignoreGlobs`.
         var ignoreExplicit = false
 
         var pendingListKey: String?

@@ -38,6 +38,21 @@ struct InitDecl {
     let col: Int
 }
 
+/// A `let`/`var name: Type` stored-property-shaped declaration (R12: `let`/`var viewModel:`
+/// in a View). Lexical, like every other shape here: it also matches a typed local
+/// (`let x: Int = 1` inside a function), which is an accepted over-approximation for a
+/// warning-severity rule — the same trade-off R11 makes for `@MainActor`.
+struct PropertyDecl {
+    let name: String
+    /// Whether an `@State` attribute appears on the same line as `let`/`var`, or on the
+    /// line directly above it — the two shapes `archinit`-generated code and hand-written
+    /// code both use (`@State private var x: T` on one line, or `@State` alone above `var
+    /// x: T`).
+    let hasNearbyStateAttribute: Bool
+    let line: Int
+    let col: Int
+}
+
 /// An identifier token reference, kept separate from `Token` so rule code doesn't need to
 /// know about punctuation/strings/comments — only "this identifier appears here, and it
 /// isn't inside a `#if DEBUG`/`#Preview` exempt region."
@@ -62,6 +77,8 @@ struct ParsedFile {
     /// scaffolding routinely wires a real (non-mock) stack for convenience and is exempt
     /// from the layering rules, the same way it's exempt from shipping in a release build.
     let references: [IdentifierRef]
+    /// Every `let`/`var name: Type` declaration in the file (R12).
+    let properties: [PropertyDecl]
 }
 
 enum FileParser {
@@ -71,10 +88,22 @@ enum FileParser {
         var typeDecls: [TypeDecl] = []
         var inits: [InitDecl] = []
         var references: [IdentifierRef] = []
+        var properties: [PropertyDecl] = []
 
         let exemptRanges = Self.exemptRanges(tokens: tokens)
         func isExempt(_ index: Int) -> Bool {
             exemptRanges.contains { $0.contains(index) }
+        }
+
+        // Every line an `@State` attribute appears on (R12) — computed once up front so the
+        // property scan below can just ask "is @State on this line, or the one above?"
+        // without walking backward through modifiers/attributes token by token.
+        var stateAttributeLines: Set<Int> = []
+        for (idx, t) in tokens.enumerated()
+        where t.kind == .identifier && t.text == "State" && idx > 0 && tokens[idx - 1].kind == .punctuation
+            && tokens[idx - 1].text == "@"
+        {
+            stateAttributeLines.insert(t.line)
         }
 
         let typeKeywords: Set<String> = ["class", "struct", "enum", "actor", "protocol"]
@@ -193,6 +222,27 @@ enum FileParser {
                         continue
                     }
                 }
+
+                // Property-shaped declaration: `let`/`var name: …` — a typed local
+                // (`let x: Int = 1` inside a function) matches too, and is an accepted
+                // over-approximation (R12 is a warning, never an error).
+                if token.text == "let" || token.text == "var" {
+                    if i + 2 < tokens.count, tokens[i + 1].kind == .identifier,
+                        tokens[i + 2].kind == .punctuation, tokens[i + 2].text == ":"
+                    {
+                        let nameToken = tokens[i + 1]
+                        let hasNearbyState =
+                            stateAttributeLines.contains(token.line) || stateAttributeLines.contains(token.line - 1)
+                        properties.append(
+                            PropertyDecl(
+                                name: nameToken.text,
+                                hasNearbyStateAttribute: hasNearbyState,
+                                line: token.line,
+                                col: token.col
+                            )
+                        )
+                    }
+                }
             }
 
             i += 1
@@ -205,7 +255,8 @@ enum FileParser {
             importedModules: Set(imports.map(\.module)),
             typeDecls: typeDecls,
             inits: inits,
-            references: references
+            references: references,
+            properties: properties
         )
     }
 

@@ -11,21 +11,25 @@ struct {{Feature}}LogicTests {
 {{#both}}
     @Test("cached() returns what the store has")
     func cachedReturnsStoredItems() async throws {
-        let store = InMemory{{Feature}}Store()
-        let existing = {{Feature}}Item(title: "Existing")
+        let store = {{StoreMockType}}()
+        let existing = {{StoreItemType}}(title: "Existing")
         try await store.replaceAll([existing])
-        let logic = {{Feature}}Logic({{feature}}Service: {{Feature}}ServiceMock(), {{feature}}Store: store)
+        let logic = {{Feature}}Logic({{feature}}Service: {{ServiceMockType}}(), {{feature}}Store: store)
 
         let cached = await logic.cached()
 
-        #expect(cached == [existing])
+        // Not a direct `cached == [existing]`: with --store-from, {{StoreItemType}} and
+        // {{Feature}}Item are different (if equally `{ id, title }`-shaped) types, so Logic
+        // maps one into the other — compare the fields the mapping actually preserves.
+        #expect(cached.map(\.title) == [existing].map(\.title))
+        #expect(cached.map(\.id) == [existing].map(\.id))
     }
 
     @Test("cached() never throws — a store failure returns an empty list")
     func cachedNeverThrows() async {
         struct SomeStorageError: Error {}
-        let store = InMemory{{Feature}}Store(failureToThrow: SomeStorageError())
-        let logic = {{Feature}}Logic({{feature}}Service: {{Feature}}ServiceMock(), {{feature}}Store: store)
+        let store = {{StoreMockType}}(failureToThrow: SomeStorageError())
+        let logic = {{Feature}}Logic({{feature}}Service: {{ServiceMockType}}(), {{feature}}Store: store)
 
         let cached = await logic.cached()
 
@@ -34,24 +38,25 @@ struct {{Feature}}LogicTests {
 
     @Test("refresh() fetches from the service, persists, and returns the fresh items")
     func refreshFetchesPersistsAndReturns() async throws {
-        let fresh = [{{Feature}}Item(title: "Fresh 1"), {{Feature}}Item(title: "Fresh 2")]
-        let service = {{Feature}}ServiceMock(result: .success(fresh))
-        let store = InMemory{{Feature}}Store()
+        let fresh = [{{ServiceItemType}}(title: "Fresh 1"), {{ServiceItemType}}(title: "Fresh 2")]
+        let service = {{ServiceMockType}}(result: .success(fresh))
+        let store = {{StoreMockType}}()
         let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: store)
 
         let items = try await logic.refresh()
 
-        #expect(items == fresh)
+        #expect(items.map(\.title) == fresh.map(\.title))
+        #expect(items.map(\.id) == fresh.map(\.id))
         #expect(await service.fetchCalls.count == 1)
-        #expect(await store.replaceAllCalls.calls == [fresh])
+        #expect(await store.replaceAllCalls.calls.map { $0.map(\.title) } == [fresh.map(\.title)])
     }
 
     @Test("An offline service failure maps to {{Feature}}Error.offline")
     func offlineFailureMapsToDomainError() async {
-        let service = {{Feature}}ServiceMock(
+        let service = {{ServiceMockType}}(
             result: .failure(.stub(code: .transport, underlying: URLError(.notConnectedToInternet)))
         )
-        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: InMemory{{Feature}}Store())
+        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: {{StoreMockType}}())
 
         await #expect(throws: {{Feature}}Error.offline) {
             _ = try await logic.refresh()
@@ -60,8 +65,8 @@ struct {{Feature}}LogicTests {
 
     @Test("A 5xx service failure maps to {{Feature}}Error.server")
     func serverFailureMapsToDomainError() async {
-        let service = {{Feature}}ServiceMock(result: .failure(.stub(code: .httpStatus, statusCode: 503)))
-        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: InMemory{{Feature}}Store())
+        let service = {{ServiceMockType}}(result: .failure(.stub(code: .httpStatus, statusCode: 503)))
+        let logic = {{Feature}}Logic({{feature}}Service: service, {{feature}}Store: {{StoreMockType}}())
 
         await #expect(throws: {{Feature}}Error.server) {
             _ = try await logic.refresh()
@@ -70,21 +75,26 @@ struct {{Feature}}LogicTests {
 {{/both}}
 {{^both}}
 {{#api}}
+{{#serviceTestable}}
     @Test("load() returns what the service returns")
     func loadReturnsServiceItems() async throws {
-        let items = [{{Feature}}Item(title: "Hola mundo")]
-        let service = {{Feature}}ServiceMock(result: .success(items))
+        let items = [{{ServiceItemType}}(title: "Hola mundo")]
+        let service = {{ServiceMockType}}(result: .success(items))
         let logic = {{Feature}}Logic({{feature}}Service: service)
 
         let loaded = try await logic.load()
 
-        #expect(loaded == items)
+        // Not a direct `loaded == items`: with --service-from, {{ServiceItemType}} and
+        // {{Feature}}Item are different (if equally `{ id, title }`-shaped) types, so Logic
+        // maps one into the other — compare the fields the mapping actually preserves.
+        #expect(loaded.map(\.title) == items.map(\.title))
+        #expect(loaded.map(\.id) == items.map(\.id))
         #expect(await service.fetchCalls.count == 1)
     }
 
     @Test("An offline service failure maps to {{Feature}}Error.offline")
     func offlineFailureMapsToDomainError() async {
-        let service = {{Feature}}ServiceMock(
+        let service = {{ServiceMockType}}(
             result: .failure(.stub(code: .transport, underlying: URLError(.notConnectedToInternet)))
         )
         let logic = {{Feature}}Logic({{feature}}Service: service)
@@ -96,37 +106,56 @@ struct {{Feature}}LogicTests {
 
     @Test("A 5xx service failure maps to {{Feature}}Error.server")
     func serverFailureMapsToDomainError() async {
-        let service = {{Feature}}ServiceMock(result: .failure(.stub(code: .httpStatus, statusCode: 503)))
+        let service = {{ServiceMockType}}(result: .failure(.stub(code: .httpStatus, statusCode: 503)))
         let logic = {{Feature}}Logic({{feature}}Service: service)
 
         await #expect(throws: {{Feature}}Error.server) {
             _ = try await logic.load()
         }
     }
+{{/serviceTestable}}
+{{^serviceTestable}}
+    // TODO: generado con --no-service — no hay {{Feature}}ServiceMock contra el que probar
+    // {{Feature}}Logic.load(). Añade tests aquí cuando {{Feature}}Servicing tenga una
+    // implementación concreta registrada en {{Feature}}Module, o vuelve a generar con
+    // --service-from <FeatureExistente> para reutilizar un Servicing real (y su mock).
+{{/serviceTestable}}
 {{/api}}
 {{#local}}
+{{#storeTestable}}
     @Test("load() returns what the store has")
     func loadReturnsStoredItems() async throws {
-        let store = InMemory{{Feature}}Store()
-        let item = {{Feature}}Item(title: "Hola mundo")
+        let store = {{StoreMockType}}()
+        let item = {{StoreItemType}}(title: "Hola mundo")
         try await store.save(item)
         let logic = {{Feature}}Logic({{feature}}Store: store)
 
         let items = try await logic.load()
 
-        #expect(items == [item])
+        // Not a direct `items == [item]`: with --store-from, {{StoreItemType}} and
+        // {{Feature}}Item are different (if equally `{ id, title }`-shaped) types, so Logic
+        // maps one into the other — compare the fields the mapping actually preserves.
+        #expect(items.map(\.title) == [item].map(\.title))
+        #expect(items.map(\.id) == [item].map(\.id))
     }
 
     @Test("A store failure maps to {{Feature}}Error.storageFailure")
     func storeFailureMapsToDomainError() async {
         struct SomeStorageError: Error {}
-        let store = InMemory{{Feature}}Store(failureToThrow: SomeStorageError())
+        let store = {{StoreMockType}}(failureToThrow: SomeStorageError())
         let logic = {{Feature}}Logic({{feature}}Store: store)
 
         await #expect(throws: {{Feature}}Error.storageFailure) {
             _ = try await logic.load()
         }
     }
+{{/storeTestable}}
+{{^storeTestable}}
+    // TODO: generado con --no-store — no hay InMemory{{Feature}}Store contra el que probar
+    // {{Feature}}Logic.load(). Añade tests aquí cuando {{Feature}}Storing tenga una
+    // implementación concreta registrada en {{Feature}}Module, o vuelve a generar con
+    // --store-from <FeatureExistente> para reutilizar un Storing real (y su doble de test).
+{{/storeTestable}}
 {{/local}}
 {{#none}}
     @Test("load() returns the Hola mundo item")

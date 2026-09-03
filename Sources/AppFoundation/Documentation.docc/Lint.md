@@ -30,7 +30,7 @@ Sources/MiApp/Features/Login/LoginViewModel.swift:2:1: error: [ArchLint.R1] El V
 swift package archlint [--path DIR]
 ```
 
-### Las reglas (R1-R11)
+### Las reglas (R1-R12)
 
 Análisis léxico propio (tokens, `import`, declaraciones de tipo; ignora comentarios y
 strings), clasificando cada fichero por el sufijo de su nombre (`XxxViewModel.swift`,
@@ -51,6 +51,7 @@ strings), clasificando cada fichero por el sufijo de su nombre (`XxxViewModel.sw
 | **R9** | Logic/Service/Store no referencian `Router`/`Coordinator`/`DeepLink`. |
 | **R10** | `Container.shared`/`resolve(`/`@Inject` prohibidos fuera del `XxxModule` (composition root). |
 | **R11** | Aviso (no error): una Logic marcada `@MainActor` pierde su independencia de actor. |
+| **R12** | Aviso (no error): en una `*View.swift`, `let viewModel:`/`var viewModel:` sin `@State` en la misma línea o la anterior — un ViewModel transitorio se libera cuando SwiftUI reevalúa el builder de destino y pierde la acción `.load` (PRD-X-05, A3/A7). |
 
 ### `.archlint.yml`
 
@@ -69,6 +70,28 @@ disabled: [R11]                    # reglas desactivadas por id
 ignore:                            # rutas ignoradas (glob: '*' un segmento, '**' cualquiera)
   - Generated/**
 ```
+
+#### Qué se ignora, y qué se ignora siempre
+
+Hay dos listas, y conviene saber cuál es cuál:
+
+- **`ignore:`** — la lista del usuario. Sin fichero (o sin la clave), vale por defecto
+  `**/Tests/**`, `**/*Tests.swift`, `**/*Mock.swift`, `**/*Mocks.swift`, `**/*Spy.swift` y
+  `**/*Stub.swift`. Un `ignore:` explícito **reemplaza** esos defaults, no los amplía — es
+  la única forma de dejar de ignorar `Tests/**` si algún día lo necesitas. El `.archlint.yml`
+  que escribe `archinit` es explícito (`Tests/**` y `**/Mocks/**`), así que en un proyecto
+  inicializado con `archinit` los defaults ya no aplican.
+- **Siempre ignoradas** — `**/.build/**`, `**/.swiftpm/**`, `**/DerivedData/**` y
+  `**/.git/**`, aplicadas en toda ejecución, diga lo que diga `ignore:`. Ahí viven las
+  dependencias descargadas (`.build/checkouts` contiene las fuentes de cada dependencia,
+  incluidos los fixtures «malos» con los que AppFoundation prueba su propio linter) y los
+  productos de build; nunca tu código. Antes de 1.0.1 estas rutas vivían dentro de los
+  defaults de `ignore:`, y un `ignore:` explícito las borraba con el resto: `swift package
+  archlint` sin `--path` entraba en `.build/checkouts` y fallaba por código ajeno.
+
+El build-tool plugin (`ArchitectureLint`) no se ve afectado por nada de esto: recibe solo
+los `sourceFiles` del target. La distinción importa para el command plugin (`swift package
+archlint`), que sin `--path` recorre el directorio del paquete entero.
 
 ## Ver también
 

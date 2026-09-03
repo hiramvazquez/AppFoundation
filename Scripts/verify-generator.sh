@@ -104,6 +104,18 @@ swift package --package-path "$DEMO_DIR" --allow-writing-to-package-directory ge
 swift package --package-path "$DEMO_DIR" --allow-writing-to-package-directory generate-feature Catalog --api --local
 swift package --package-path "$DEMO_DIR" --allow-writing-to-package-directory generate-feature Counter
 
+log "A4 (PRD-X-05): generate-feature Products --api / Detail --api --service-from Products"
+swift package --package-path "$DEMO_DIR" --allow-writing-to-package-directory generate-feature Products --api
+swift package --package-path "$DEMO_DIR" --allow-writing-to-package-directory generate-feature Detail --api --service-from Products
+
+DETAIL_LOGIC="$DEMO_DIR/Sources/DemoApp/Features/Detail/DetailLogic.swift"
+grep -q "any ProductsServicing" "$DETAIL_LOGIC" || fail "DetailLogic no depende de 'any ProductsServicing' (--service-from no se aplicó)"
+grep -q "protocol DetailServicing" "$DETAIL_LOGIC" && fail "DetailLogic declaró un DetailServicing propio — --service-from debía reutilizar ProductsServicing, no generar uno nuevo"
+[ -f "$DEMO_DIR/Sources/DemoApp/Features/Detail/Services/DetailService.swift" ] && fail "--service-from no debía generar Detail/Services/DetailService.swift"
+[ -f "$DEMO_DIR/Tests/DemoAppTests/Features/Detail/Mocks/DetailServiceMock.swift" ] && fail "--service-from no debía generar DetailServiceMock.swift"
+grep -q "ProductsServiceMock" "$DEMO_DIR/Tests/DemoAppTests/Features/Detail/DetailLogicTests.swift" \
+    || fail "DetailLogicTests no reutiliza ProductsServiceMock"
+
 log "swift build (sin ArchitectureLint todavía)"
 swift build --package-path "$DEMO_DIR" || fail "swift build falló sobre el código generado"
 

@@ -121,11 +121,11 @@ for input in inputs {
     }
 }
 
+// `isIgnored` consults the user's `ignore:` AND the fixed `alwaysIgnoreGlobs` (`.build`,
+// `.swiftpm`, `DerivedData`, the VCS directory) — a directory scan from the package root
+// must never descend into dependency checkouts, whatever the config says.
 let candidateFiles = swiftFiles.sorted()
-    .filter { path in
-        let rel = relativePath(path, root: root)
-        return !config.ignoreGlobs.contains { Glob.matches($0, path: rel) }
-    }
+    .filter { path in !config.isIgnored(relativePath: relativePath(path, root: root)) }
 
 // MARK: - Parse + lint
 

@@ -5,7 +5,7 @@ import Testing
 
 /// Fixture-based tests: one "bad" file per rule (`Fixtures/Bad/Rn_*.swift`) proves the rule
 /// fires, and the "good" feature (`Fixtures/Good/*`, a small but complete Login feature
-/// shaped exactly like `AppFoundation/Examples/LoginApp`) proves none of R1-R11 false-fire
+/// shaped exactly like `AppFoundation/Examples/LoginApp`) proves none of R1-R12 false-fire
 /// on code that actually follows the architecture — including its `#if DEBUG`/`#Preview`
 /// block, which references the concrete Logic/Service/Store on purpose (same pattern as
 /// `LoginApp`'s `LoginPreview`).
@@ -136,6 +136,49 @@ struct ArchLintRuleTests {
         #expect(r11.first?.severity == .warning)
         // A warning never fails the build on its own.
         #expect(diags.filter { $0.severity == .error }.isEmpty)
+    }
+
+    @Test("R12: a View's `let viewModel:` (no @State) is a warning, not an error")
+    func r12FiresAsWarning() {
+        let file = parse("R12_BadView", in: "Bad")
+        let diags = diagnostics(for: [file])
+        let r12 = diags.filter { $0.rule == "R12" }
+        #expect(r12.count == 1)
+        #expect(r12.first?.severity == .warning)
+        #expect(diags.filter { $0.severity == .error }.isEmpty)
+    }
+
+    @Test("R12 does not fire on `@State private var viewModel:` (same line)")
+    func r12DoesNotFireOnSameLineState() {
+        let source = """
+            import SwiftUI
+
+            public struct BadView: View {
+                @State private var viewModel: BadViewModel
+
+                public var body: some View { Text("ok") }
+            }
+            """
+        let file = FileParser.parse(path: "BadView.swift", relativePath: "BadView.swift", source: source)
+        let diags = diagnostics(for: [file])
+        #expect(!diags.contains { $0.rule == "R12" })
+    }
+
+    @Test("R12 does not fire when @State sits on the line above `var viewModel:`")
+    func r12DoesNotFireOnPreviousLineState() {
+        let source = """
+            import SwiftUI
+
+            public struct BadView: View {
+                @State
+                private var viewModel: BadViewModel
+
+                public var body: some View { Text("ok") }
+            }
+            """
+        let file = FileParser.parse(path: "BadView.swift", relativePath: "BadView.swift", source: source)
+        let diags = diagnostics(for: [file])
+        #expect(!diags.contains { $0.rule == "R12" })
     }
 
     // MARK: - strict: true extends R1
@@ -314,5 +357,53 @@ struct ArchLintInternalsTests {
                 Glob.matches($0, path: "Tests/LoginAppTests/Features/Login/Mocks/LoginServiceMock.swift")
             }
         )
+    }
+
+    // MARK: - A1 (PRD-X-05): .build/.swiftpm/DerivedData/.git are never analyzed
+
+    @Test("An explicit ignore: of only Tests/** still never analyzes .build/.swiftpm/DerivedData/.git")
+    func explicitIgnoreNeverReachesBuildProducts() {
+        // Exactly what `archinit`'s generated `.archlint.yml` amounts to: an `ignore:` that
+        // REPLACES the defaults. Before `alwaysIgnoreGlobs` this dropped `**/.build/**`
+        // with the rest, and `swift package archlint` walked into every checkout.
+        let config = ArchLintConfig.parse("ignore:\n  - Tests/**\n")
+        #expect(config.ignoreGlobs == ["Tests/**"])
+
+        let checkout = ".build/checkouts/AppFoundation/Tests/ArchLintTests/Fixtures/Bad/R1_BadViewModel.swift"
+        #expect(config.isIgnored(relativePath: checkout))
+        #expect(
+            config.isIgnored(
+                relativePath: ".build/checkouts/AppFoundation/Examples/LoginApp/Sources/LoginApp/LoginViewModel.swift"
+            )
+        )
+        #expect(config.isIgnored(relativePath: ".swiftpm/xcode/Scratch/ScratchViewModel.swift"))
+        #expect(config.isIgnored(relativePath: "DerivedData/DemoApp/Build/GeneratedViewModel.swift"))
+        #expect(config.isIgnored(relativePath: ".git/hooks/HookViewModel.swift"))
+        // Nested, and absolute (a file outside --root keeps its absolute path).
+        #expect(config.isIgnored(relativePath: "Modules/Feature/.build/checkouts/Dep/DepViewModel.swift"))
+        #expect(config.isIgnored(relativePath: "/Users/me/Project/.build/checkouts/Dep/DepViewModel.swift"))
+
+        // The user's own entry still applies, and the replaced defaults really are gone.
+        #expect(config.isIgnored(relativePath: "Tests/DemoAppTests/LoginLogicTests.swift"))
+        #expect(!config.isIgnored(relativePath: "Sources/DemoApp/Features/Login/LoginServiceMock.swift"))
+        #expect(!config.isIgnored(relativePath: "Sources/DemoApp/Features/Login/LoginViewModel.swift"))
+    }
+
+    @Test("Without a config file, .build/checkouts is never analyzed either")
+    func missingConfigNeverReachesBuildProducts() {
+        let config = ArchLintConfig.load(from: URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString)"))
+        #expect(config.isIgnored(relativePath: ".build/checkouts/Dep/Sources/Dep/DepViewModel.swift"))
+        #expect(config.isIgnored(relativePath: "Tests/DemoAppTests/LoginLogicTests.swift"))
+        #expect(!config.isIgnored(relativePath: "Sources/DemoApp/Features/Login/LoginViewModel.swift"))
+    }
+
+    @Test("alwaysIgnoreGlobs is not part of ignoreGlobs, so an explicit ignore: cannot drop it")
+    func alwaysIgnoreIsSeparateFromUserIgnore() {
+        #expect(
+            ArchLintConfig.alwaysIgnoreGlobs == ["**/.build/**", "**/.swiftpm/**", "**/DerivedData/**", "**/.git/**"]
+        )
+        let defaults = ArchLintConfig()
+        #expect(!defaults.ignoreGlobs.contains("**/.build/**"))
+        #expect(!defaults.ignoreGlobs.contains("**/.swiftpm/**"))
     }
 }

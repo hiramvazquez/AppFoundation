@@ -4,10 +4,10 @@ import AppFoundation
 import SwiftUI
 
 public struct LoginView: View {
-    let viewModel: LoginViewModel
+    @State private var viewModel: LoginViewModel
 
     public init(viewModel: LoginViewModel) {
-        self.viewModel = viewModel
+        _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
