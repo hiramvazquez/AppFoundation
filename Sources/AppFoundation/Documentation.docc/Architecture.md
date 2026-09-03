@@ -48,7 +48,12 @@ Features/Login/
    Repro completo y todas las variantes probadas en `docs/repros/actor-inline-conformance.md`;
    ejemplo real en `Examples/NotesApp/Sources/NotesApp/Features/Notes/Stores/NotesSettingsStore.swift`.
 4. **View** no referencia `*Logic`/`*Service`/`*Store`/`APIService`; recibe el ViewModel y
-   usa `ActionSender`.
+   usa `ActionSender`. El composition root construye el ViewModel; la View lo retiene con
+   `@State private var viewModel: XxxViewModel` + `_viewModel = State(initialValue:
+   viewModel)` en el `init`, nunca `let viewModel:`. Causa: SwiftUI reejecuta el builder de
+   destino de navegación durante un push; con `let`, esa reejecución sustituye la instancia
+   que ya recibió `.load` (vía `.task`) — se libera (`performLoad` captura `[weak self]`,
+   sin error) y la instancia que queda en pantalla nunca lo recibe. Ver <doc:FAQ>.
 5. Cada `XxxViewModel.swift` tiene su `XxxLogic.swift`.
 6. Ninguna clase concreta de Service/Store/Logic aparece en un `init` de otra capa: siempre
    `any XxxProtocol`.
@@ -196,3 +201,4 @@ generador y en el linter.
 - <doc:Generator>
 - <doc:Lint>
 - <doc:Recipes>
+- <doc:FAQ>

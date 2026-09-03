@@ -12,7 +12,11 @@ automáticamente alrededor del contenido de la pantalla; solo requiere que `stat
 
 ```swift
 struct ProfileView: View {
-    let viewModel: ProfileViewModel
+    @State private var viewModel: ProfileViewModel
+
+    init(viewModel: ProfileViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
 
     var body: some View {
         ScreenContainer(viewModel) { send in

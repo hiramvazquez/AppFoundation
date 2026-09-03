@@ -1,5 +1,27 @@
 # Preguntas frecuentes
 
+## ¿Por qué la View retiene su ViewModel con `@State` y no con `let`?
+
+Porque el ViewModel puede ser transitorio: cuando el composition root lo construye dentro
+del builder de destino de una navegación (`CoordinatorView`/`navigationDestination`),
+SwiftUI reejecuta ese builder durante la transición de push. Con `let viewModel:`, cada
+reejecución sustituye la instancia que ya está en el árbol de vistas por una nueva — la
+instancia A, que recibió `.load` vía `.task`/`.onAppear` y ya tiene un `performLoad` en
+vuelo, se libera unos milisegundos después (`performLoad` captura `[weak self]`, así que
+su trabajo termina sin ejecutarse y sin error); la instancia B, que queda realmente en
+pantalla, nunca recibe `.load`: la pantalla se queda vacía, sin spinner ni error. `@State
+private var viewModel: XxxViewModel` + `_viewModel = State(initialValue: viewModel)` en el
+`init` evita esto — `State` conserva la primera instancia durante toda la vida de la
+identidad de la vista e ignora las reejecuciones posteriores del builder. Ver
+<doc:Architecture>.
+
+En `DEBUG`, `ActionSender` (`ScreenState.sender`) y los `guard let self else { throw
+CancellationError() }` de `performLoad`/`performActivity` registran en `os_log` (subsystem
+`AppFoundation`) cada acción descartada porque su ViewModel ya no existe —
+configurable vía `AppFoundationDiagnostics`, para no depender de deducirlo de una pantalla
+vacía. `ArchitectureLint` (regla R12) avisa cuando detecta `let viewModel:` en un
+`*View.swift`.
+
 ## ¿Por qué `performLoad`/`performActivity` reciben el view model como parámetro, en vez de que el closure capture `self`?
 
 Un closure que captura `self` en vez de usar el `vm` recibido puede recrear el ciclo

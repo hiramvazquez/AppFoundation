@@ -14,7 +14,17 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
 ## Capas
 
 - **View** (SwiftUI): recibe el `ViewModel`, renderiza con `ScreenContainer(vm) { send in … }`.
-  Nunca importa `CoreNetworking`, nunca referencia `*Logic`/`*Service`/`*Store`.
+  Nunca importa `CoreNetworking`, nunca referencia `*Logic`/`*Service`/`*Store`. El
+  composition root lo construye; la View lo retiene con `@State private var viewModel:
+  XxxViewModel` + `_viewModel = State(initialValue: viewModel)` en el `init` — nunca `let
+  viewModel:`. SwiftUI reejecuta el builder del destino de navegación durante un push; con
+  `let` esa reejecución sustituye la instancia que ya recibió `.load` (vía `.task`), esa
+  instancia se libera (`performLoad` captura `[weak self]`, sin error) y la que queda en
+  pantalla nunca lo recibe — pantalla vacía sin spinner ni error. En DEBUG, `ActionSender`
+  y `performLoad`/`performActivity` registran en `os_log` (subsystem `AppFoundation`) cada
+  acción descartada porque su ViewModel ya no existe, configurable vía
+  `AppFoundationDiagnostics`; `ArchitectureLint` (R12) avisa de `let viewModel:` en un
+  `*View.swift`.
 - **ViewModel** (`@MainActor`): `final class XxxViewModel: LogicViewModel<any XxxLogicProtocol>,
   ActionHandling`. Orquesta: recibe `Action` en `handle(_:)`, llama a `logic`, actualiza
   `phase`/estado propio, decide navegación (`Router`/`Coordinator`). Nunca conoce

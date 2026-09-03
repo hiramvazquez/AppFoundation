@@ -82,9 +82,15 @@ final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, Action
     }
 }
 
-// 4. View — cáscara con ScreenContainer
+// 4. View — cáscara con ScreenContainer. El composition root construye el ViewModel; la
+// View lo retiene con @State (nunca `let`, ver AGENTS.md, sección View).
 struct GreetingView: View {
-    let viewModel: GreetingViewModel
+    @State private var viewModel: GreetingViewModel
+
+    init(viewModel: GreetingViewModel) {
+        _viewModel = State(initialValue: viewModel)
+    }
+
     var body: some View {
         ScreenContainer(viewModel) { send in
             Text(viewModel.message).onAppear { send(.load(name: "Hiram")) }
