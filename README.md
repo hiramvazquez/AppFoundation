@@ -111,6 +111,14 @@ cáscara de Xcode) lista para clonar. Ver el artículo `GettingStarted` de DocC,
 «Desde un proyecto Xcode», para lo que ese repo enseñó sobre integrar este kit fuera de un
 paquete SPM puro.
 
+## Calidad de código
+
+`archinit` deja también `.swiftlint.yml`, la configuración curada de SwiftLint (`only_rules`,
+severidad y porqué de cada regla, calibrada contra código real): `ArchitectureLint` valida
+DÓNDE está el código, SwiftLint CÓMO está escrito, el compilador la concurrencia. Añade el
+plugin junto a `ArchitectureLint` y un `try!` rompe el build igual que una violación de capa;
+en CI, `swiftlint --strict`. Artículo `CodeQuality` en DocC.
+
 ## Más
 
 - [`AGENTS.md`](AGENTS.md) — arquitectura, naming y qué NO hacer, para agentes y humanos.

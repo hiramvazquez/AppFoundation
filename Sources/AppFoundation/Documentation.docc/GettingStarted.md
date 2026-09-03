@@ -90,7 +90,7 @@ struct GreetingModule: DependencyModule {
 
 Container.shared.register(modules: [GreetingModule()])
 let service: GreetingServicing = Container.shared.resolve()
-print(service.greeting(for: "Hiram"))
+let greeting = service.greeting(for: "Hiram")  // "Hola, Hiram"
 ```
 
 **Resultado esperado**: compila. Las últimas tres líneas del snippet son la demostración de

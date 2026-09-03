@@ -28,7 +28,7 @@ public final class NotesViewModel: LogicViewModel<any NotesLogicProtocol>, Actio
         performLoad(successTransition: .preserveCurrentPhase) { vm in
             let notes = try await vm.logic.loadNotes()
             vm.notes = notes
-            notes.isEmpty ? vm.setEmpty() : vm.setContent()
+            if notes.isEmpty { vm.setEmpty() } else { vm.setContent() }
         }
     }
 

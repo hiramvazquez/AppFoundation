@@ -70,6 +70,20 @@ jobs:
           xcode-version: latest-stable
       - run: Scripts/verify-generator.sh
 
+  quality:
+    name: SwiftLint --strict (Templates/swiftlint.yml sobre ejemplos y snippets)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install swiftlint && swiftlint version
+      - name: Ejemplos y snippets con la configuración curada
+        run: |
+          set -e
+          for e in CounterApp NotesApp LoginApp CatalogApp; do
+            swiftlint lint --strict --quiet --config Templates/swiftlint.yml Examples/$e/Sources Examples/$e/Tests
+          done
+          swiftlint lint --strict --quiet --config Templates/swiftlint.yml Snippets
+
   docs:
     name: DocC
     runs-on: macos-15

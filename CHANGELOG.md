@@ -6,6 +6,33 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-03
+
+### Añadido
+
+- **Calidad de código: SwiftLint curado, instalado por `archinit`.** `Templates/swiftlint.yml`
+  (copiado como `.swiftlint.yml` si no existe): `only_rules` explícito, `error` para lo que
+  esconde un crash o una fuga (`try!`, `as!`, `x!`, `T!`, `[unowned]`, delegate fuerte, `Task`
+  con `throw` sin capturar, `@State` no privado…) y `warning` para tamaños, complejidad e
+  idioms, con el porqué de cada regla y de las tres descartadas en la calibración. Dos reglas
+  propias por regex (`print` en producción, `privacy: .public`). `archinit` imprime los dos
+  pasos manuales (dependencia `SwiftLintPlugins` y el plugin junto a `ArchitectureLint`).
+- Artículo `CodeQuality` en DocC (las tres capas, instalación, qué bloquea y qué avisa,
+  excepciones, calibración); secciones en README, `AGENTS.md` (Qué NO hacer, Definition of
+  Done) y el skill `/feature`.
+- `Scripts/verify-generator.sh` pasa `swiftlint --strict` con la plantilla sobre el código
+  generado y los cuatro ejemplos cuando `swiftlint` está en el PATH; job `quality` en CI sobre
+  ejemplos y snippets.
+
+- `SpyRecorder.isEmpty` en `AppFoundationTestSupport`: `#expect(await spy.isEmpty)` en vez de
+  `count == 0`.
+
+### Corregido
+
+- Los ejemplos y snippets cumplen la configuración curada: `count == 0` → `isEmpty`,
+  `UserDefaults(suiteName:)!` → `try #require`, `.data(using:)!` → `Data(_.utf8)`, un ternario
+  con `Void` → `if/else`, y el snippet de arranque ya no usa `print`.
+
 ## [1.0.2] - 2026-09-03
 
 ### Documentación

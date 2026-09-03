@@ -42,6 +42,11 @@ public actor SpyRecorder<Call: Sendable> {
     /// Number of recorded calls.
     public var count: Int { calls.count }
 
+    /// `true` when nothing has been recorded — the natural spelling for "the collaborator was
+    /// never called" (`#expect(await spy.isEmpty)`), and what SwiftLint's `empty_count` expects
+    /// instead of `count == 0`.
+    public var isEmpty: Bool { calls.isEmpty }
+
     /// Whether `record` has been called at least once.
     public var wasCalled: Bool { !calls.isEmpty }
 

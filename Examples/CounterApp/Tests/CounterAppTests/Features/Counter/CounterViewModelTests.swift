@@ -37,6 +37,7 @@ struct CounterViewModelTests {
         viewModel.handle(.reset)
 
         #expect(mock.resetCallCount == 1)
+        // swiftlint:disable:next empty_count — `count` is the counter's value, not a collection
         #expect(viewModel.count == 0)
     }
 }

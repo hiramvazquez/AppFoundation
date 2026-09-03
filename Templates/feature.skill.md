@@ -106,3 +106,7 @@ reglas ANTES de escribir el código a mano:
 
 Ver también `AGENTS.md` (raíz del proyecto) y, en el paquete AppFoundation,
 `AppFoundation/README.md` § Generador y linter.
+
+Antes de dar la feature por terminada: `swift build` (corre ArchitectureLint y SwiftLint),
+`swift test`, y pega la última línea de cada uno. `swiftlint lint --strict Sources Tests` si
+está instalado.

@@ -10,6 +10,8 @@ import PackagePlugin
 /// 3. AppFoundation's `AGENTS.md`, copied to the project root.
 /// 4. `CLAUDE.md`: creates it (or appends to an existing one) with an `@AGENTS.md` line, so
 ///    Claude Code picks up the architecture rules automatically.
+/// 6. `.swiftlint.yml` from `Templates/swiftlint.yml` (curated SwiftLint config; the plugin
+///    itself is added by hand — the two manual steps are printed at the end).
 /// 5. `.claude/skills/feature.md` — the `/feature` skill that explains the generator and
 ///    the lint rules.
 ///
@@ -48,6 +50,14 @@ struct ArchInitPlugin: CommandPlugin {
                 try writeIfMissing(at: root.appendingPathComponent("AGENTS.md"), contents: text)
             }
 
+            // MARK: 6. .swiftlint.yml (calidad de código; el plugin de SwiftLint se añade a mano)
+            let lintSource = appFoundationDirectory.appendingPathComponent("Templates")
+                .appendingPathComponent("swiftlint.yml")
+            if let data = fileManager.contents(atPath: lintSource.path), let text = String(data: data, encoding: .utf8)
+            {
+                try writeIfMissing(at: root.appendingPathComponent(".swiftlint.yml"), contents: text)
+            }
+
             // MARK: 5. .claude/skills/feature.md
             let skillSource = appFoundationDirectory.appendingPathComponent("Templates")
                 .appendingPathComponent("feature.skill.md")
@@ -81,6 +91,13 @@ struct ArchInitPlugin: CommandPlugin {
             print("Creado CLAUDE.md con '\(agentsLine)'.")
         }
 
+        print("")
+        print("Pasos manuales (calidad de código, ver el artículo CodeQuality de AppFoundation):")
+        print("  1. En Package.swift, dependencia:")
+        print("     .package(url: \"https://github.com/SimplyDanny/SwiftLintPlugins\", from: \"0.65.0\")")
+        print("  2. En el target, junto a ArchitectureLint:")
+        print("     .plugin(name: \"SwiftLintBuildToolPlugin\", package: \"SwiftLintPlugins\")")
+        print("  3. En CI: brew install swiftlint && swiftlint lint --strict Sources Tests")
         print("")
         print(
             "archinit listo. Siguiente paso: swift package --allow-writing-to-package-directory generate-feature <Nombre> [--api] [--local]"

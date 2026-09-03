@@ -50,7 +50,7 @@ struct LoginServiceTests {
                 url: loginURL,
                 responses: [
                     .response(status: 401),
-                    .response(status: 200, body: #"{"token":"refreshed-session"}"#.data(using: .utf8)!)
+                    .response(status: 200, body: Data(#"{"token":"refreshed-session"}"#.utf8))
                 ]
             )
         )

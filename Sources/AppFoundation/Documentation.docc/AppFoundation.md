@@ -56,6 +56,7 @@ punto de referencia de este catálogo.
 
 - <doc:Generator>
 - <doc:Lint>
+- <doc:CodeQuality>
 
 ### Recetas y testing
 

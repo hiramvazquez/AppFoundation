@@ -1,0 +1,120 @@
+# .swiftlint.yml — calidad de código, instalado por `swift package archinit` (AppFoundation).
+# Complementa a ArchitectureLint (.archlint.yml):
+# archlint valida DÓNDE está el código (capas); SwiftLint valida CÓMO está escrito; el
+# compilador (Swift 6, warnings estrictos) valida la concurrencia. El formato es de swift-format.
+#
+# Criterio: `only_rules` explícito (una versión nueva de SwiftLint no activa reglas sin que lo
+# decidamos). `error` bloquea el build; `warning` avisa en Xcode y solo bloquea en CI con
+# `swiftlint --strict`. Cada umbral está calibrado contra código real generado por el kit.
+
+only_rules:
+  # ── Bloquean (error): construcciones que esconden un crash o una fuga ──────────────
+  - force_try                        # try! → propaga o mapea a DomainError
+  - force_cast                       # as! → as? + manejo
+  - force_unwrapping                 # x! → guard let / ??
+  - implicitly_unwrapped_optional    # T! solo tiene sentido en IBOutlets, que aquí no hay
+  - unowned_variable_capture         # [unowned self] es un crash diferido; usa [weak self]
+  - weak_delegate                    # delegate fuerte = ciclo de retención
+  - unhandled_throwing_task          # Task { try … } sin catch traga el error en silencio
+  - self_in_property_initialization  # self en un inicializador de propiedad no es lo que crees
+  - private_swiftui_state            # @State siempre private (la View es dueña de su ViewModel)
+  - duplicate_imports
+  - fatal_error_message              # fatalError() sin mensaje no se puede diagnosticar
+  # ── Avisan (warning): tamaño y complejidad ──────────────────────────────────────────
+  - function_body_length
+  - type_body_length
+  - file_length
+  - cyclomatic_complexity
+  - line_length
+  - large_tuple
+  - function_parameter_count
+  - nesting
+  # ── Avisan (warning): idioms de Swift moderno ───────────────────────────────────────
+  - identifier_name
+  - todo
+  - void_function_in_ternary
+  - legacy_swiftui_aspect_ratio
+  - unused_closure_parameter
+  - unused_optional_binding
+  - unused_enumerated
+  - shorthand_optional_binding
+  - empty_count
+  - empty_string
+  - empty_collection_literal
+  - contains_over_first_not_nil
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - first_where
+  - last_where
+  - toggle_bool
+  - yoda_condition
+  - syntactic_sugar
+  - implicit_optional_initialization
+  - redundant_nil_coalescing
+  - redundant_discardable_let
+  - redundant_void_return
+  - unneeded_break_in_switch
+  - for_where
+  - accessibility_label_for_image     # Image sin label ni .decorative: VoiceOver lee el nombre del asset
+  - accessibility_trait_for_button    # onTapGesture sin .isButton: VoiceOver no sabe que es pulsable
+  # ── Reglas propias (abajo) ──────────────────────────────────────────────────────────
+  - custom_rules
+
+excluded:           # globs: valen también al lintar subdirectorios desde otro sitio (--config)
+  - .build
+  - .swiftpm
+  - DerivedData
+  - Package.swift
+  - "**/.build"
+  - "**/.swiftpm"
+  - "**/DerivedData"
+
+# ── Umbrales ──────────────────────────────────────────────────────────────────────────
+empty_count: { severity: warning }                     # `count == 0` sobre un Int que se llama `count` es legítimo: aviso, no error
+function_body_length: { warning: 50, error: 100 }
+type_body_length: { warning: 250, error: 400 }
+file_length: { warning: 400, error: 600, ignore_comment_only_lines: true }
+cyclomatic_complexity: { warning: 10, error: 20, ignores_case_statements: true }
+line_length:
+  warning: 120
+  error: 160
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true
+large_tuple: { warning: 2, error: 3 }
+function_parameter_count: { warning: 6, error: 8 }   # un composition root con 7 dependencias avisa, no bloquea
+nesting: { type_level: 2, function_level: 3 }
+identifier_name:
+  min_length: { warning: 3 }
+  max_length: { warning: 40, error: 60 }
+  excluded:      # idioms del kit: `{ c in c.resolve() }` en Modules, `performLoad { vm in … }`
+    - c
+    - vm
+    - id
+    - i
+    - x
+    - y
+    - to
+  validates_start_with_lowercase: warning
+
+# ── Reglas propias del equipo (regex; sin código) ─────────────────────────────────────
+# Descartadas en la calibración (AppStarter, 2026-09-03), con motivo:
+# - async_without_await: en esta arquitectura casi todo `async` viene del protocolo (Servicing/
+#   Storing/Logic); mocks, actores y previews lo implementan sin await por contrato. 32 falsos positivos.
+# - closure_body_length: los `body` de SwiftUI son closures de 30-40 líneas por naturaleza;
+#   type_body_length y function_body_length ya acotan el tamaño real.
+# - "Text con literal sin localizar": Text("literal") en SwiftUI YA es LocalizedStringKey (se
+#   traduce por String Catalog); lo no localizable es Text(verbatim:) o Text(variable).
+custom_rules:
+  no_print_in_production:
+    name: "print en producción"
+    regex: '^\s*print\('
+    excluded: '.*(Tests|Mocks)/.*'
+    message: "Usa AppFoundationLogger/os_log: print no se filtra por nivel ni se desactiva en release."
+    severity: warning
+  os_log_public_interpolation:
+    name: "os_log con datos públicos interpolados"
+    regex: 'privacy:\s*\.public'
+    excluded: '.*(Tests|Mocks)/.*'
+    message: "privacy: .public expone el valor en el log del dispositivo; justifícalo en un comentario o quítalo."
+    severity: warning

@@ -102,6 +102,10 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
 
 ## Qué NO hacer
 
+- No uses `try!`, `as!`, `x!`, `T!` ni `[unowned self]`: SwiftLint (`.swiftlint.yml`, instalado
+  por `archinit`) los convierte en error de build. Una excepción se justifica en el sitio con
+  `// swiftlint:disable:next <regla>` y el motivo en el comentario, nunca bajando el umbral.
+
 - No inyectes un tipo concreto de Service/Store/Logic en otra capa — siempre `any XxxProtocol`.
 - No dejes que `APIError`/un error de SwiftData llegue al ViewModel: mapéalo a `DomainError`
   dentro del `Logic`.
@@ -125,6 +129,11 @@ Genera View/ViewModel/Logic/Service/Store/Module + tests/mocks, todo compilando 
 verde. Nunca edita el `.xcodeproj` ni el `enum AppRoute` — imprime esos dos pasos
 manuales al terminar; hazlos tú.
 
+`SwiftLint` es la segunda capa (calidad: tamaños, complejidad, idioms, forzados). `archinit`
+deja `.swiftlint.yml`; el plugin `SwiftLintBuildToolPlugin` se añade al target junto a
+`ArchitectureLint` (artículo `CodeQuality`). Los `error` rompen el build; los `warning` solo
+bloquean en CI con `--strict`.
+
 `ArchitectureLint` (build-tool plugin, se añade al target en `Package.swift`) y
 `swift package archlint` (command plugin, para CI o una comprobación puntual) aplican
 las reglas R1-R11 — un error de build es lo único que no se puede ignorar. Antes de
@@ -146,6 +155,7 @@ En un proyecto que consume este paquete (desde la raíz del paquete local, p. ej
 swift build                                      # compila, y con ello corre ArchitectureLint (R1-R12)
 swift test                                       # unitarios por capa: ViewModel, Logic, Service, Store
 swift package archlint                           # comprobación explícita; debe imprimir "0 errors"
+swiftlint lint --strict Sources Tests            # calidad (brew install swiftlint); sin salida = limpio
 # Si el proyecto tiene app de Xcode y XCUITests:
 xcodebuild test -scheme <App> -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -skipPackagePluginValidation
 ```

@@ -96,4 +96,5 @@ archlint`), que sin `--path` recorre el directorio del paquete entero.
 ## Ver también
 
 - <doc:Generator> — el camino fácil: el cascarón que ya cumple estas reglas.
+- <doc:CodeQuality> — la otra capa: SwiftLint curado para CÓMO está escrito el código.
 - <doc:Architecture> — de dónde sale cada regla (§1 y las mejoras M1-M11).

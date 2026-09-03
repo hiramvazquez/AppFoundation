@@ -17,7 +17,7 @@ struct LoginLogicTests {
         await #expect(throws: LoginError.emptyEmail) {
             _ = try await logic.login(email: "", password: "secret")
         }
-        #expect(await service.logins.count == 0)
+        #expect(await service.logins.isEmpty)
     }
 
     @Test("An empty password throws LoginError.emptyPassword before calling the service")
@@ -28,7 +28,7 @@ struct LoginLogicTests {
         await #expect(throws: LoginError.emptyPassword) {
             _ = try await logic.login(email: "hiram@example.com", password: "")
         }
-        #expect(await service.logins.count == 0)
+        #expect(await service.logins.isEmpty)
     }
 
     @Test("Valid credentials delegate to LoginServicing, persist the session, and return it")
@@ -55,7 +55,7 @@ struct LoginLogicTests {
             _ = try await logic.login(email: "hiram@example.com", password: "secret")
         }
         // A failed login never persists a session.
-        #expect(await sessionStore.savedTokens.count == 0)
+        #expect(await sessionStore.savedTokens.isEmpty)
     }
 
     @Test("An offline transport failure maps to LoginError.offline")

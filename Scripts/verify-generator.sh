@@ -122,6 +122,19 @@ swift build --package-path "$DEMO_DIR" || fail "swift build falló sobre el cód
 log "swift test"
 swift test --package-path "$DEMO_DIR" || fail "swift test falló sobre el código generado"
 
+# PRD-AF-09: el código generado debe pasar la configuración curada de SwiftLint sin avisos.
+# Solo si `swiftlint` está en el PATH (el plugin lo descarga en los consumidores; aquí no).
+SWIFTLINT_CONFIG="$REPO_ROOT/Templates/swiftlint.yml"
+if command -v swiftlint > /dev/null 2>&1; then
+    log "swiftlint --strict sobre el código generado (Templates/swiftlint.yml)"
+    # Solo Sources/ y Tests/: los `excluded` del .yml son relativos al fichero de configuración,
+    # no al directorio lintado, así que con --config desde otro sitio no excluirían .build/.
+    swiftlint lint --strict --quiet --config "$SWIFTLINT_CONFIG" "$DEMO_DIR/Sources" "$DEMO_DIR/Tests" \
+        || fail "El código generado no pasa swiftlint --strict con la configuración curada"
+else
+    log "AVISO: swiftlint no está en el PATH — se omite la comprobación de calidad del código generado"
+fi
+
 log "Activando el plugin ArchitectureLint en el target DemoApp"
 python3 - "$DEMO_DIR/Package.swift" <<'PYEOF'
 import sys
@@ -195,6 +208,11 @@ for example in LoginApp NotesApp CatalogApp CounterApp; do
         fail "Examples/$example no reportó 'archlint: 0 errors'"
     }
     log "Examples/$example: archlint limpio"
+    if command -v swiftlint > /dev/null 2>&1; then
+        swiftlint lint --strict --quiet --config "$SWIFTLINT_CONFIG" "$example_dir/Sources" "$example_dir/Tests" \
+            || fail "Examples/$example no pasa swiftlint --strict con Templates/swiftlint.yml"
+        log "Examples/$example: swiftlint --strict limpio"
+    fi
 done
 
 log "Todo verde: generate-feature (4 variantes) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07."

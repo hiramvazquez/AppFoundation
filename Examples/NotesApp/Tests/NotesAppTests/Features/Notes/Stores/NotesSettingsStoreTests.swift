@@ -20,20 +20,34 @@ struct NotesSettingsStoreTests {
     }
 
     @Test("sortOldestFirst() defaults to false when nothing was set")
-    func defaultsToFalse() async {
-        let store = UserDefaultsNotesSettingsStore(defaults: UserDefaults(suiteName: makeSuiteName())!)
+    func defaultsToFalse() async throws {
+        guard let storeDefaults = UserDefaults(suiteName: makeSuiteName()) else {
+            Issue.record("UserDefaults(suiteName:) returned nil")
+            return
+        }
+        let store = UserDefaultsNotesSettingsStore(defaults: storeDefaults)
 
         #expect(await store.sortOldestFirst() == false)
     }
 
     @Test("setSortOldestFirst(_:) persists across a new store instance over the same UserDefaults")
-    func persistsAcrossInstances() async {
+    func persistsAcrossInstances() async throws {
         let suiteName = makeSuiteName()
-        let store = UserDefaultsNotesSettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
+        guard let storeDefaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("UserDefaults(suiteName:) returned nil")
+            return
+        }
+        let store = UserDefaultsNotesSettingsStore(defaults: storeDefaults)
 
         await store.setSortOldestFirst(true)
 
-        let reopened = UserDefaultsNotesSettingsStore(defaults: UserDefaults(suiteName: suiteName)!)
+        guard let reopenedDefaults = UserDefaults(suiteName: suiteName) else {
+            Issue.record("UserDefaults(suiteName:) returned nil")
+
+            return
+        }
+
+        let reopened = UserDefaultsNotesSettingsStore(defaults: reopenedDefaults)
         #expect(await reopened.sortOldestFirst() == true)
     }
 }
