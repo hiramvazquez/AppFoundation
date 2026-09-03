@@ -6,7 +6,60 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-03
+
+Versión de mantenimiento a partir de las fricciones de la app de referencia
+[AppStarter](https://github.com/hiramvazquez/AppStarter). Sin roturas de API.
+
+### Corregido
+
+- **La View es dueña de su ViewModel con `@State`.** `Templates/View.swift.txt`, los cuatro
+  ejemplos y los snippets pasan de `let viewModel` a `@State private var viewModel` +
+  `_viewModel = State(initialValue:)`, y de `.onAppear` a `.task` para la carga inicial.
+  Con `let`, un ViewModel transitorio construido en el builder de destino de navegación
+  se sustituía cuando SwiftUI reejecutaba el builder durante el push: la instancia que
+  recibió `.load` moría, `performLoad` (`[weak self]`) no hacía nada y la que quedaba en
+  pantalla nunca recibía la acción (pantalla vacía, sin spinner ni error).
+- **`archlint` ya no entra nunca en `.build`, `.swiftpm`, `DerivedData` ni el directorio
+  del VCS**: una lista fija `alwaysIgnore` se aplica siempre, aunque el `.archlint.yml`
+  traiga un `ignore:` explícito (que sigue reemplazando solo los defaults de usuario).
+  Antes, `swift package archlint` sin `--path` en un proyecto consumidor analizaba
+  `.build/checkouts`, incluidos los fixtures «malos» del propio paquete.
+
+### Añadido
+
+- **Ninguna acción se pierde en silencio** (solo `DEBUG`, coste cero en release):
+  `ActionSender` y `performLoad`/`performActivity` registran por `os_log` (subsystem
+  `AppFoundation`, category `ActionSender`, nivel `.error`) toda acción o trabajo
+  descartado porque el ViewModel ya fue liberado. `AppFoundationDiagnostics` expone
+  `assertOnDroppedAction` (default `false`) y `droppedActionHandler` para tests.
+  `ViewModelOwnershipTests` cubre ambos casos.
+- **Regla R12 del linter** (severidad aviso): `let`/`var viewModel:` sin `@State` en un
+  `*View.swift`.
+- **`generate-feature --no-service` / `--no-store` / `--service-from <Feature>` /
+  `--store-from <Feature>`**: una feature puede reutilizar el `Servicing`/`Storing` de
+  otra ya generada (la Logic lo recibe por protocolo, el Module lo resuelve del contenedor,
+  los tests reutilizan su mock) o dejar un placeholder con `// TODO`, sin generar un
+  Service/Store nuevo. `Scripts/verify-generator.sh` cubre `Products --api` +
+  `Detail --api --service-from Products`.
+- `Examples/NotesApp`: `UserDefaultsNotesSettingsStore`, un `actor` sobre `UserDefaults`
+  con la conformidad a su protocolo en una `extension` (ver Documentación), con tests.
+
 ### Documentación
+
+- Regla «el composition root construye el ViewModel; la View lo retiene con `@State`» en
+  `AGENTS.md`, `Architecture.md` y `FAQ.md`.
+- Guía de actores con dependencias no-Sendable: bajo `defaultIsolation(MainActor)`, un
+  `actor` con una propiedad almacenada no-Sendable asignada en el `init` y conformidad
+  inline a su protocolo no compila; declarar la conformidad en una `extension` sí.
+  Repro mínimo con el error exacto en `docs/repros/actor-inline-conformance.md`.
+- Nueva sección «Desde un proyecto Xcode» en `GettingStarted.md`: paquete local + app
+  cáscara con xcodegen, `-skipPackagePluginValidation`, productos transitivos, test targets
+  de paquetes locales, `.accessibilityIdentifier` solo en hojas, variables de entorno
+  horneadas en el scheme para XCUITest, `.textContentType(.password)` bajo XCUITest,
+  modo offline con `InMemoryTransport` y selección de Xcode en CI.
+- Sección «App de referencia» en el README (y en el de CoreNetworking) enlazando a
+  AppStarter; R12 y las nuevas opciones del generador en `Lint.md` y `Generator.md`.
 
 - Los 16 `@Snippet(path:)` de `Documentation.docc/` (no se resolvían en el primer
   `xcodebuild docbuild` sobre DerivedData limpio) se sustituyen por bloques de código en

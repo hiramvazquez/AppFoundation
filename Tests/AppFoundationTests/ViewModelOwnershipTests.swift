@@ -109,7 +109,9 @@ struct ViewModelOwnershipTests {
 
         #expect(work.events.isEmpty)
         #if DEBUG
-        #expect(drops(in: reports) == ["performLoad work skipped: OwnershipProbeViewModel was deallocated before it ran"])
+        #expect(
+            drops(in: reports) == ["performLoad work skipped: OwnershipProbeViewModel was deallocated before it ran"]
+        )
         #else
         #expect(reports.events.isEmpty)
         #endif
@@ -135,7 +137,9 @@ struct ViewModelOwnershipTests {
         #expect(work.events.isEmpty)
         #if DEBUG
         #expect(
-            drops(in: reports) == ["performActivity work skipped: OwnershipProbeViewModel was deallocated before it ran"]
+            drops(in: reports) == [
+                "performActivity work skipped: OwnershipProbeViewModel was deallocated before it ran"
+            ]
         )
         #else
         #expect(reports.events.isEmpty)

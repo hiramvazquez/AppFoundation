@@ -67,7 +67,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
         // --no-service/--no-store, so that combination is refused rather than silently
         // generating LogicTests with a hole in them. --service-from/--store-from (reused,
         // real mocks) have no such problem and combine with `both` freely.
-        if (noServiceFlag || noStoreFlag), api, local {
+        if noServiceFlag || noStoreFlag, api, local {
             throw GenerateFeatureError.noServiceOrStoreWithBoth
         }
 
