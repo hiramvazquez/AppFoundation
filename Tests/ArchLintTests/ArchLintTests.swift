@@ -5,7 +5,7 @@ import Testing
 
 /// Fixture-based tests: one "bad" file per rule (`Fixtures/Bad/Rn_*.swift`) proves the rule
 /// fires, and the "good" feature (`Fixtures/Good/*`, a small but complete Login feature
-/// shaped exactly like `AppFoundation/Examples/LoginApp`) proves none of R1-R11 false-fire
+/// shaped exactly like `AppFoundation/Examples/LoginApp`) proves none of R1-R12 false-fire
 /// on code that actually follows the architecture — including its `#if DEBUG`/`#Preview`
 /// block, which references the concrete Logic/Service/Store on purpose (same pattern as
 /// `LoginApp`'s `LoginPreview`).
@@ -136,6 +136,49 @@ struct ArchLintRuleTests {
         #expect(r11.first?.severity == .warning)
         // A warning never fails the build on its own.
         #expect(diags.filter { $0.severity == .error }.isEmpty)
+    }
+
+    @Test("R12: a View's `let viewModel:` (no @State) is a warning, not an error")
+    func r12FiresAsWarning() {
+        let file = parse("R12_BadView", in: "Bad")
+        let diags = diagnostics(for: [file])
+        let r12 = diags.filter { $0.rule == "R12" }
+        #expect(r12.count == 1)
+        #expect(r12.first?.severity == .warning)
+        #expect(diags.filter { $0.severity == .error }.isEmpty)
+    }
+
+    @Test("R12 does not fire on `@State private var viewModel:` (same line)")
+    func r12DoesNotFireOnSameLineState() {
+        let source = """
+            import SwiftUI
+
+            public struct BadView: View {
+                @State private var viewModel: BadViewModel
+
+                public var body: some View { Text("ok") }
+            }
+            """
+        let file = FileParser.parse(path: "BadView.swift", relativePath: "BadView.swift", source: source)
+        let diags = diagnostics(for: [file])
+        #expect(!diags.contains { $0.rule == "R12" })
+    }
+
+    @Test("R12 does not fire when @State sits on the line above `var viewModel:`")
+    func r12DoesNotFireOnPreviousLineState() {
+        let source = """
+            import SwiftUI
+
+            public struct BadView: View {
+                @State
+                private var viewModel: BadViewModel
+
+                public var body: some View { Text("ok") }
+            }
+            """
+        let file = FileParser.parse(path: "BadView.swift", relativePath: "BadView.swift", source: source)
+        let diags = diagnostics(for: [file])
+        #expect(!diags.contains { $0.rule == "R12" })
     }
 
     // MARK: - strict: true extends R1

@@ -53,6 +53,7 @@ enum RuleEngine {
             if config.isEnabled("R9") { diagnostics += checkR9(file, layer: layer) }
             if config.isEnabled("R10") { diagnostics += checkR10(file, layer: layer) }
             if config.isEnabled("R11"), layer == .logic { diagnostics += checkR11(file) }
+            if config.isEnabled("R12"), layer == .view { diagnostics += checkR12(file) }
         }
 
         if config.isEnabled("R5") {
@@ -555,6 +556,28 @@ enum RuleEngine {
                     rule: "R11",
                     message:
                         "'\(type.name)' es @MainActor — una Logic normalmente es 'nonisolated' (M5); confirma que es intencional."
+                )
+            )
+        }
+        return out
+    }
+
+    // MARK: - R12 — a View retains its ViewModel with @State (PRD-X-05 A3/A7, warning)
+
+    private static func checkR12(_ file: ParsedFile) -> [Diagnostic] {
+        var out: [Diagnostic] = []
+        for property in file.properties where property.name == "viewModel" && !property.hasNearbyStateAttribute {
+            out.append(
+                Diagnostic(
+                    path: file.path,
+                    line: property.line,
+                    col: property.col,
+                    severity: .warning,
+                    rule: "R12",
+                    message:
+                        "La View debe retener su ViewModel con `@State` (`_viewModel = State(initialValue:)`); "
+                        + "con `let`, un ViewModel transitorio se libera cuando SwiftUI reevalúa el builder de "
+                        + "destino y la acción `.load` se pierde."
                 )
             )
         }

@@ -113,7 +113,7 @@ struct ArchInitPlugin: CommandPlugin {
     private static let archLintYML = """
         # .archlint.yml — configuración de ArchitectureLint.
         # Formato: 'key: value' plano, con listas en bloque ('- item') o inline ('[a, b]').
-        # Ver AppFoundation/README.md § Generador y linter para el detalle de cada regla (R1-R11).
+        # Ver AppFoundation/README.md § Generador y linter para el detalle de cada regla (R1-R12).
 
         # strict: true exige que cada ViewModel herede de LogicViewModel<any XxxLogicProtocol>
         # en vez de BaseViewModel a pelo.

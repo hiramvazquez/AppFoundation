@@ -30,7 +30,7 @@ Sources/MiApp/Features/Login/LoginViewModel.swift:2:1: error: [ArchLint.R1] El V
 swift package archlint [--path DIR]
 ```
 
-### Las reglas (R1-R11)
+### Las reglas (R1-R12)
 
 Análisis léxico propio (tokens, `import`, declaraciones de tipo; ignora comentarios y
 strings), clasificando cada fichero por el sufijo de su nombre (`XxxViewModel.swift`,
@@ -51,6 +51,7 @@ strings), clasificando cada fichero por el sufijo de su nombre (`XxxViewModel.sw
 | **R9** | Logic/Service/Store no referencian `Router`/`Coordinator`/`DeepLink`. |
 | **R10** | `Container.shared`/`resolve(`/`@Inject` prohibidos fuera del `XxxModule` (composition root). |
 | **R11** | Aviso (no error): una Logic marcada `@MainActor` pierde su independencia de actor. |
+| **R12** | Aviso (no error): en una `*View.swift`, `let viewModel:`/`var viewModel:` sin `@State` en la misma línea o la anterior — un ViewModel transitorio se libera cuando SwiftUI reevalúa el builder de destino y pierde la acción `.load` (PRD-X-05, A3/A7). |
 
 ### `.archlint.yml`
 
