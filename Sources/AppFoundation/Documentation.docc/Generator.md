@@ -34,6 +34,26 @@ menú contextual (Xcode 14+) → pide permiso de escritura una vez.
 | `--target NAME` | Target de origen, si el paquete tiene más de uno. |
 | `--dry-run` | Lista lo que generaría sin escribir nada. |
 | `--route AppRoute.xxx` | Se imprime en los pasos manuales, como recordatorio. |
+| `--no-service` / `--no-store` | La Logic sigue dependiendo de `any XxxServicing`/`any XxxStoring`, pero no se genera `XxxService`/`XxxStore` (ni sus mocks/tests): el protocolo queda como placeholder con un `// TODO` en `XxxLogic.swift`, y `XxxModule` deja el `// TODO` de registro. |
+| `--service-from <Feature>` / `--store-from <Feature>` | La Logic depende de `any <Feature>Servicing`/`any <Feature>Storing` — el `Servicing`/`Storing` de OTRO feature ya generado. No se genera `XxxService`/`XxxStore` nuevo; `XxxModule` no registra nada (lo hace el módulo del feature reutilizado); los tests de la Logic usan el mock real de ese feature (`<Feature>ServiceMock`/`InMemory<Feature>Store`). Implican `--api`/`--local` respectivamente. |
+
+`--no-service`/`--no-store` no combinan con `--api --local` a la vez (el error lo explica:
+los tests de Logic para esa combinación ejercitan Service y Store juntos, y no hay mock
+para el lado omitido) — para reutilizar ambas dependencias de otros features con
+`--api --local`, usa `--service-from`/`--store-from` en su lugar, que sí combinan
+libremente entre sí y con el resto de opciones.
+
+### Reutilizar el Service/Store de otro feature
+
+```bash
+swift package --allow-writing-to-package-directory generate-feature Products --api
+swift package --allow-writing-to-package-directory generate-feature Detail --api --service-from Products
+```
+
+`DetailLogic` recibe `any ProductsServicing` por `init` (no un `DetailServicing` nuevo);
+`DetailModule` no registra ningún `Servicing` — lo hace `ProductsModule`, que también debe
+estar registrado en el `Container`. `DetailLogicTests` construye un `ProductsServiceMock()`
+en vez de un `DetailServiceMock` inexistente.
 
 ### Qué genera
 
