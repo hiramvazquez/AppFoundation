@@ -7,8 +7,10 @@ import PackagePlugin
 /// como command plugin... para CI sin integrar el build."
 ///
 /// Without `--path`, it scans the whole package directory (respecting `.archlint.yml`'s
-/// `ignore:`, which defaults to skipping `Tests/**`). `--path DIR` restricts the scan to
-/// one subdirectory — handy for a monorepo with several targets.
+/// `ignore:`, which defaults to skipping `Tests/**`; `.build`, `.swiftpm`, `DerivedData`
+/// and the VCS directory are skipped always, whatever `ignore:` says — see
+/// `ArchLintConfig.alwaysIgnoreGlobs`). `--path DIR` restricts the scan to one
+/// subdirectory — handy for a monorepo with several targets.
 @main
 struct ArchLintCommand: CommandPlugin {
     func performCommand(context: PluginContext, arguments: [String]) async throws {

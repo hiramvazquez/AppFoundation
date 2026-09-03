@@ -315,4 +315,52 @@ struct ArchLintInternalsTests {
             }
         )
     }
+
+    // MARK: - A1 (PRD-X-05): .build/.swiftpm/DerivedData/.git are never analyzed
+
+    @Test("An explicit ignore: of only Tests/** still never analyzes .build/.swiftpm/DerivedData/.git")
+    func explicitIgnoreNeverReachesBuildProducts() {
+        // Exactly what `archinit`'s generated `.archlint.yml` amounts to: an `ignore:` that
+        // REPLACES the defaults. Before `alwaysIgnoreGlobs` this dropped `**/.build/**`
+        // with the rest, and `swift package archlint` walked into every checkout.
+        let config = ArchLintConfig.parse("ignore:\n  - Tests/**\n")
+        #expect(config.ignoreGlobs == ["Tests/**"])
+
+        let checkout = ".build/checkouts/AppFoundation/Tests/ArchLintTests/Fixtures/Bad/R1_BadViewModel.swift"
+        #expect(config.isIgnored(relativePath: checkout))
+        #expect(
+            config.isIgnored(
+                relativePath: ".build/checkouts/AppFoundation/Examples/LoginApp/Sources/LoginApp/LoginViewModel.swift"
+            )
+        )
+        #expect(config.isIgnored(relativePath: ".swiftpm/xcode/Scratch/ScratchViewModel.swift"))
+        #expect(config.isIgnored(relativePath: "DerivedData/DemoApp/Build/GeneratedViewModel.swift"))
+        #expect(config.isIgnored(relativePath: ".git/hooks/HookViewModel.swift"))
+        // Nested, and absolute (a file outside --root keeps its absolute path).
+        #expect(config.isIgnored(relativePath: "Modules/Feature/.build/checkouts/Dep/DepViewModel.swift"))
+        #expect(config.isIgnored(relativePath: "/Users/me/Project/.build/checkouts/Dep/DepViewModel.swift"))
+
+        // The user's own entry still applies, and the replaced defaults really are gone.
+        #expect(config.isIgnored(relativePath: "Tests/DemoAppTests/LoginLogicTests.swift"))
+        #expect(!config.isIgnored(relativePath: "Sources/DemoApp/Features/Login/LoginServiceMock.swift"))
+        #expect(!config.isIgnored(relativePath: "Sources/DemoApp/Features/Login/LoginViewModel.swift"))
+    }
+
+    @Test("Without a config file, .build/checkouts is never analyzed either")
+    func missingConfigNeverReachesBuildProducts() {
+        let config = ArchLintConfig.load(from: URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString)"))
+        #expect(config.isIgnored(relativePath: ".build/checkouts/Dep/Sources/Dep/DepViewModel.swift"))
+        #expect(config.isIgnored(relativePath: "Tests/DemoAppTests/LoginLogicTests.swift"))
+        #expect(!config.isIgnored(relativePath: "Sources/DemoApp/Features/Login/LoginViewModel.swift"))
+    }
+
+    @Test("alwaysIgnoreGlobs is not part of ignoreGlobs, so an explicit ignore: cannot drop it")
+    func alwaysIgnoreIsSeparateFromUserIgnore() {
+        #expect(
+            ArchLintConfig.alwaysIgnoreGlobs == ["**/.build/**", "**/.swiftpm/**", "**/DerivedData/**", "**/.git/**"]
+        )
+        let defaults = ArchLintConfig()
+        #expect(!defaults.ignoreGlobs.contains("**/.build/**"))
+        #expect(!defaults.ignoreGlobs.contains("**/.swiftpm/**"))
+    }
 }

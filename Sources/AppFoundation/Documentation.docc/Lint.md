@@ -70,6 +70,28 @@ ignore:                            # rutas ignoradas (glob: '*' un segmento, '**
   - Generated/**
 ```
 
+#### Qué se ignora, y qué se ignora siempre
+
+Hay dos listas, y conviene saber cuál es cuál:
+
+- **`ignore:`** — la lista del usuario. Sin fichero (o sin la clave), vale por defecto
+  `**/Tests/**`, `**/*Tests.swift`, `**/*Mock.swift`, `**/*Mocks.swift`, `**/*Spy.swift` y
+  `**/*Stub.swift`. Un `ignore:` explícito **reemplaza** esos defaults, no los amplía — es
+  la única forma de dejar de ignorar `Tests/**` si algún día lo necesitas. El `.archlint.yml`
+  que escribe `archinit` es explícito (`Tests/**` y `**/Mocks/**`), así que en un proyecto
+  inicializado con `archinit` los defaults ya no aplican.
+- **Siempre ignoradas** — `**/.build/**`, `**/.swiftpm/**`, `**/DerivedData/**` y
+  `**/.git/**`, aplicadas en toda ejecución, diga lo que diga `ignore:`. Ahí viven las
+  dependencias descargadas (`.build/checkouts` contiene las fuentes de cada dependencia,
+  incluidos los fixtures «malos» con los que AppFoundation prueba su propio linter) y los
+  productos de build; nunca tu código. Antes de 1.0.1 estas rutas vivían dentro de los
+  defaults de `ignore:`, y un `ignore:` explícito las borraba con el resto: `swift package
+  archlint` sin `--path` entraba en `.build/checkouts` y fallaba por código ajeno.
+
+El build-tool plugin (`ArchitectureLint`) no se ve afectado por nada de esto: recibe solo
+los `sourceFiles` del target. La distinción importa para el command plugin (`swift package
+archlint`), que sin `--path` recorre el directorio del paquete entero.
+
 ## Ver también
 
 - <doc:Generator> — el camino fácil: el cascarón que ya cumple estas reglas.

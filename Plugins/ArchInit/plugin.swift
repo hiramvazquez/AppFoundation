@@ -130,8 +130,11 @@ struct ArchInitPlugin: CommandPlugin {
         # en este proyecto).
         disabled: []
 
-        # Rutas ignoradas (glob: '*' un segmento, '**' cualquier profundidad). Tests/ y los
-        # dobles de test están ignorados por defecto aunque no se declaren aquí.
+        # Rutas ignoradas (glob: '*' un segmento, '**' cualquier profundidad). Esta lista
+        # REEMPLAZA los defaults de archlint (Tests/**, *Tests.swift, *Mock.swift, *Spy.swift,
+        # *Stub.swift): sin este fichero, archlint usa esos defaults. Al margen de lo que
+        # pongas aquí, .build/, .swiftpm/, DerivedData/ y .git/ se ignoran SIEMPRE — ahí
+        # viven las dependencias descargadas y los productos de build, no tu código.
         ignore:
           - Tests/**
           - "**/Mocks/**"
