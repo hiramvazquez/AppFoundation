@@ -13,9 +13,15 @@ import Foundation
 /// ```swift
 /// Container.shared.register(modules: [LoginModule(baseURL: URL(string: "https://api.myapp.com")!)])
 /// BaseViewModel.errorPresenter = AppErrorPresenter()
+/// BaseViewModel.cancellationRecognizer = AppCancellationRecognizer()
 /// ```
 /// and its root view would resolve `LoginViewModel`/`AppSessionState` from
 /// `Container.shared` — never construct them by hand.
+///
+/// The `cancellationRecognizer` line above is the seam a consumer of BOTH AppFoundation and
+/// CoreNetworking must not skip — see `AppCancellationRecognizer`'s doc comment for why
+/// `DefaultCancellationRecognizer` alone lets a cancelled login surface as "Something went
+/// wrong".
 public struct LoginModule: DependencyModule {
     private let baseURL: URL
 

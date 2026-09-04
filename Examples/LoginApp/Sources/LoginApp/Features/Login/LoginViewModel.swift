@@ -25,8 +25,12 @@ public final class LoginViewModel: LogicViewModel<any LoginLogicProtocol>, Actio
         case login
     }
 
-    public init(logic: any LoginLogicProtocol, errorPresenter: (any ErrorPresenting)? = nil) {
-        super.init(logic: logic, errorPresenter: errorPresenter)
+    public init(
+        logic: any LoginLogicProtocol,
+        errorPresenter: (any ErrorPresenting)? = nil,
+        cancellationRecognizer: (any CancellationRecognizing)? = nil
+    ) {
+        super.init(logic: logic, errorPresenter: errorPresenter, cancellationRecognizer: cancellationRecognizer)
     }
 
     public func handle(_ action: Action) {

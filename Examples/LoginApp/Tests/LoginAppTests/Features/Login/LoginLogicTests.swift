@@ -69,4 +69,14 @@ struct LoginLogicTests {
             _ = try await logic.login(email: "hiram@example.com", password: "secret")
         }
     }
+
+    @Test("A cancelled service failure maps to LoginError.cancelled — never .unknown")
+    func cancelledFailureMapsToCancelledNotUnknown() async {
+        let service = LoginServiceMock(result: .failure(.stub(code: .cancelled)))
+        let logic = LoginLogic(loginService: service, sessionStore: SessionStoreSpy())
+
+        await #expect(throws: LoginError.cancelled) {
+            _ = try await logic.login(email: "hiram@example.com", password: "secret")
+        }
+    }
 }

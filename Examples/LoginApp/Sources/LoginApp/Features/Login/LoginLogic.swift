@@ -42,11 +42,20 @@ public enum LoginError: DomainError, Equatable {
     case offline
     case server(message: String?)
     case unknown
+    /// The login request was cancelled (e.g. the user left the screen mid-request) — not a
+    /// failure. Kept as a `LoginError` case (instead of letting `mapError` fall through to
+    /// `.unknown`) precisely so `AppCancellationRecognizer` can recognize it AFTER
+    /// `LoginLogic` has already translated `APIError` away (`AppCancellationRecognizer.swift`
+    /// explains why a recognizer that only understands `APIError.isCancellation` isn't
+    /// enough here). `screenError`/`isRetryable` below are never actually used —
+    /// `BaseViewModel` filters this case out before `AppErrorPresenter` ever sees it — they
+    /// exist only because `DomainError` requires an exhaustive implementation.
+    case cancelled
 
     public var isRetryable: Bool {
         switch self {
         case .offline, .server, .unknown: true
-        case .emptyEmail, .emptyPassword, .invalidCredentials: false
+        case .emptyEmail, .emptyPassword, .invalidCredentials, .cancelled: false
         }
     }
 
@@ -67,6 +76,9 @@ public enum LoginError: DomainError, Equatable {
             return ScreenError(title: "Something went wrong", message: message ?? "Please try again later.")
         case .unknown:
             return ScreenError(title: "Something went wrong", message: "Please try again.")
+        case .cancelled:
+            // Unreachable in practice — see the case's doc comment.
+            return ScreenError(title: "Cancelled", message: "The request was cancelled.")
         }
     }
 }
@@ -124,6 +136,11 @@ public nonisolated final class LoginLogic: LoginLogicProtocol {
     /// method (`LoginViewModel`, `AppErrorPresenter`) only ever sees the result.
     private static func mapError(_ error: APIError) -> LoginError {
         switch error.category {
+        case .cancelled:
+            // NOT `.unknown`: a cancelled request is never a login failure, and falling
+            // through here is exactly the bug this case exists to avoid — see
+            // `LoginError.cancelled`'s doc comment and `AppCancellationRecognizer`.
+            return .cancelled
         case .offline:
             return .offline
         case .unauthorized:

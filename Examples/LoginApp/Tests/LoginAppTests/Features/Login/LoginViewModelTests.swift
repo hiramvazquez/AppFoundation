@@ -1,3 +1,5 @@
+import CoreNetworking
+import CoreNetworkingTestSupport
 import Foundation
 import Testing
 
@@ -48,5 +50,29 @@ struct LoginViewModelTests {
 
         #expect(viewModel.hasError)
         #expect(viewModel.currentError?.title == "Missing password")
+    }
+
+    @Test(
+        "A cancelled APIError from LoginServiceMock, through the real LoginLogic, never reaches phase == .error"
+    )
+    func cancelledLoginNeverSurfacesAsError() async {
+        // The full seam this test exists for: a REAL `LoginLogic` (not `LoginLogicMock`)
+        // translating a REAL `CoreNetworking.APIError(code: .cancelled)` into
+        // `LoginError.cancelled`, with `AppCancellationRecognizer` registered — exactly what
+        // `LoginModule`'s doc comment tells a consumer to wire up.
+        let service = LoginServiceMock(result: .failure(.stub(code: .cancelled)))
+        let logic = LoginLogic(loginService: service, sessionStore: SessionStoreSpy())
+        let viewModel = LoginViewModel(
+            logic: logic,
+            errorPresenter: AppErrorPresenter(),
+            cancellationRecognizer: AppCancellationRecognizer()
+        )
+        viewModel.handle(.updateEmail("hiram@example.com"))
+        viewModel.handle(.updatePassword("secret"))
+
+        viewModel.handle(.login)
+        await viewModel.inFlightLoad?.value
+
+        #expect(!viewModel.hasError)
     }
 }

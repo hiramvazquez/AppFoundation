@@ -105,6 +105,15 @@ struct AppCancellationRecognizer: CancellationRecognizing {
 BaseViewModel.cancellationRecognizer = AppCancellationRecognizer()
 ```
 
+Si tu `Logic` ya traduce el error de red a tu propio `DomainError` antes de devolverlo (M1,
+lo normal en las cuatro variantes de <doc:Architecture>), el `ViewModel` nunca ve el error de
+red original — solo el `DomainError` ya mapeado. Tu recognizer tiene que reconocer AMBAS
+formas: la de red (por si algún camino la deja pasar sin traducir) y la ya mapeada (para el
+camino normal). `Examples/LoginApp` (`AppCancellationRecognizer.swift`,
+`LoginLogic.mapError`) es el ejemplo completo de esta costura con CoreNetworking:
+`APIError(code: .cancelled)` se traduce a `LoginError.cancelled` — nunca a `.unknown` — y el
+recognizer reconoce los dos, `APIError.isCancellation` y `LoginError.cancelled`.
+
 ## Topics
 
 ### Presentación

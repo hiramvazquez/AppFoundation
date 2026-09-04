@@ -135,6 +135,17 @@ DÓNDE está el código, SwiftLint CÓMO está escrito, el compilador la concurr
 plugin junto a `ArchitectureLint` y un `try!` rompe el build igual que una violación de capa;
 en CI, `swiftlint --strict`. Artículo `CodeQuality` en DocC.
 
+## AppFoundation + CoreNetworking
+
+AppFoundation no depende de CoreNetworking (ni de ningún otro paquete de red) — son
+independientes por diseño, y `BaseViewModel.cancellationRecognizer` solo reconoce
+`CancellationError`/`URLError(.cancelled)`. Quien use los dos paquetes juntos tiene que
+registrar su propio `CancellationRecognizing` que entienda el error de red que use (p.ej.
+`CoreNetworking.APIError`) — de lo contrario, una petición que el propio usuario canceló
+puede acabar viéndose como "Algo salió mal". `Examples/LoginApp` (`AppCancellationRecognizer.swift`)
+es el ejemplo de referencia; el artículo `ErrorHandling` de DocC, sección «Cancelación»,
+explica la costura completa.
+
 ## Más
 
 - [`AGENTS.md`](AGENTS.md) — arquitectura, naming y qué NO hacer, para agentes y humanos.

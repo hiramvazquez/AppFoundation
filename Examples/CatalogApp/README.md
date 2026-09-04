@@ -3,6 +3,10 @@
 The "API + local" variant (`docs/ARQUITECTURA-KIT-2026-09-02.md` §1): a screen backed by both a
 network call and a local cache, following the cache-then-network contract (§8, M7): show
 whatever is cached immediately, refresh from the network, persist what comes back.
+`Package.swift` resolves CoreNetworking by looking at where it is: through `path:` when the
+sibling directory exists (inside the `spm-pro` monorepo, so this example always builds
+against the working tree), and by URL from the released version otherwise (the published
+AppFoundation repository, which carries no such sibling).
 
 ## Files
 
