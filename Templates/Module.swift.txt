@@ -1,5 +1,6 @@
 import AppFoundation
-{{#newService}}
+{{#splitModule}}import {{CoreModule}}
+{{/splitModule}}{{#newService}}
 import CoreNetworking
 {{/newService}}
 {{#newStore}}

@@ -215,4 +215,180 @@ for example in LoginApp NotesApp CatalogApp CounterApp; do
     fi
 done
 
-log "Todo verde: generate-feature (4 variantes) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07."
+########################################################################################
+# PRD-AF-10 (entregable 2): "modo multi" — generate-feature registra el target/producto
+# entre los markers de un Package.swift de tipo `Features` (archinit --multi, agente A) y
+# hace las inserciones best-effort en ../../App/{AppModule,AppRoute}.swift. `archinit
+# --multi` en sí no está construido todavía (otro entregable de PRD-AF-10): esta sección
+# monta a mano la estructura mínima del contrato documentado — `.archinit-multi`, los
+# markers de Package.swift, un `Platform` con el producto `Domain` vacío, y
+# `App/{AppModule,AppRoute}.swift` con sus markers — exactamente como se espera que
+# `archinit --multi` los deje.
+########################################################################################
+
+log "Modo multi: montando la estructura mínima del contrato (.archinit-multi + markers)"
+
+MULTI_ROOT="$WORK_DIR/MultiApp"
+FEATURES_DIR="$MULTI_ROOT/Packages/Features"
+PLATFORM_DIR="$MULTI_ROOT/Packages/Platform"
+APP_DIR="$MULTI_ROOT/App"
+
+mkdir -p "$FEATURES_DIR/Sources" "$FEATURES_DIR/Tests" "$PLATFORM_DIR/Sources/Domain" "$APP_DIR"
+touch "$FEATURES_DIR/.archinit-multi"
+
+cat > "$PLATFORM_DIR/Package.swift" <<'EOF'
+// swift-tools-version: 6.2
+import PackageDescription
+
+let package = Package(
+    name: "Platform",
+    platforms: [.iOS(.v17), .macOS(.v14)],
+    products: [
+        .library(name: "Domain", targets: ["Domain"])
+    ],
+    targets: [
+        .target(name: "Domain", path: "Sources/Domain")
+    ]
+)
+EOF
+
+cat > "$PLATFORM_DIR/Sources/Domain/Domain.swift" <<'EOF'
+// Modelos y protocolos compartidos entre features — solo Foundation (PRD-AF-10). Vacío a
+// propósito: este fixture solo comprueba que generate-feature enlaza contra el producto
+// Domain, no que lo use.
+public enum Domain {}
+EOF
+
+cat > "$FEATURES_DIR/Package.swift" <<EOF
+// swift-tools-version: 6.2
+import PackageDescription
+
+let swiftSettings: [SwiftSetting] = [
+    .defaultIsolation(MainActor.self),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+]
+
+let package = Package(
+    name: "Features",
+    platforms: [.iOS(.v17), .macOS(.v14)],
+    products: [
+        // archinit:products-begin
+        // archinit:products-end
+    ],
+    dependencies: [
+        .package(path: "$APPFOUNDATION_DIR"),
+        $CORENETWORKING_DEP,
+        .package(path: "$PLATFORM_DIR")
+    ],
+    targets: [
+        // archinit:features-begin
+        // archinit:features-end
+    ]
+)
+EOF
+
+cat > "$APP_DIR/AppModule.swift" <<'EOF'
+import AppFoundation
+
+/// Composition root — generado a mano por este fixture con la forma que archinit --multi
+/// deja (PRD-AF-10, entregable 4): generate-feature solo toca la línea del marker.
+enum AppModule {
+    static func register(in container: Container) {
+        container.register(modules: [
+            AppFoundationModule(),
+            // archinit:modules
+        ])
+    }
+}
+EOF
+
+cat > "$APP_DIR/AppRoute.swift" <<'EOF'
+/// Cada pantalla navegable de la app — generado a mano por este fixture con la forma que
+/// archinit --multi deja (PRD-AF-10, entregable 4): generate-feature solo añade el `case`.
+enum AppRoute: Hashable {
+    case home
+    // archinit:routes
+}
+EOF
+
+log "Modo multi: generate-feature Contratos --api / MisCasos --api --local --module"
+swift package --package-path "$FEATURES_DIR" --allow-writing-to-package-directory generate-feature Contratos --api
+swift package --package-path "$FEATURES_DIR" --allow-writing-to-package-directory generate-feature MisCasos --api --local --module
+
+MULTI_MANIFEST="$FEATURES_DIR/Package.swift"
+
+log "Modo multi: el target/producto de Contratos y MisCasos quedaron entre los markers"
+grep -q 'name: "ContratosFeature"' "$MULTI_MANIFEST" || fail "ContratosFeature no se registró entre los markers de targets"
+grep -q 'name: "ContratosFeatureTests"' "$MULTI_MANIFEST" || fail "ContratosFeatureTests no se registró entre los markers de targets"
+grep -q 'name: "MisCasosFeatureCore"' "$MULTI_MANIFEST" || fail "MisCasosFeatureCore no se registró (--module) entre los markers de targets"
+grep -q 'name: "MisCasosFeatureUI"' "$MULTI_MANIFEST" || fail "MisCasosFeatureUI no se registró (--module) entre los markers de targets"
+grep -q 'name: "MisCasosFeatureTests"' "$MULTI_MANIFEST" || fail "MisCasosFeatureTests no se registró entre los markers de targets"
+grep -q '.library(name: "ContratosFeature", targets: \["ContratosFeature"\])' "$MULTI_MANIFEST" \
+    || fail "El producto ContratosFeature no se registró entre los markers de products"
+grep -q '.library(name: "MisCasosFeature", targets: \["MisCasosFeatureCore", "MisCasosFeatureUI"\])' "$MULTI_MANIFEST" \
+    || fail "El producto MisCasosFeature (Core+UI) no se registró entre los markers de products"
+
+log "Modo multi: regenerar el mismo feature falla claro y no toca nada (target ya existe)"
+cp "$MULTI_MANIFEST" "$WORK_DIR/Package.swift.before-duplicate"
+if swift package --package-path "$FEATURES_DIR" --allow-writing-to-package-directory generate-feature Contratos --api \
+    > "$WORK_DIR/duplicate.log" 2>&1; then
+    cat "$WORK_DIR/duplicate.log"
+    fail "generate-feature Contratos --api debería haber fallado (ya está registrado) y no falló"
+fi
+grep -q "ya está registrado" "$WORK_DIR/duplicate.log" || {
+    cat "$WORK_DIR/duplicate.log"
+    fail "El error de 'ya existe' no fue claro"
+}
+diff -q "$WORK_DIR/Package.swift.before-duplicate" "$MULTI_MANIFEST" > /dev/null \
+    || fail "generate-feature tocó Package.swift aunque el target ya existía — debía dejarlo intacto"
+[ -f "$FEATURES_DIR/Sources/ContratosFeature/ContratosView.swift" ] \
+    || fail "el intento duplicado no debería haber borrado los ficheros de la primera generación"
+log "Confirmado: sin markers/target duplicado, generate-feature no toca nada"
+
+log "Modo multi: App/AppModule.swift y App/AppRoute.swift recibieron las inserciones"
+grep -q "ContratosModule()," "$APP_DIR/AppModule.swift" || fail "ContratosModule() no se insertó en App/AppModule.swift"
+grep -q "MisCasosModule()," "$APP_DIR/AppModule.swift" || fail "MisCasosModule() no se insertó en App/AppModule.swift"
+grep -q "case contratos" "$APP_DIR/AppRoute.swift" || fail "'case contratos' no se insertó en App/AppRoute.swift"
+grep -q "case misCasos" "$APP_DIR/AppRoute.swift" || fail "'case misCasos' no se insertó en App/AppRoute.swift"
+
+log "Modo multi: swift build del paquete Features (Contratos + MisCasosCore/UI, ArchitectureLint incluido)"
+swift build --package-path "$FEATURES_DIR" || fail "swift build falló sobre el paquete Features en modo multi"
+
+log "Modo multi: swift test del paquete Features"
+swift test --package-path "$FEATURES_DIR" || fail "swift test falló sobre el paquete Features en modo multi"
+
+log "Modo multi: swift package archlint sobre Features (debe pasar limpio)"
+if ! swift package --package-path "$FEATURES_DIR" archlint > "$WORK_DIR/archlint-multi.log" 2>&1; then
+    cat "$WORK_DIR/archlint-multi.log"
+    fail "swift package archlint falló sobre el paquete Features en modo multi"
+fi
+grep -q "archlint: 0 errors" "$WORK_DIR/archlint-multi.log" || {
+    cat "$WORK_DIR/archlint-multi.log"
+    fail "El paquete Features en modo multi no reportó 'archlint: 0 errors'"
+}
+
+if command -v swiftlint > /dev/null 2>&1; then
+    log "Modo multi: swiftlint --strict sobre el código generado (Templates/swiftlint.yml)"
+    swiftlint lint --strict --quiet --config "$SWIFTLINT_CONFIG" "$FEATURES_DIR/Sources" "$FEATURES_DIR/Tests" \
+        || fail "El código generado en modo multi no pasa swiftlint --strict con la configuración curada"
+else
+    log "AVISO: swiftlint no está en el PATH — se omite la comprobación de calidad del código generado en modo multi"
+fi
+
+log "Modo multi: --no-register no toca Package.swift ni App/"
+cp "$MULTI_MANIFEST" "$WORK_DIR/Package.swift.before-no-register"
+cp "$APP_DIR/AppModule.swift" "$WORK_DIR/AppModule.swift.before-no-register"
+cp "$APP_DIR/AppRoute.swift" "$WORK_DIR/AppRoute.swift.before-no-register"
+swift package --package-path "$FEATURES_DIR" --allow-writing-to-package-directory generate-feature Standalone --no-register
+diff -q "$WORK_DIR/Package.swift.before-no-register" "$MULTI_MANIFEST" > /dev/null \
+    || fail "--no-register no debía tocar Package.swift"
+diff -q "$WORK_DIR/AppModule.swift.before-no-register" "$APP_DIR/AppModule.swift" > /dev/null \
+    || fail "--no-register no debía tocar App/AppModule.swift"
+diff -q "$WORK_DIR/AppRoute.swift.before-no-register" "$APP_DIR/AppRoute.swift" > /dev/null \
+    || fail "--no-register no debía tocar App/AppRoute.swift"
+[ -f "$FEATURES_DIR/Sources/StandaloneFeature/StandaloneView.swift" ] \
+    || fail "--no-register debía seguir generando los ficheros del feature, solo sin registrar nada"
+log "Confirmado: --no-register genera ficheros sin editar Package.swift ni App/"
+
+log "Todo verde: generate-feature (4 variantes) + modo multi (targets/producto registrados, duplicado rechazado sin tocar nada, App/AppModule+AppRoute, --no-register) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07 y sobre Features en modo multi."

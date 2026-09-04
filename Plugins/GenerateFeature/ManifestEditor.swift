@@ -1,0 +1,1 @@
+../../Sources/GenerateFeatureSupport/ManifestEditor.swift

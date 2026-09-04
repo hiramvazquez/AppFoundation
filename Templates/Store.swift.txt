@@ -4,11 +4,18 @@ import SwiftData
 // MARK: - The persistence model (AGENTS.md §8, M2: only this file
 // ever sees it)
 
-/// La entidad SwiftData. Nunca sale de este fichero: `SwiftData{{Feature}}Store` la mapea
-/// a `{{Feature}}Item` (el modelo de dominio) al leer, y de vuelta al escribir.
+/// La entidad SwiftData. `SwiftData{{Feature}}Store` la mapea a `{{Feature}}Item` (el
+/// modelo de dominio) al leer, y de vuelta al escribir — Logic/ViewModel/View nunca la ven
+/// (M2). `{{Feature}}Module.swift` sí la referencia (solo el TIPO, para construir el
+/// `ModelContainer` por defecto): el composition root es quien conoce los tipos concretos
+/// de persistencia (M4), y en modo multi + `--module` vive en un target distinto de este
+/// fichero — de ahí `public` en vez de `internal`.
 @Model
-final class {{Feature}}Record {
-    @Attribute(.unique) var id: UUID
+public final class {{Feature}}Record {
+    // `public`: the `@Model` macro synthesizes `{{Feature}}Record: Identifiable`, and a
+    // public type's `id` must satisfy that public protocol requirement with a public
+    // property too — the compiler enforces it, not a style choice.
+    @Attribute(.unique) public var id: UUID
     var title: String
 
     init(id: UUID, title: String) {

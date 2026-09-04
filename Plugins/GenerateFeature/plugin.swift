@@ -10,7 +10,7 @@ import PackagePlugin
 /// `swift package --allow-writing-to-package-directory generate-feature <Nombre> [--api]
 /// [--local] [--module] [--analytics] [--no-logic] [--no-tests] [--path Features]
 /// [--dry-run] [--target NAME] [--route AppRoute.xxx] [--no-service] [--no-store]
-/// [--service-from <Feature>] [--store-from <Feature>]`
+/// [--service-from <Feature>] [--store-from <Feature>] [--no-register]`
 /// (`AGENTS.md`).
 ///
 /// Genera el cascarón completo View → ViewModel → Logic → Services/Stores de una feature
@@ -26,6 +26,16 @@ import PackagePlugin
 /// el `XxxModule` no registra nada porque el feature reutilizado ya lo hace). Ninguna de las
 /// dos combina con su opuesta (`--no-service` + `--service-from` es un error), y ambas
 /// implican `--api`/`--local` respectivamente.
+///
+/// **Modo multi** (PRD-AF-10): si el paquete donde se invoca tiene un `.archinit-multi` en
+/// su raíz (lo deja `archinit --multi`), cada feature es un target real propio —
+/// `--module` da dos, `<Nombre>FeatureCore`/`<Nombre>FeatureUI` — y este comando los da de
+/// alta entre los markers `// archinit:features-begin/end` y `// archinit:products-begin/
+/// end` de `Package.swift`, además de insertar `<Nombre>Module()`/`case <nombre>` en
+/// `../../App/{AppModule,AppRoute}.swift` si esos ficheros y sus markers existen.
+/// `--no-register` desactiva las tres ediciones. Fuera de modo multi, este plugin no
+/// cambia de comportamiento — ver `MultiMode.swift` y `Documentation.docc/Generator.md`
+/// («Modo multi»).
 @main
 struct GenerateFeaturePlugin: CommandPlugin {
     func performCommand(context: PluginContext, arguments: [String]) async throws {
@@ -44,6 +54,11 @@ struct GenerateFeaturePlugin: CommandPlugin {
         let noStoreFlag = extractor.extractFlag(named: "no-store") > 0
         let serviceFromRaw = extractor.extractOption(named: "service-from").first
         let storeFromRaw = extractor.extractOption(named: "store-from").first
+        // PRD-AF-10 (entregable 2): en modo multi (`.archinit-multi` en la raíz del
+        // paquete Features), --no-register desactiva la única edición de manifiesto que
+        // hace este generador (Package.swift entre markers) y las inserciones best-effort
+        // en ../../App/{AppModule,AppRoute}.swift. Sin efecto fuera de modo multi.
+        let noRegister = extractor.extractFlag(named: "no-register") > 0
         let remaining = extractor.remainingArguments
 
         guard let rawName = remaining.first, !rawName.isEmpty else {
@@ -73,27 +88,6 @@ struct GenerateFeaturePlugin: CommandPlugin {
 
         guard let templatesDirectory = Self.findTemplatesDirectory(in: context.package) else {
             throw GenerateFeatureError.templatesNotFound
-        }
-
-        guard let target = Self.selectTarget(context.package, named: targetOption) else {
-            throw GenerateFeatureError.noTarget
-        }
-        // Un paquete recién creado declara `Tests/<Target>Tests` en Package.swift pero aún no
-        // tiene ficheros ahí, y SwiftPM no lo lista como target. Es justo el momento en que
-        // más se usa el generador, así que se cae al directorio convencional y se avisa.
-        let testDirectoryURL: URL
-        if let testTarget = Self.testTarget(for: target, in: context.package) {
-            testDirectoryURL = testTarget.directoryURL
-        } else {
-            testDirectoryURL = context.package.directoryURL
-                .appendingPathComponent("Tests")
-                .appendingPathComponent("\(target.name)Tests")
-            if !noTests {
-                print(
-                    "Aviso: no hay target de tests con ficheros para '\(target.name)'; los tests se generan en "
-                        + "Tests/\(target.name)Tests/ — asegúrate de que Package.swift declara ese testTarget."
-                )
-            }
         }
 
         let both = api && local
@@ -138,10 +132,13 @@ struct GenerateFeaturePlugin: CommandPlugin {
         // both).
         let serviceItemType = serviceFrom.map { "\($0)Item" } ?? "\(feature)Item"
         let storeItemType = storeFrom.map { "\($0)Item" } ?? "\(feature)Item"
+        // "Module" (the `@testable import` target for the four Test/Mock templates) is
+        // deliberately absent here: it depends on which target a file ends up in, which
+        // in turn depends on multi mode / --module — every call site below passes it
+        // explicitly via `render(_:module:)` instead of baking one value in globally.
         let substitutions: [String: String] = [
             "Feature": feature,
             "feature": featureLower,
-            "Module": target.moduleName,
             "ServiceItemType": serviceItemType,
             "StoreItemType": storeItemType,
             "ServiceFeature": serviceFrom ?? "",
@@ -153,14 +150,74 @@ struct GenerateFeaturePlugin: CommandPlugin {
         ]
 
         let engine = TemplateEngine.self
-        func render(_ templateName: String) throws -> String {
+        // `module`: the `{{Module}}` a Test/Mock template `@testable import`s — omitted
+        // for the six non-test templates, which never reference it. `splitModule`/
+        // `coreModule`: PRD-AF-10's multi + `--module` cross-target import (View/
+        // ViewModel/Module.swift.txt import the Core target to see `{{Feature}}Item`/
+        // `{{Feature}}LogicProtocol`/etc.) — both default to "off", which renders
+        // byte-identical to before this generator knew about multi mode.
+        func render(_ templateName: String, module: String? = nil, splitModule: Bool = false, coreModule: String? = nil)
+            throws -> String
+        {
             let url = templatesDirectory.appendingPathComponent(templateName)
             guard let data = FileManager.default.contents(atPath: url.path),
                 let text = String(data: data, encoding: .utf8)
             else {
                 throw GenerateFeatureError.templateMissing(templateName)
             }
-            return engine.render(text, substitutions: substitutions, flags: flags)
+            var renderSubstitutions = substitutions
+            if let module { renderSubstitutions["Module"] = module }
+            if let coreModule { renderSubstitutions["CoreModule"] = coreModule }
+            var renderFlags = flags
+            renderFlags["splitModule"] = splitModule
+            return engine.render(text, substitutions: renderSubstitutions, flags: renderFlags)
+        }
+
+        // PRD-AF-10 (entregable 2): modo multi — un fichero `.archinit-multi` en la raíz
+        // del paquete Features (donde se invoca el plugin). Cada feature es un target real
+        // propio (dos con --module) en vez de una subcarpeta de un target existente que ya
+        // tiene que existir de antemano — así que esta rama nunca llama a `selectTarget`.
+        if Self.isMultiMode(package: context.package) {
+            try Self.performMultiMode(
+                context: context,
+                feature: feature,
+                featureLower: featureLower,
+                api: api,
+                module: module,
+                noLogic: noLogic,
+                noTests: noTests,
+                dryRun: dryRun,
+                noRegister: noRegister,
+                newService: newService,
+                newStore: newStore,
+                noServiceFlag: noServiceFlag,
+                noStoreFlag: noStoreFlag,
+                serviceFrom: serviceFrom,
+                storeFrom: storeFrom,
+                render: render
+            )
+            return
+        }
+
+        guard let target = Self.selectTarget(context.package, named: targetOption) else {
+            throw GenerateFeatureError.noTarget
+        }
+        // Un paquete recién creado declara `Tests/<Target>Tests` en Package.swift pero aún no
+        // tiene ficheros ahí, y SwiftPM no lo lista como target. Es justo el momento en que
+        // más se usa el generador, así que se cae al directorio convencional y se avisa.
+        let testDirectoryURL: URL
+        if let testTarget = Self.testTarget(for: target, in: context.package) {
+            testDirectoryURL = testTarget.directoryURL
+        } else {
+            testDirectoryURL = context.package.directoryURL
+                .appendingPathComponent("Tests")
+                .appendingPathComponent("\(target.name)Tests")
+            if !noTests {
+                print(
+                    "Aviso: no hay target de tests con ficheros para '\(target.name)'; los tests se generan en "
+                        + "Tests/\(target.name)Tests/ — asegúrate de que Package.swift declara ese testTarget."
+                )
+            }
         }
 
         // MARK: - Destination layout
@@ -225,20 +282,20 @@ struct GenerateFeaturePlugin: CommandPlugin {
                 writes.append(
                     (
                         featureTestDir.appendingPathComponent("\(feature)ViewModelTests.swift"),
-                        try render("ViewModelTests.swift.txt")
+                        try render("ViewModelTests.swift.txt", module: target.moduleName)
                     )
                 )
                 writes.append(
                     (
                         featureTestDir.appendingPathComponent("Mocks")
                             .appendingPathComponent("\(feature)LogicMock.swift"),
-                        try render("LogicMock.swift.txt")
+                        try render("LogicMock.swift.txt", module: target.moduleName)
                     )
                 )
                 writes.append(
                     (
                         featureTestDir.appendingPathComponent("\(feature)LogicTests.swift"),
-                        try render("LogicTests.swift.txt")
+                        try render("LogicTests.swift.txt", module: target.moduleName)
                     )
                 )
                 if newService {
@@ -246,14 +303,14 @@ struct GenerateFeaturePlugin: CommandPlugin {
                         (
                             featureTestDir.appendingPathComponent("Mocks")
                                 .appendingPathComponent("\(feature)ServiceMock.swift"),
-                            try render("ServiceMock.swift.txt")
+                            try render("ServiceMock.swift.txt", module: target.moduleName)
                         )
                     )
                     writes.append(
                         (
                             featureTestDir.appendingPathComponent("Services")
                                 .appendingPathComponent("\(feature)ServiceTests.swift"),
-                            try render("ServiceTests.swift.txt")
+                            try render("ServiceTests.swift.txt", module: target.moduleName)
                         )
                     )
                 }
@@ -262,14 +319,14 @@ struct GenerateFeaturePlugin: CommandPlugin {
                         (
                             featureTestDir.appendingPathComponent("Mocks")
                                 .appendingPathComponent("InMemory\(feature)Store.swift"),
-                            try render("InMemoryStore.swift.txt")
+                            try render("InMemoryStore.swift.txt", module: target.moduleName)
                         )
                     )
                     writes.append(
                         (
                             featureTestDir.appendingPathComponent("Stores")
                                 .appendingPathComponent("\(feature)StoreTests.swift"),
-                            try render("StoreTests.swift.txt")
+                            try render("StoreTests.swift.txt", module: target.moduleName)
                         )
                     )
                 }
@@ -354,7 +411,9 @@ struct GenerateFeaturePlugin: CommandPlugin {
         return String(first).lowercased() + pascal.dropFirst()
     }
 
-    private static func displayPath(_ url: URL, root: URL) -> String {
+    // `internal` (not `private`): `Plugins/GenerateFeature/MultiMode.swift` (a separate
+    // file, same extension-friendly type) reuses this for its own generated-file listing.
+    static func displayPath(_ url: URL, root: URL) -> String {
         let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
         return url.path.hasPrefix(rootPath) ? String(url.path.dropFirst(rootPath.count)) : url.path
     }
