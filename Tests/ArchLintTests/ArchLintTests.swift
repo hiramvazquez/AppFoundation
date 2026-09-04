@@ -407,3 +407,243 @@ struct ArchLintInternalsTests {
         #expect(!defaults.ignoreGlobs.contains("**/.swiftpm/**"))
     }
 }
+
+/// R13/R14 (PRD-AF-10): module isolation and branch/revision dependencies. Fixtures under
+/// `Fixtures/Multi/` — a repo-root `.archlint.yml` with `modules:`, a small `AFeature` that
+/// breaks two different ways, a clean `Domain`, and a `Package.swift` pinned to a branch.
+@Suite("ArchLint R13/R14 — module isolation and branch dependencies")
+struct ArchLintModuleRuleTests {
+    /// `Fixtures/Multi/.archlint.yml` and `Fixtures/Multi/Package.swift` are read directly
+    /// (not through `Bundle.module`, unlike every other fixture in this file): a leading-dot
+    /// filename is awkward as a `forResource:withExtension:` resource name, and reading the
+    /// checked-in fixture straight from disk — relative to this test file's own `#filePath`
+    /// — works just as well for plain text either way.
+    private func multiFixtureURL(_ relativePath: String) -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/Multi/\(relativePath)")
+    }
+
+    private func multiConfig() -> ArchLintConfig {
+        let text = (try? String(contentsOf: multiFixtureURL(".archlint.yml"), encoding: .utf8)) ?? ""
+        return ArchLintConfig.parse(text)
+    }
+
+    private func parseSource(_ relativePathUnderMulti: String) -> ParsedFile {
+        let url = multiFixtureURL(relativePathUnderMulti)
+        let source = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        return FileParser.parse(path: url.path, relativePath: relativePathUnderMulti, source: source)
+    }
+
+    // MARK: - Config parsing: the nested `modules:` block and the flat dotted form agree
+
+    @Test("modules: nested block form parses pattern, allowedImports, forbiddenImports")
+    func nestedModulesBlockParses() {
+        let config = multiConfig()
+        #expect(config.modules.count == 2)
+
+        let domain = config.moduleRule(for: "Domain")
+        #expect(domain?.allowedImports == ["Foundation"])
+        #expect(domain?.forbiddenImports.isEmpty == true)
+
+        let feature = config.moduleRule(for: "AFeature")
+        #expect(feature?.allowedImports == ["Foundation", "SwiftUI", "Domain"])
+        #expect(feature?.forbiddenImports == ["*Feature", "Firebase*"])
+    }
+
+    @Test("modules.<glob>.allowedImports: [...] (flat dotted form) is equivalent to the nested block")
+    func flatDottedFormIsEquivalent() {
+        let text = """
+            modules.Domain.allowedImports: [Foundation]
+            modules.*Feature.allowedImports: [Foundation, SwiftUI, Domain]
+            modules.*Feature.forbiddenImports: [*Feature, Firebase*]
+            """
+        let config = ArchLintConfig.parse(text)
+        #expect(config.moduleRule(for: "Domain")?.allowedImports == ["Foundation"])
+        let feature = config.moduleRule(for: "AFeature")
+        #expect(feature?.allowedImports == ["Foundation", "SwiftUI", "Domain"])
+        #expect(feature?.forbiddenImports == ["*Feature", "Firebase*"])
+    }
+
+    @Test("moduleRule(for:) prefers an exact match over a glob that also matches")
+    func exactMatchWinsOverGlob() {
+        var config = ArchLintConfig()
+        config.modules = [
+            ModuleRule(pattern: "*Feature", allowedImports: ["Foundation"]),
+            ModuleRule(pattern: "AFeature", forbiddenImports: ["Everything"])
+        ]
+        let rule = config.moduleRule(for: "AFeature")
+        #expect(rule?.pattern == "AFeature")
+        #expect(rule?.forbiddenImports == ["Everything"])
+    }
+
+    // MARK: - moduleName(relativePath:)
+
+    @Test("moduleName(relativePath:) reads the Sources/<Target>/ segment, Core/UI included")
+    func moduleNameFromPath() {
+        #expect(RuleEngine.moduleName(relativePath: "Sources/MisCasosFeature/Thing.swift") == "MisCasosFeature")
+        #expect(
+            RuleEngine.moduleName(relativePath: "Sources/MisCasosFeatureCore/Thing.swift") == "MisCasosFeatureCore"
+        )
+        #expect(RuleEngine.moduleName(relativePath: "Package.swift") == nil)
+    }
+
+    // MARK: - R13 fires
+
+    @Test("R13: AFeature importing BFeature (feature-to-feature) fires with the Domain/AppRoute phrasing")
+    func r13FiresForFeatureToFeature() {
+        let file = parseSource("Sources/AFeature/AFeatureThing.swift")
+        let diags = RuleEngine.run(files: [file], config: multiConfig())
+        let r13 = diags.filter { $0.rule == "R13" }
+        #expect(r13.count == 1)
+        #expect(r13.first?.severity == .error)
+        #expect(r13.first?.message.contains("las features se comunican por Domain y por AppRoute") == true)
+    }
+
+    @Test("R13: AFeature importing FirebaseAnalytics (an SDK) fires with the Adapter/Kit phrasing")
+    func r13FiresForSDKImport() {
+        let file = parseSource("Sources/AFeature/AFeatureAnalytics.swift")
+        let diags = RuleEngine.run(files: [file], config: multiConfig())
+        let r13 = diags.filter { $0.rule == "R13" }
+        #expect(r13.count == 1)
+        #expect(r13.first?.severity == .error)
+        #expect(r13.first?.message.contains("Adapter/Kit") == true)
+    }
+
+    @Test("R13: Domain importing only Foundation is clean")
+    func r13CleanForDomain() {
+        let file = parseSource("Sources/Domain/DomainThing.swift")
+        let diags = RuleEngine.run(files: [file], config: multiConfig())
+        #expect(!diags.contains { $0.rule == "R13" })
+    }
+
+    @Test("R13: --module (moduleOverride) wins over the path-derived module")
+    func r13ModuleOverrideWins() {
+        var config = multiConfig()
+        config.moduleOverride = "Domain"
+        // Path says AFeature, override says Domain: BFeature is not among Domain's
+        // allowedImports ([Foundation]) either, so this still fires — as Domain, proving the
+        // override (not the path) is what decided which rule applied.
+        let file = parseSource("Sources/AFeature/AFeatureThing.swift")
+        let diags = RuleEngine.run(files: [file], config: config)
+        let r13 = diags.filter { $0.rule == "R13" }
+        #expect(r13.count == 1)
+        #expect(r13.first?.message.hasPrefix("'Domain'") == true)
+    }
+
+    @Test("R13: without modules:, nothing fires — full backward compatibility")
+    func r13NoOpWithoutModulesConfig() {
+        let file = parseSource("Sources/AFeature/AFeatureThing.swift")
+        let diags = RuleEngine.run(files: [file], config: ArchLintConfig())
+        #expect(diags.isEmpty)
+    }
+
+    @Test("R13: import Testing/XCTest is never flagged, even under a restrictive allowedImports")
+    func r13IgnoresTestFrameworks() {
+        let source = """
+            import Testing
+            import XCTest
+
+            struct AFeatureSpec {}
+            """
+        let file = FileParser.parse(
+            path: "AFeatureSpec.swift",
+            relativePath: "Sources/AFeature/AFeatureSpec.swift",
+            source: source
+        )
+        let diags = RuleEngine.run(files: [file], config: multiConfig())
+        #expect(!diags.contains { $0.rule == "R13" })
+    }
+
+    // MARK: - R14 fires (Package.swift branch/revision)
+
+    @Test("R14: a dependency pinned to branch: fires as a warning, never an error")
+    func r14FiresForBranch() {
+        let url = multiFixtureURL("Package.swift")
+        let source = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        let diags = RuleEngine.checkR14(packageSwiftSource: source, path: url.path)
+        #expect(diags.count == 1)
+        #expect(diags.first?.severity == .warning)
+        #expect(diags.first?.rule == "R14")
+        #expect(diags.first?.message.contains("no es reproducible") == true)
+    }
+
+    @Test("R14: a `let revision: String` declaration is not mistaken for a .package(revision:) argument")
+    func r14DoesNotFireOnUnrelatedDeclaration() {
+        let source = """
+            import PackageDescription
+            let revision: String = "abc123"
+            let branch: String = "main"
+            let package = Package(name: "X", dependencies: [
+                .package(url: "https://example.com/dep.git", from: "1.0.0")
+            ])
+            """
+        let diags = RuleEngine.checkR14(packageSwiftSource: source, path: "Package.swift")
+        #expect(diags.isEmpty)
+    }
+
+    @Test("R14: revision: as a call argument also fires")
+    func r14FiresForRevision() {
+        let source = """
+            import PackageDescription
+            let package = Package(name: "X", dependencies: [
+                .package(url: "https://example.com/dep.git", revision: "abc123")
+            ])
+            """
+        let diags = RuleEngine.checkR14(packageSwiftSource: source, path: "Package.swift")
+        #expect(diags.count == 1)
+        #expect(diags.first?.severity == .warning)
+    }
+
+    // MARK: - resolveModules: local config vs. walking up to a repo-root config vs. override
+
+    @Test("resolveModules walks up from --root to find a parent .archlint.yml's modules:")
+    func resolveModulesWalksUpToRepoRoot() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let packageDir = base.appendingPathComponent("Packages/Features")
+        try FileManager.default.createDirectory(at: packageDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let rootConfig = """
+            modules:
+              Domain:
+                allowedImports: [Foundation]
+            """
+        try rootConfig.write(to: base.appendingPathComponent(".archlint.yml"), atomically: true, encoding: .utf8)
+
+        let modules = ArchLintConfig.resolveModules(currentModules: [], root: packageDir.path, explicitPath: nil)
+        #expect(modules.count == 1)
+        #expect(modules.first?.pattern == "Domain")
+    }
+
+    @Test("resolveModules keeps the local config's own modules: without walking up")
+    func resolveModulesKeepsLocalWhenPresent() {
+        let local = [ModuleRule(pattern: "Domain", allowedImports: ["Foundation"])]
+        let modules = ArchLintConfig.resolveModules(
+            currentModules: local,
+            root: "/nonexistent-\(UUID().uuidString)",
+            explicitPath: nil
+        )
+        #expect(modules == local)
+    }
+
+    @Test("resolveModules: --modules-config overrides everything, even a non-empty local modules:")
+    func resolveModulesExplicitPathOverrides() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let explicitPath = base.appendingPathComponent("modules.archlint.yml")
+        try "modules.CameraKit.allowedImports: [Foundation, Domain]"
+            .write(to: explicitPath, atomically: true, encoding: .utf8)
+
+        let local = [ModuleRule(pattern: "Domain", allowedImports: ["Foundation"])]
+        let modules = ArchLintConfig.resolveModules(
+            currentModules: local,
+            root: "/irrelevant",
+            explicitPath: explicitPath.path
+        )
+        #expect(modules.count == 1)
+        #expect(modules.first?.pattern == "CameraKit")
+    }
+}

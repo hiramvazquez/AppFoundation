@@ -1,0 +1,9 @@
+# Fixture for R13 (PRD-AF-10): a repo-root `modules:` section, nested form. Loaded directly
+# by ArchLintTests.swift (not through Bundle.module — a leading-dot filename is awkward as a
+# `forResource:withExtension:` resource name) via a path relative to the test file itself.
+modules:
+  Domain:
+    allowedImports: [Foundation]
+  "*Feature":
+    allowedImports: [Foundation, SwiftUI, Domain]
+    forbiddenImports: ["*Feature", "Firebase*"]
