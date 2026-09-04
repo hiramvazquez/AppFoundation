@@ -25,8 +25,10 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
   acción descartada porque su ViewModel ya no existe, configurable vía
   `AppFoundationDiagnostics`; `ArchitectureLint` (R12) avisa de `let viewModel:` en un
   `*View.swift`.
-- **ViewModel** (`@MainActor`): `final class XxxViewModel: LogicViewModel<any XxxLogicProtocol>,
-  ActionHandling`. Orquesta: recibe `Action` en `handle(_:)`, llama a `logic`, actualiza
+- **ViewModel** (`@MainActor`): `@Observable final class XxxViewModel: LogicViewModel<any
+  XxxLogicProtocol>, ActionHandling`. **`@Observable` no se hereda**: el macro solo instrumenta
+  las propiedades declaradas en la clase que lo lleva; sin él, las propiedades propias del
+  ViewModel no refrescan la vista (regla R15, error de build). Orquesta: recibe `Action` en `handle(_:)`, llama a `logic`, actualiza
   `phase`/estado propio, decide navegación (`Router`/`Coordinator`). Nunca conoce
   `APIService`, `URLSession`, SwiftData ni un `*Service`/`*Store` concreto — solo `logic`.
 - **Logic** (`nonisolated`, métodos `async`): `protocol XxxLogicProtocol: Logic { … }` +

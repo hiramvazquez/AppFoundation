@@ -9,6 +9,7 @@ protocol ItemsLoading: Sendable {
     func fetch() async throws -> [String]
 }
 
+@Observable
 final class ItemsViewModel: BaseViewModel, ActionHandling {
     private(set) var items: [String] = []
     private let service: any ItemsLoading

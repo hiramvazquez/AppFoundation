@@ -1,6 +1,7 @@
 // Un formulario: validación local antes de llamar a la Logic, submit vía
 // `performActivity` (el contenido — el propio formulario — se queda visible).
 import AppFoundation
+import Observation
 
 enum SignupError: DomainError {
     case invalidEmail
@@ -17,6 +18,7 @@ protocol SignupLogicProtocol: Logic, Sendable {
     func signUp(email: String, password: String) async throws(SignupError)
 }
 
+@Observable
 final class SignupViewModel: LogicViewModel<any SignupLogicProtocol>, ActionHandling {
     var email = ""
     var password = ""

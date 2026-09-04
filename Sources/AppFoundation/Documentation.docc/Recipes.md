@@ -11,6 +11,7 @@ contenido ya visible mientras llega más.
 <!-- snippet: recipe-pagination -->
 ```swift
 import AppFoundation
+import Observation
 
 struct Page: Sendable {
     let items: [String]
@@ -21,6 +22,7 @@ protocol FeedLoading: Sendable {
     func load(page: Int) async throws -> Page
 }
 
+@Observable
 final class FeedViewModel: BaseViewModel, ActionHandling {
     private(set) var items: [String] = []
     private var currentPage = 0
@@ -79,6 +81,7 @@ protocol ItemsLoading: Sendable {
     func fetch() async throws -> [String]
 }
 
+@Observable
 final class ItemsViewModel: BaseViewModel, ActionHandling {
     private(set) var items: [String] = []
     private let service: any ItemsLoading
@@ -133,6 +136,7 @@ formulario es el contenido, se queda visible mientras se envía.
 <!-- snippet: recipe-form -->
 ```swift
 import AppFoundation
+import Observation
 
 enum SignupError: DomainError {
     case invalidEmail
@@ -149,6 +153,7 @@ protocol SignupLogicProtocol: Logic, Sendable {
     func signUp(email: String, password: String) async throws(SignupError)
 }
 
+@Observable
 final class SignupViewModel: LogicViewModel<any SignupLogicProtocol>, ActionHandling {
     var email = ""
     var password = ""

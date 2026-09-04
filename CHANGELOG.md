@@ -6,6 +6,23 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-04
+
+### Corregido
+
+- **`@Observable` no se hereda de `BaseViewModel`**: el macro instrumenta solo las propiedades
+  declaradas en la clase que lo lleva, así que un ViewModel sin él nunca notificaba sus
+  propiedades propias (la vista se refrescaba solo cuando cambiaba `phase`/`activity`, por
+  coincidencia). Descubierto en AppStarter con un contador de renders y medido con
+  `withObservationTracking` (`ObservationInheritanceTests`). La plantilla del ViewModel, los
+  cuatro ejemplos, los snippets, los artículos, el README y `AGENTS.md` declaran ahora
+  `@Observable` en cada ViewModel.
+
+### Añadido
+
+- **Regla R15** (error): una `class` cuyo nombre termina en `ViewModel` debe llevar
+  `@Observable`.
+
 ## [1.2.0] - 2026-09-04
 
 ### Añadido

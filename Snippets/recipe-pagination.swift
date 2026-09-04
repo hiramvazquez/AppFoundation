@@ -1,6 +1,7 @@
 // Paginación: la carga inicial usa `performLoad`; cargar la página siguiente es
 // `activity` — no reemplaza el contenido ya visible mientras llega más.
 import AppFoundation
+import Observation
 
 struct Page: Sendable {
     let items: [String]
@@ -11,6 +12,7 @@ protocol FeedLoading: Sendable {
     func load(page: Int) async throws -> Page
 }
 
+@Observable
 final class FeedViewModel: BaseViewModel, ActionHandling {
     private(set) var items: [String] = []
     private var currentPage = 0

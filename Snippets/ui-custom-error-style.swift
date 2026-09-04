@@ -16,6 +16,7 @@ struct BrandErrorStyle: ErrorViewStyle {
     }
 }
 
+@Observable
 final class ProfileViewModel: BaseViewModel, ActionHandling {
     enum Action: Sendable { case load }
     func handle(_ action: Action) {}

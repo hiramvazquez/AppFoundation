@@ -71,6 +71,7 @@ final class GreetingLogic: GreetingLogicProtocol {
 }
 
 // 3. ViewModel — orquesta, nunca conoce Service/Store
+@Observable
 final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
     private(set) var message = ""
     enum Action: Sendable { case load(name: String) }

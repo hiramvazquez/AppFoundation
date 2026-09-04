@@ -1,7 +1,9 @@
 // `inFlightLoad`/`inFlightActivity` evitan sondear `phase` en un bucle: el test
 // espera el `Task` que `performLoad`/`handle(_:)` ya está corriendo.
 import AppFoundation
+import Observation
 
+@Observable
 final class CounterViewModel: BaseViewModel, ActionHandling {
     private(set) var count = 0
 

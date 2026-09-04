@@ -15,7 +15,9 @@ cancela cualquier trabajo en vuelo.
 <!-- snippet: utilities-debouncer -->
 ```swift
 import AppFoundation
+import Observation
 
+@Observable
 final class SearchViewModel: BaseViewModel {
     private let debouncer = Debouncer(delay: .milliseconds(300))
     private(set) var query = ""

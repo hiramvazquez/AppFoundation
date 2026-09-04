@@ -1,6 +1,7 @@
 import AppFoundation
 {{#splitModule}}import {{CoreModule}}
 {{/splitModule}}import Foundation
+import Observation
 
 /// Generado por `swift package generate-feature {{Feature}}`. Orquesta: recibe una
 /// `Action`, llama a `logic`, actualiza `items`. Nunca importa CoreNetworking ni
@@ -11,6 +12,9 @@ import AppFoundation
 /// Analítica (M10): si este feature necesita eventos de negocio, inyecta un
 /// `Analytics`/`EventTracking` en `{{Feature}}Logic` — nunca aquí ni en la View.
 {{/analytics}}
+// `@Observable` is NOT inherited from `BaseViewModel`: without it, this class's own
+// properties (`items`…) would never notify SwiftUI (linter rule R15).
+@Observable
 @MainActor
 public final class {{Feature}}ViewModel: LogicViewModel<any {{Feature}}LogicProtocol>, ActionHandling {
     public private(set) var items: [{{Feature}}Item] = []

@@ -148,6 +148,23 @@ struct ArchLintRuleTests {
         #expect(diags.filter { $0.severity == .error }.isEmpty)
     }
 
+    @Test("R15: a ViewModel subclass without @Observable is an error")
+    func r15FiresWithoutObservable() {
+        let file = parse("R15_UnobservedViewModel", in: "Bad")
+        let diags = diagnostics(for: [file])
+        let r15 = diags.filter { $0.rule == "R15" }
+        #expect(r15.count == 1)
+        #expect(r15.first?.severity == .error)
+        #expect(r15.first?.message.contains("@Observable") == true)
+    }
+
+    @Test("R15 does not fire on a ViewModel that declares @Observable (the Good fixture)")
+    func r15DoesNotFireWithObservable() {
+        let file = parse("LoginViewModel", in: "Good")
+        let diags = diagnostics(for: [file])
+        #expect(!diags.contains { $0.rule == "R15" })
+    }
+
     @Test("R12 does not fire on `@State private var viewModel:` (same line)")
     func r12DoesNotFireOnSameLineState() {
         let source = """

@@ -18,11 +18,13 @@ carga inicial o un fallo a pantalla completa; usa `activity` para todo lo demás
 <!-- snippet: quickstart-viewmodel -->
 ```swift
 import AppFoundation
+import Observation
 
 struct Profile {
     let name: String
 }
 
+@Observable
 final class ProfileViewModel: BaseViewModel, ActionHandling {
     private(set) var profile: Profile?
 
@@ -88,6 +90,7 @@ de construir un ViewModel sobre una `Logic` (ver <doc:Architecture>):
 <!-- snippet: getting-started-viewmodel -->
 ```swift
 import AppFoundation
+import Observation
 
 protocol GreetingLogicProtocol: Logic {
     func greeting(for name: String) -> String
@@ -99,6 +102,7 @@ final class GreetingLogic: GreetingLogicProtocol {
     }
 }
 
+@Observable
 final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
     private(set) var message: String = ""
 
@@ -143,7 +147,9 @@ bucle con `Task.sleep`:
 <!-- snippet: screenstate-inflight -->
 ```swift
 import AppFoundation
+import Observation
 
+@Observable
 final class CounterViewModel: BaseViewModel, ActionHandling {
     private(set) var count = 0
 

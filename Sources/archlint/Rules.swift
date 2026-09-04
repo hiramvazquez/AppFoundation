@@ -54,6 +54,7 @@ enum RuleEngine {
             if config.isEnabled("R10") { diagnostics += checkR10(file, layer: layer) }
             if config.isEnabled("R11"), layer == .logic { diagnostics += checkR11(file) }
             if config.isEnabled("R12"), layer == .view { diagnostics += checkR12(file) }
+            if config.isEnabled("R15"), layer == .viewModel { diagnostics += checkR15(file, config: config) }
             // R13 applies to every file, regardless of layer — it is about which MODULE a
             // file lives in, not which architectural layer within that module.
             if config.isEnabled("R13") { diagnostics += checkR13(file, config: config) }
@@ -581,6 +582,34 @@ enum RuleEngine {
                         "La View debe retener su ViewModel con `@State` (`_viewModel = State(initialValue:)`); "
                         + "con `let`, un ViewModel transitorio se libera cuando SwiftUI reevalúa el builder de "
                         + "destino y la acción `.load` se pierde."
+                )
+            )
+        }
+        return out
+    }
+
+    // MARK: - R15 — every ViewModel declares @Observable (PRD-AF-11 A0)
+
+    /// `@Observable` is not inherited: the macro instruments only the stored properties of
+    /// the class it is attached to, so a `BaseViewModel`/`LogicViewModel` subclass without
+    /// it never notifies SwiftUI about its OWN properties (the view refreshes only when the
+    /// inherited `phase`/`activity` happens to change). Silent, and easy to miss.
+    private static func checkR15(_ file: ParsedFile, config: ArchLintConfig) -> [Diagnostic] {
+        var out: [Diagnostic] = []
+        for decl in file.typeDecls
+        where decl.keyword == "class" && decl.name.hasSuffix(config.viewModelSuffix)
+            && !decl.attributes.contains(where: { $0.hasSuffix("Observable") })
+        {
+            out.append(
+                Diagnostic(
+                    path: file.path,
+                    line: decl.line,
+                    col: decl.col,
+                    severity: .error,
+                    rule: "R15",
+                    message:
+                        "'\(decl.name)' debe declarar @Observable: el macro no se hereda de BaseViewModel, y sin él "
+                        + "las propiedades propias del ViewModel no refrescan la vista."
                 )
             )
         }

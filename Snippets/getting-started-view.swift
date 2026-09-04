@@ -14,6 +14,7 @@ final class GreetingLogic: GreetingLogicProtocol {
     }
 }
 
+@Observable
 final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
     private(set) var message: String = ""
 

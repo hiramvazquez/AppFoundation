@@ -1,7 +1,9 @@
 import AppFoundation
 import Foundation
+import Observation
 
 @MainActor
+@Observable
 public final class LoginViewModel: LogicViewModel<any LoginLogicProtocol>, ActionHandling {
     public private(set) var items: [LoginItem] = []
 

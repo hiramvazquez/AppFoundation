@@ -7,6 +7,7 @@
 // `nonisolated` corre en el actor del llamador. Se deja aquí para que el snippet compile
 // igual sin esa feature activada.
 import AppFoundation
+import Observation
 
 struct Item: Sendable, Equatable {
     let id: String
@@ -59,6 +60,7 @@ final class CatalogLogic: CatalogLogicProtocol {
     }
 }
 
+@Observable
 final class CatalogViewModel: LogicViewModel<any CatalogLogicProtocol>, ActionHandling {
     private(set) var items: [Item] = []
 

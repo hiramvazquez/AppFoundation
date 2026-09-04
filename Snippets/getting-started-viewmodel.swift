@@ -2,6 +2,7 @@
 // `GreetingLogic` es la regla de negocio (aquí, una sola línea); el ViewModel
 // solo orquesta: recibe la acción, llama a `logic`, actualiza el estado de pantalla.
 import AppFoundation
+import Observation
 
 protocol GreetingLogicProtocol: Logic {
     func greeting(for name: String) -> String
@@ -13,6 +14,7 @@ final class GreetingLogic: GreetingLogicProtocol {
     }
 }
 
+@Observable
 final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
     private(set) var message: String = ""
 

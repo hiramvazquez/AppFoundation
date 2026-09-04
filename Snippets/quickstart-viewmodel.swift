@@ -1,11 +1,13 @@
 // Un BaseViewModel mínimo: `performLoad` reemplaza el trabajo async, `phase`
 // pasa por `.loading` → `.content`/`.error` sin código de estado escrito a mano.
 import AppFoundation
+import Observation
 
 struct Profile {
     let name: String
 }
 
+@Observable
 final class ProfileViewModel: BaseViewModel, ActionHandling {
     private(set) var profile: Profile?
 

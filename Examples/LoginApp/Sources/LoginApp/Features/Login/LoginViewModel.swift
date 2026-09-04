@@ -1,11 +1,13 @@
 import AppFoundation
 import Foundation
+import Observation
 
 /// Orchestrates between `LoginView` and `LoginLogic`: receives an `Action`, calls
 /// `logic`, updates screen state. Never imports CoreNetworking, never references the
 /// networking layer or the concrete Login service type directly — only `logic`
 /// (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 1).
 @MainActor
+@Observable
 public final class LoginViewModel: LogicViewModel<any LoginLogicProtocol>, ActionHandling {
     public private(set) var email = ""
     public private(set) var password = ""

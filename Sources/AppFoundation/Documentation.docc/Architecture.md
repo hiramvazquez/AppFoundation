@@ -83,6 +83,7 @@ banner, contenido intacto; caché vacía + `refresh()` falla → fase de error d
 <!-- snippet: architecture-cache-then-network -->
 ```swift
 import AppFoundation
+import Observation
 
 struct Item: Sendable, Equatable {
     let id: String
@@ -135,6 +136,7 @@ final class CatalogLogic: CatalogLogicProtocol {
     }
 }
 
+@Observable
 final class CatalogViewModel: LogicViewModel<any CatalogLogicProtocol>, ActionHandling {
     private(set) var items: [Item] = []
 

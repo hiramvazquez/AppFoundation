@@ -1,11 +1,13 @@
 import AppFoundation
 import Foundation
+import Observation
 
 /// Orchestrates between `NotesView` and `NotesLogic`: receives an `Action`, calls `logic`,
 /// updates `notes`. Never imports the persistence framework, never references the
 /// concrete store type directly (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 1) — only
 /// `logic`.
 @MainActor
+@Observable
 public final class NotesViewModel: LogicViewModel<any NotesLogicProtocol>, ActionHandling {
     public private(set) var notes: [Note] = []
 

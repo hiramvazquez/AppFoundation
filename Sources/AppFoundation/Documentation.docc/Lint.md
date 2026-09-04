@@ -30,7 +30,7 @@ Sources/MiApp/Features/Login/LoginViewModel.swift:2:1: error: [ArchLint.R1] El V
 swift package archlint [--path DIR]
 ```
 
-### Las reglas (R1-R14)
+### Las reglas (R1-R15)
 
 Análisis léxico propio (tokens, `import`, declaraciones de tipo; ignora comentarios y
 strings), clasificando cada fichero por el sufijo de su nombre (`XxxViewModel.swift`,
@@ -53,6 +53,7 @@ strings), clasificando cada fichero por el sufijo de su nombre (`XxxViewModel.sw
 | **R11** | Aviso (no error): una Logic marcada `@MainActor` pierde su independencia de actor. |
 | **R12** | Aviso (no error): en una `*View.swift`, `let viewModel:`/`var viewModel:` sin `@State` en la misma línea o la anterior — un ViewModel transitorio se libera cuando SwiftUI reevalúa el builder de destino y pierde la acción `.load` (PRD-X-05, A3/A7). |
 | **R13** | Aislamiento entre módulos (PRD-AF-10, repo multi-target): cada `import` de un fichero se compara contra `forbiddenImports`/`allowedImports` del módulo al que pertenece — ver `modules:` más abajo. Sin `modules:` en la config, no hace nada. |
+| **R15** | Error: una `class` cuyo nombre termina en `ViewModel` sin `@Observable`. El macro no se hereda de `BaseViewModel`: sin él, las propiedades propias del ViewModel no refrescan la vista, y la pantalla solo se actualiza cuando cambia `phase`/`activity` por coincidencia (PRD-AF-11, A0). |
 | **R14** | Aviso (no error): una dependencia de `Package.swift` fijada por `branch:`/`revision:` en vez de un tag — no reproducible. Solo lo comprueba `swift package archlint` (command plugin); el build-tool plugin nunca ve `Package.swift`. |
 
 ### R13 — aislamiento entre módulos

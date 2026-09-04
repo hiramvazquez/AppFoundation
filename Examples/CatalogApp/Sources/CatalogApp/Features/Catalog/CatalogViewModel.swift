@@ -1,5 +1,6 @@
 import AppFoundation
 import Foundation
+import Observation
 
 /// Orchestrates between `CatalogView` and `CatalogLogic`, sequencing the cache-then-network
 /// policy (`ARQUITECTURA-KIT-2026-09-02.md` §8, M7) over `logic.cached()`/`logic.refresh()`:
@@ -8,6 +9,7 @@ import Foundation
 /// cached is the screen's error phase. Never imports the networking or persistence
 /// frameworks — only `logic`.
 @MainActor
+@Observable
 public final class CatalogViewModel: LogicViewModel<any CatalogLogicProtocol>, ActionHandling {
     public private(set) var items: [Item] = []
 

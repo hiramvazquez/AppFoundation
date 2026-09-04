@@ -72,6 +72,7 @@ struct BrandRootView: View {
 }
 
 // 4. Una pantalla concreta puede cambiar solo el suyo, por debajo de la raíz.
+@Observable
 final class OnboardingViewModel: BaseViewModel, ActionHandling {
     enum Action: Sendable { case load }
     func handle(_ action: Action) {}

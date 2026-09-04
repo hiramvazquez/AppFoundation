@@ -141,6 +141,7 @@ Nuevo fichero, `Sources/MiApp/GreetingFeature.swift`:
 <!-- snippet: getting-started-viewmodel -->
 ```swift
 import AppFoundation
+import Observation
 
 protocol GreetingLogicProtocol: Logic {
     func greeting(for name: String) -> String
@@ -152,6 +153,7 @@ final class GreetingLogic: GreetingLogicProtocol {
     }
 }
 
+@Observable
 final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
     private(set) var message: String = ""
 
@@ -202,6 +204,7 @@ final class GreetingLogic: GreetingLogicProtocol {
     }
 }
 
+@Observable
 final class GreetingViewModel: LogicViewModel<any GreetingLogicProtocol>, ActionHandling {
     private(set) var message: String = ""
 
