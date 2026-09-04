@@ -347,8 +347,8 @@ diff -q "$WORK_DIR/Package.swift.before-duplicate" "$MULTI_MANIFEST" > /dev/null
 log "Confirmado: sin markers/target duplicado, generate-feature no toca nada"
 
 log "Modo multi: App/AppModule.swift y App/AppRoute.swift recibieron las inserciones"
-grep -q "ContratosModule()," "$APP_DIR/AppModule.swift" || fail "ContratosModule() no se insertó en App/AppModule.swift"
-grep -q "MisCasosModule()," "$APP_DIR/AppModule.swift" || fail "MisCasosModule() no se insertó en App/AppModule.swift"
+grep -q "ContratosModule(baseURL: AppModule.apiBaseURL)," "$APP_DIR/AppModule.swift" || fail "ContratosModule(baseURL:) no se insertó en App/AppModule.swift"
+grep -q "try MisCasosModule(baseURL: AppModule.apiBaseURL)," "$APP_DIR/AppModule.swift" || fail "try MisCasosModule(baseURL:) no se insertó en App/AppModule.swift"
 grep -q "case contratos" "$APP_DIR/AppRoute.swift" || fail "'case contratos' no se insertó en App/AppRoute.swift"
 grep -q "case misCasos" "$APP_DIR/AppRoute.swift" || fail "'case misCasos' no se insertó en App/AppRoute.swift"
 

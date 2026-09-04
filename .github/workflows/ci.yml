@@ -70,6 +70,19 @@ jobs:
           xcode-version: latest-stable
       - run: Scripts/verify-generator.sh
 
+  multi:
+    name: archinit --multi + generate-feature + R13
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest available Xcode
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          [ -n "$LATEST" ] && sudo xcode-select -s "$LATEST"
+          xcodebuild -version && swift --version
+      - run: brew install xcodegen
+      - run: Scripts/verify-multi.sh
+
   quality:
     name: SwiftLint --strict (Templates/swiftlint.yml sobre ejemplos y snippets)
     runs-on: macos-15

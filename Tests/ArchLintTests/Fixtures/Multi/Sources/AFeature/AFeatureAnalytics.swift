@@ -1,5 +1,5 @@
-import Foundation
 import FirebaseAnalytics
+import Foundation
 
 /// R13 fixture: `AFeature` importing an SDK directly — forbidden by `"*Feature":
 /// forbiddenImports: [..., "Firebase*"]` in `Fixtures/Multi/.archlint.yml`. Triggers the

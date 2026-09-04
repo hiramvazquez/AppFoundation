@@ -4,7 +4,6 @@ import Testing
 
 @Suite("ManifestEditor")
 struct ManifestEditorTests {
-
     // MARK: - insertBetweenMarkers (Package.swift's targets:/products: archinit blocks)
 
     @Test("Inserts an entry right before the end marker, between the pair")
@@ -307,5 +306,54 @@ struct ManifestEditorTests {
         let manifest = ".target(name: \"SomeFeature\")"
 
         #expect(ManifestEditor.existingPluginLiteral(named: "SwiftLintBuildToolPlugin", in: manifest) == nil)
+    }
+}
+
+@Suite("ManifestEditor.moduleInitExpression")
+struct ModuleInitExpressionTests {
+    @Test("api + local: baseURL and try")
+    func apiLocal() {
+        let src = "public init(baseURL: URL, modelContainer: ModelContainer? = nil) throws {"
+        #expect(
+            ManifestEditor.moduleInitExpression(
+                feature: "MisCasos",
+                moduleSource: src,
+                baseURLExpression: "AppModule.apiBaseURL"
+            )
+                == "try MisCasosModule(baseURL: AppModule.apiBaseURL)"
+        )
+    }
+
+    @Test("api only: baseURL, no try")
+    func apiOnly() {
+        let src = "public init(baseURL: URL) {"
+        #expect(
+            ManifestEditor.moduleInitExpression(
+                feature: "Contratos",
+                moduleSource: src,
+                baseURLExpression: "AppModule.apiBaseURL"
+            )
+                == "ContratosModule(baseURL: AppModule.apiBaseURL)"
+        )
+    }
+
+    @Test("local only: try, no baseURL")
+    func localOnly() {
+        let src = "public init(modelContainer: ModelContainer? = nil) throws {"
+        #expect(
+            ManifestEditor.moduleInitExpression(feature: "Notas", moduleSource: src, baseURLExpression: "x")
+                == "try NotasModule()"
+        )
+    }
+
+    @Test("no data: plain init")
+    func none() {
+        #expect(
+            ManifestEditor.moduleInitExpression(
+                feature: "Contador",
+                moduleSource: "public init() {}",
+                baseURLExpression: "x"
+            ) == "ContadorModule()"
+        )
     }
 }

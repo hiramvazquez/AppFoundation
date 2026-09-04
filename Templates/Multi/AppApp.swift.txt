@@ -18,7 +18,11 @@ struct {{Name}}App: App {
         FirebaseApp.configure()
         #endif
 {{/hasFirebase}}
-        Container.shared.register(modules: AppModule.modules)
+        do {
+            Container.shared.register(modules: try AppModule.makeModules())
+        } catch {
+            preconditionFailure("Composition root failed: \(error)")
+        }
     }
 
     var body: some Scene {

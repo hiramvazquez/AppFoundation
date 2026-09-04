@@ -1,5 +1,6 @@
 import AppFoundation
 import SwiftUI
+// archinit:imports
 
 /// The app's navigation shell: `CoordinatorView` over the `Coordinator<AppRoute>`
 /// `AppModule.swift` registers. Resolves every `ViewModel` from `Container.shared` —
@@ -15,6 +16,7 @@ struct RootView: View {
     var body: some View {
         CoordinatorView(coordinator: coordinator) { route in
             switch route {
+            // archinit:destinations
             case .placeholder:
                 PlaceholderView()
             }

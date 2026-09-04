@@ -13,9 +13,9 @@ import Testing
 @MainActor
 struct CompositionRootTests {
     @Test("Every module registers without crashing, and the navigation root resolves")
-    func allModulesResolve() {
+    func allModulesResolve() throws {
         let container = Container()
-        for module in AppModule.modules {
+        for module in try AppModule.makeModules() {
             module.register(in: container)
         }
 

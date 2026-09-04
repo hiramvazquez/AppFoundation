@@ -138,22 +138,26 @@ public enum ArchInitSupport {
     // MARK: - Root .archlint.yml (`modules:` section, R13)
 
     public static func rootModulesYAML(capabilities: [String], adapters: [String]) -> String {
+        // Policy: `Domain` is a closed allow-list (it must stay pure). Every other module gets a
+        // DENY-list instead — Apple frameworks (SwiftData, AVFoundation, UIKit, OSLog…) are
+        // legitimate anywhere, and an allow-list would only produce false positives; what
+        // R13 must block is features importing each other, and SDKs/Kits/Adapters leaking
+        // into features or into each other. Every `--adapter <Sdk>` adds `<Sdk>*` to the
+        // deny-lists of features and Kits, so a third-party SDK only enters through its adapter.
+        let sdkGlobs = adapters.map { "\"\($0)*\"" }
+        func denyList(_ items: [String]) -> String { "    forbiddenImports: [" + items.joined(separator: ", ") + "]" }
         var lines: [String] = ["modules:", "  Domain:", "    allowedImports: [Foundation]"]
         for cap in capabilities {
             lines.append("  \(cap)Kit:")
-            lines.append("    allowedImports: [Foundation, Domain]")
+            lines.append(denyList(["\"*Feature\"", "\"*Adapters\""] + sdkGlobs))
         }
-        if adapters.contains("Firebase") {
-            lines.append("  FirebaseAdapters:")
-            lines.append("    allowedImports: [Foundation, Domain, Firebase*]")
-        }
-        for sdk in adapters where sdk != "Firebase" {
+        for sdk in adapters {
+            let others = adapters.filter { $0 != sdk }.map { "\"\($0)*\"" }
             lines.append("  \(sdk)Adapters:")
-            lines.append("    allowedImports: [Foundation, Domain, \(sdk)*]")
+            lines.append(denyList(["\"*Feature\"", "\"*Kit\""] + others))
         }
         lines.append("  \"*Feature\":")
-        lines.append("    allowedImports: [Foundation, SwiftUI, Observation, AppFoundation, CoreNetworking, Domain]")
-        lines.append("    forbiddenImports: [\"*Feature\", \"Firebase*\", \"*Kit\", \"*Adapters\"]")
+        lines.append(denyList(["\"*Feature\"", "\"*Kit\"", "\"*Adapters\""] + sdkGlobs))
         return lines.joined(separator: "\n") + "\n"
     }
 

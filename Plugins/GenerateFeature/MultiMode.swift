@@ -68,9 +68,14 @@ extension GenerateFeaturePlugin {
 
         var writes: [(url: URL, contents: String)] = []
         if noLogic {
-            writes.append((layout.uiDir.appendingPathComponent("\(feature)View.swift"), Self.noLogicView(feature: feature)))
             writes.append(
-                (layout.uiDir.appendingPathComponent("\(feature)ViewModel.swift"), Self.noLogicViewModel(feature: feature))
+                (layout.uiDir.appendingPathComponent("\(feature)View.swift"), Self.noLogicView(feature: feature))
+            )
+            writes.append(
+                (
+                    layout.uiDir.appendingPathComponent("\(feature)ViewModel.swift"),
+                    Self.noLogicViewModel(feature: feature)
+                )
             )
             writes.append(
                 (
@@ -108,7 +113,8 @@ extension GenerateFeaturePlugin {
             if newService {
                 writes.append(
                     (
-                        layout.coreDir.appendingPathComponent("Services").appendingPathComponent("\(feature)Service.swift"),
+                        layout.coreDir.appendingPathComponent("Services")
+                            .appendingPathComponent("\(feature)Service.swift"),
                         try render("Service.swift.txt", nil, false, nil)
                     )
                 )
@@ -137,7 +143,8 @@ extension GenerateFeaturePlugin {
                 )
                 writes.append(
                     (
-                        layout.testDir.appendingPathComponent("Mocks").appendingPathComponent("\(feature)LogicMock.swift"),
+                        layout.testDir.appendingPathComponent("Mocks")
+                            .appendingPathComponent("\(feature)LogicMock.swift"),
                         try render("LogicMock.swift.txt", layout.coreTargetName, false, nil)
                     )
                 )
@@ -220,8 +227,21 @@ extension GenerateFeaturePlugin {
         var routeOutcome: AppEditOutcome?
         if !noRegister {
             let appDir = Self.appDirectory(fromFeaturesPackage: packageRoot)
-            moduleOutcome = Self.registerAppModule(feature: feature, appDirectory: appDir)
+            let moduleExpression = Self.moduleInitExpression(feature: feature, packageRoot: packageRoot)
+            moduleOutcome = Self.registerAppModule(
+                feature: feature,
+                expression: moduleExpression,
+                appDirectory: appDir
+            )
             routeOutcome = Self.registerAppRoute(featureLower: featureLower, appDirectory: appDir)
+            for outcome in Self.registerAppWiring(
+                feature: feature,
+                featureLower: featureLower,
+                appDirectory: appDir,
+                repoRoot: appDir.deletingLastPathComponent()
+            ) {
+                print(outcome)
+            }
         }
 
         Self.printMultiNextSteps(
@@ -331,7 +351,9 @@ extension GenerateFeaturePlugin {
         // `Scripts/verify-generator.sh`'s "modo multi" block.
         func pluginsLiteral(includeArchitectureLint: Bool) -> [String] {
             var literals: [String] = []
-            if includeArchitectureLint { literals.append(".plugin(name: \"ArchitectureLint\", package: \"AppFoundation\")") }
+            if includeArchitectureLint {
+                literals.append(".plugin(name: \"ArchitectureLint\", package: \"AppFoundation\")")
+            }
             if let swiftLintLiteral { literals.append(swiftLintLiteral) }
             return literals
         }
@@ -466,6 +488,14 @@ extension GenerateFeaturePlugin {
         case registered
         case alreadyPresent
         case skipped(reason: String)
+
+        func describe(_ what: String) -> String {
+            switch self {
+            case .registered: return "\(what) añadido"
+            case .alreadyPresent: return "\(what) ya estaba"
+            case .skipped(let reason): return "\(what) NO añadido (\(reason)) — hazlo a mano"
+            }
+        }
     }
 
     /// `../../App` relative to the `Features` package root (PRD-AF-10's tree: `App/` and
@@ -474,7 +504,93 @@ extension GenerateFeaturePlugin {
         packageRoot.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("App")
     }
 
-    static func registerAppModule(feature: String, appDirectory: URL) -> AppEditOutcome {
+    /// The composition-root expression for the module just generated, read from its real
+    /// `public init` (see `ManifestEditor.moduleInitExpression`). Falls back to `Feature()`
+    /// if the module file cannot be found (e.g. `--no-register` layouts).
+    static func moduleInitExpression(feature: String, packageRoot: URL) -> String {
+        let sources = packageRoot.appendingPathComponent("Sources")
+        let fileManager = FileManager.default
+        if let enumerator = fileManager.enumerator(at: sources, includingPropertiesForKeys: nil) {
+            for case let url as URL in enumerator where url.lastPathComponent == "\(feature)Module.swift" {
+                if let data = fileManager.contents(atPath: url.path), let text = String(data: data, encoding: .utf8) {
+                    return ManifestEditor.moduleInitExpression(
+                        feature: feature,
+                        moduleSource: text,
+                        baseURLExpression: "AppModule.apiBaseURL"
+                    )
+                }
+            }
+        }
+        return "\(feature)Module()"
+    }
+
+    /// Best-effort wiring beyond the module and the route: the `import` of the feature in
+    /// `AppModule.swift` and `RootView.swift`, the navigation destination in `RootView.swift`,
+    /// and the feature product in `project.yml` — each only if its marker exists. Returns one
+    /// human-readable line per edit for the plugin's output.
+    static func registerAppWiring(feature: String, featureLower: String, appDirectory: URL, repoRoot: URL) -> [String] {
+        var lines: [String] = []
+        let importLine = "import \(feature)Feature"
+        for file in ["AppModule.swift", "RootView.swift"] {
+            let outcome = insertAtMarker(
+                importLine,
+                duplicateOf: importLine,
+                marker: "// archinit:imports",
+                file: appDirectory.appendingPathComponent(file)
+            )
+            lines.append("App/\(file): \(outcome.describe("\(importLine)"))")
+        }
+        let destination = "case .\(featureLower): \(feature)View(viewModel: Container.shared.resolve())"
+        let destinationOutcome = insertAtMarker(
+            destination,
+            duplicateOf: "case .\(featureLower):",
+            marker: "// archinit:destinations",
+            file: appDirectory.appendingPathComponent("RootView.swift")
+        )
+        lines.append("App/RootView.swift: \(destinationOutcome.describe("destino \(feature)View"))")
+        // Relative indent inside the entry: the editor shifts the whole block by the marker's indent.
+        let productOutcome = insertAtMarker(
+            "- package: Features\n  product: \(feature)Feature",
+            duplicateOf: "product: \(feature)Feature",
+            marker: "# archinit:products",
+            file: repoRoot.appendingPathComponent("project.yml")
+        )
+        lines.append("project.yml: \(productOutcome.describe("producto \(feature)Feature"))")
+        return lines
+    }
+
+    private static func insertAtMarker(
+        _ entry: String,
+        duplicateOf: String,
+        marker: String,
+        file: URL
+    ) -> AppEditOutcome {
+        guard let data = FileManager.default.contents(atPath: file.path), let text = String(data: data, encoding: .utf8)
+        else {
+            return .skipped(reason: "no existe \(file.lastPathComponent)")
+        }
+        guard
+            let result = try? ManifestEditor.insertBeforeMarker(
+                entry,
+                duplicateOf: duplicateOf,
+                marker: marker,
+                in: text
+            )
+        else {
+            return .skipped(reason: "\(file.lastPathComponent) no tiene el marker '\(marker)'")
+        }
+        switch result {
+        case .inserted(let newText):
+            guard (try? newText.write(to: file, atomically: true, encoding: .utf8)) != nil else {
+                return .skipped(reason: "no se pudo escribir \(file.lastPathComponent)")
+            }
+            return .registered
+        case .alreadyPresent:
+            return .alreadyPresent
+        }
+    }
+
+    static func registerAppModule(feature: String, expression: String, appDirectory: URL) -> AppEditOutcome {
         let url = appDirectory.appendingPathComponent("AppModule.swift")
         guard let data = FileManager.default.contents(atPath: url.path), let text = String(data: data, encoding: .utf8)
         else {
@@ -482,8 +598,8 @@ extension GenerateFeaturePlugin {
         }
         guard
             let result = try? ManifestEditor.insertBeforeMarker(
-                "\(feature)Module(),",
-                duplicateOf: "\(feature)Module()",
+                "\(expression),",
+                duplicateOf: "\(feature)Module(",
                 marker: "// archinit:modules",
                 in: text
             )
@@ -545,13 +661,24 @@ extension GenerateFeaturePlugin {
         storeFrom: String?
     ) {
         print("")
-        print("Modo multi: \(layout.coreTargetName)" + (module ? " + \(layout.uiTargetName)" : "") + " + \(layout.testTargetName)")
+        print(
+            "Modo multi: \(layout.coreTargetName)" + (module ? " + \(layout.uiTargetName)" : "")
+                + " + \(layout.testTargetName)"
+        )
         if noRegister {
             print("--no-register: no se editó Package.swift ni App/ — registra el target, el módulo y la ruta a mano.")
         } else {
             print("Registrado entre los markers de Package.swift (targets: y products:).")
-            Self.printAppEditOutcome(outcome: moduleOutcome, subject: "App/AppModule.swift", entry: "\(feature)Module()")
-            Self.printAppEditOutcome(outcome: routeOutcome, subject: "App/AppRoute.swift", entry: "case \(featureLower)")
+            Self.printAppEditOutcome(
+                outcome: moduleOutcome,
+                subject: "App/AppModule.swift",
+                entry: "\(feature)Module()"
+            )
+            Self.printAppEditOutcome(
+                outcome: routeOutcome,
+                subject: "App/AppRoute.swift",
+                entry: "case \(featureLower)"
+            )
         }
         if noLogic {
             print("")

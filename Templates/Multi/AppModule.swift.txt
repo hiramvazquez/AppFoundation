@@ -1,5 +1,7 @@
 import AppFoundation
+import Foundation
 {{ModuleImports}}
+// archinit:imports
 
 /// Composition root (`AppFoundation/AGENTS.md` § generador y linter): assembles every
 /// `DependencyModule` {{Name}} registers at startup. `PlatformModule` (below) wires
@@ -7,17 +9,25 @@ import AppFoundation
 /// `archinit --multi` generated; `generate-feature` (modo multi) appends `<Name>Module()`
 /// right below the marker — nothing above it changes when a feature is added.
 enum AppModule {
+    /// Base URL every `--api` feature module receives. Replace it with your environment
+    /// configuration (schemes, xcconfig, remote config) — one place, not one per feature.
+    static let apiBaseURL: URL = {
+        guard let url = URL(string: "https://api.example.com") else { preconditionFailure("Invalid API base URL") }
+        return url
+    }()
+
+    /// The composition root: every `DependencyModule` the app registers at launch.
+    /// `generate-feature` (multi mode) appends each feature's module at the marker, with the
+    /// `init` the generated module actually has (`baseURL:`, `try` for SwiftData…).
     @MainActor
-    static let modules: [DependencyModule] = [
-        PlatformModule(),
-        // archinit:modules
-    ]
+    static func makeModules() throws -> [DependencyModule] {
+        [
+            PlatformModule(),
+            // archinit:modules
+        ]
+    }
 }
 
-/// Registers navigation (`Coordinator<AppRoute>`), Domain (no bindings of its own), and
-/// every Kit/Adapter this project generated. A feature NEVER resolves a Kit/Adapter
-/// concrete type directly — always the Domain protocol this registers it against
-/// (`.archlint.yml`, R13).
 struct PlatformModule: DependencyModule {
     func register(in container: Container) {
         // MARK: Navigation

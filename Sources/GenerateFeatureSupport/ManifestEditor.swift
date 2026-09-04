@@ -22,7 +22,8 @@ public enum ManifestEditor {
         public var description: String {
             switch self {
             case .markerNotFound(let marker):
-                return "No se encontró el marcador '\(marker)' — ¿el manifiesto no está en modo multi, o es de una versión anterior?"
+                return
+                    "No se encontró el marcador '\(marker)' — ¿el manifiesto no está en modo multi, o es de una versión anterior?"
             }
         }
     }
@@ -117,7 +118,8 @@ public enum ManifestEditor {
             guard let literalEnd = balancedParenEnd(from: pluginStart.lowerBound, in: text) else { return nil }
             let literal = text[pluginStart.lowerBound...literalEnd]
             if literal.contains(nameNeedle) {
-                return literal
+                return
+                    literal
                     .components(separatedBy: .newlines)
                     .map { $0.trimmingCharacters(in: .whitespaces) }
                     .joined(separator: " ")
@@ -166,5 +168,28 @@ public enum ManifestEditor {
             .components(separatedBy: "\n")
             .map { $0.isEmpty ? $0 : indent + $0 }
             .joined(separator: "\n")
+    }
+}
+
+// MARK: - Composition-root entry for a generated feature module (multi mode)
+
+extension ManifestEditor {
+    /// The expression the app's composition root needs to build a generated feature module,
+    /// derived from the module's ACTUAL `public init` (the generator renders a different one
+    /// per variant): `baseURL:` for `--api`, `throws` when a SwiftData `ModelContainer` is
+    /// created for `--local`. Reading the source instead of re-deriving the flags keeps this
+    /// truthful when the templates change.
+    public static func moduleInitExpression(
+        feature: String,
+        moduleSource: String,
+        baseURLExpression: String
+    )
+        -> String
+    {
+        let inits = moduleSource.components(separatedBy: "\n").filter { $0.contains("public init(") }
+        let hasBaseURL = inits.contains { $0.contains("baseURL: URL") }
+        let isThrowing = inits.contains { $0.contains(") throws") }
+        let call = hasBaseURL ? "\(feature)Module(baseURL: \(baseURLExpression))" : "\(feature)Module()"
+        return (isThrowing ? "try " : "") + call
     }
 }

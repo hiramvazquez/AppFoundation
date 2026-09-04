@@ -156,9 +156,12 @@ struct GenerateFeaturePlugin: CommandPlugin {
         // ViewModel/Module.swift.txt import the Core target to see `{{Feature}}Item`/
         // `{{Feature}}LogicProtocol`/etc.) — both default to "off", which renders
         // byte-identical to before this generator knew about multi mode.
-        func render(_ templateName: String, module: String? = nil, splitModule: Bool = false, coreModule: String? = nil)
-            throws -> String
-        {
+        func render(
+            _ templateName: String,
+            module: String? = nil,
+            splitModule: Bool = false,
+            coreModule: String? = nil
+        ) throws -> String {
             let url = templatesDirectory.appendingPathComponent(templateName)
             guard let data = FileManager.default.contents(atPath: url.path),
                 let text = String(data: data, encoding: .utf8)

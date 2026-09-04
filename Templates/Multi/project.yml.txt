@@ -17,13 +17,8 @@ settings:
 packages:
   Platform:
     path: Packages/Platform
-  # Features no aparece como dependencia de ningún target todavía: recién generado no
-  # tiene un solo producto (Package.swift lo deja vacío entre los markers
-  # archinit:products-begin/end, PRD-AF-10) y xcodegen no resuelve un `product:` que no
-  # existe. En cuanto `generate-feature` (modo multi) dé de alta el primer feature, añade
-  # aquí, dentro de 'dependencies:' de {{Name}}:
-  #   - package: Features
-  #     product: <Nombre>Feature
+  # Features: sus productos entran en 'dependencies:' del target de la app en el marker
+  # '# archinit:products' — generate-feature (modo multi) los añade por ti (PRD-AF-10).
   Features:
     path: Packages/Features
   # Segundo nivel, re-declarado aquí para el target de la app (misma fricción que
@@ -50,6 +45,7 @@ targets:
         product: AppFoundation
       - package: CoreNetworking
         product: CoreNetworking
+      # archinit:products
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{BundleID}}

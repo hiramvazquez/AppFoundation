@@ -156,25 +156,31 @@ struct ArchInitSupportTests {
 
     // MARK: - Root .archlint.yml `modules:` (R13 — the other agent's parser reads this)
 
-    @Test("rootModulesYAML always includes Domain and the *Feature glob rule")
+    @Test("rootModulesYAML: Domain is a closed allow-list; *Feature is a deny-list of features, Kits and Adapters")
     func rootModulesYAMLBaseline() {
         let yaml = ArchInitSupport.rootModulesYAML(capabilities: [], adapters: [])
         #expect(yaml.contains("modules:\n  Domain:\n    allowedImports: [Foundation]"))
-        #expect(yaml.contains("\"*Feature\":"))
-        #expect(yaml.contains("forbiddenImports: [\"*Feature\", \"Firebase*\", \"*Kit\", \"*Adapters\"]"))
+        #expect(yaml.contains("  \"*Feature\":\n    forbiddenImports: [\"*Feature\", \"*Kit\", \"*Adapters\"]"))
+        // No allow-list for features: SwiftData/AVFoundation/OSLog must not be false positives.
+        #expect(!yaml.contains("*Feature\":\n    allowedImports"))
     }
 
-    @Test("rootModulesYAML adds a Kit entry restricted to Foundation+Domain per capability")
+    @Test("rootModulesYAML: a Kit may use any Apple framework but never a feature, an adapter or an SDK")
     func rootModulesYAMLPerCapability() {
-        let yaml = ArchInitSupport.rootModulesYAML(capabilities: ["Camera"], adapters: [])
-        #expect(yaml.contains("  CameraKit:\n    allowedImports: [Foundation, Domain]"))
+        let yaml = ArchInitSupport.rootModulesYAML(capabilities: ["Camera"], adapters: ["Firebase"])
+        #expect(yaml.contains("  CameraKit:\n    forbiddenImports: [\"*Feature\", \"*Adapters\", \"Firebase*\"]"))
     }
 
-    @Test("rootModulesYAML allows Firebase* only for FirebaseAdapters, and <Sdk>* only for its own adapter")
+    @Test("rootModulesYAML: every --adapter SDK is denied to features and to the other adapters")
     func rootModulesYAMLAdapterScoping() {
         let yaml = ArchInitSupport.rootModulesYAML(capabilities: [], adapters: ["Firebase", "Analytics"])
-        #expect(yaml.contains("  FirebaseAdapters:\n    allowedImports: [Foundation, Domain, Firebase*]"))
-        #expect(yaml.contains("  AnalyticsAdapters:\n    allowedImports: [Foundation, Domain, Analytics*]"))
+        #expect(yaml.contains("  FirebaseAdapters:\n    forbiddenImports: [\"*Feature\", \"*Kit\", \"Analytics*\"]"))
+        #expect(yaml.contains("  AnalyticsAdapters:\n    forbiddenImports: [\"*Feature\", \"*Kit\", \"Firebase*\"]"))
+        #expect(
+            yaml.contains(
+                "  \"*Feature\":\n    forbiddenImports: [\"*Feature\", \"*Kit\", \"*Adapters\", \"Firebase*\", \"Analytics*\"]"
+            )
+        )
     }
 
     // MARK: - project.yml substitutions
