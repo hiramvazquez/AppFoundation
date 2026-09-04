@@ -5,7 +5,18 @@
 # pasan sus tests, activa `ArchitectureLint` y comprueba que el build pasa limpio, introduce
 # una violación de R1/R7/R10 y comprueba que el build FALLA con el diagnóstico esperado, y
 # finalmente corre `swift package archlint` sobre los cuatro ejemplos de AF-07 (deben pasar
-# limpios: son la referencia).
+# limpios: son la referencia). También cubre PRD-X-05/A4 (`--service-from`) y, si `swiftlint`
+# está en el PATH, la configuración curada de PRD-AF-09.
+#
+# Este fichero existe por duplicado: aquí (monorepo) y en AppFoundation/Scripts/ (viaja en el
+# `subtree split` al repo publicado, que es donde lo ejecuta su propio CI). La copia de
+# AppFoundation/Scripts/ tiene una sección extra delimitada por `SOLO-APPFOUNDATION:
+# begin/end` (PRD-AF-10, "modo multi") que no existe aquí: el CI del monorepo no tiene un job
+# `multi` (ver AppFoundation/Scripts/verify-multi.sh y el job `multi` de
+# AppFoundation/.github/workflows/ci.yml) — es cobertura adicional solo del repo publicado.
+# Fuera de esa sección, ambas copias deben ser byte-idénticas; lo comprueba
+# Scripts/dedup-check.sh (job `dedup-check` de este mismo ci.yml). Si tocas algo fuera de esa
+# sección, replica el cambio en la otra copia o el CI del monorepo fallará.
 #
 # Uso: Scripts/verify-generator.sh   (desde cualquier directorio; se autolocaliza)
 # CI: .github/workflows/ci.yml, job `generator`.
@@ -124,7 +135,9 @@ swift test --package-path "$DEMO_DIR" || fail "swift test falló sobre el códig
 
 # PRD-AF-09: el código generado debe pasar la configuración curada de SwiftLint sin avisos.
 # Solo si `swiftlint` está en el PATH (el plugin lo descarga en los consumidores; aquí no).
-SWIFTLINT_CONFIG="$REPO_ROOT/Templates/swiftlint.yml"
+# OJO: $APPFOUNDATION_DIR, no $REPO_ROOT — en el monorepo REPO_ROOT es la raíz del repo y
+# Templates/ vive dentro de AppFoundation/; en el repo publicado ambos coinciden.
+SWIFTLINT_CONFIG="$APPFOUNDATION_DIR/Templates/swiftlint.yml"
 if command -v swiftlint > /dev/null 2>&1; then
     log "swiftlint --strict sobre el código generado (Templates/swiftlint.yml)"
     # Solo Sources/ y Tests/: los `excluded` del .yml son relativos al fichero de configuración,
@@ -215,6 +228,9 @@ for example in LoginApp NotesApp CatalogApp CounterApp; do
     fi
 done
 
+# --- SOLO-APPFOUNDATION: begin (dedup-check.sh lo recorta antes de comparar con la copia
+# del monorepo en Scripts/verify-generator.sh — ver comentario de cabecera de este fichero
+# y Scripts/README.md) ---
 ########################################################################################
 # PRD-AF-10 (entregable 2): "modo multi" — generate-feature registra el target/producto
 # entre los markers de un Package.swift de tipo `Features` (archinit --multi, agente A) y
@@ -392,3 +408,5 @@ diff -q "$WORK_DIR/AppRoute.swift.before-no-register" "$APP_DIR/AppRoute.swift" 
 log "Confirmado: --no-register genera ficheros sin editar Package.swift ni App/"
 
 log "Todo verde: generate-feature (4 variantes) + modo multi (targets/producto registrados, duplicado rechazado sin tocar nada, App/AppModule+AppRoute, --no-register) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07 y sobre Features en modo multi."
+# --- SOLO-APPFOUNDATION: end ---
+log "Todo verde: generate-feature (4 variantes) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07."
