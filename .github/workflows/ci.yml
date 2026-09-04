@@ -116,3 +116,14 @@ jobs:
             echo "$log" | grep -q "BUILD DOCUMENTATION SUCCEEDED" || exit 1
             ! echo "$log" | grep -qE "warning:|error:"
           done
+
+  archlint-self:
+    name: archlint (R16) sobre las fuentes del propio paquete
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - run: swift build --product archlint
+      - run: .build/debug/archlint --root . Sources/AppFoundation Snippets

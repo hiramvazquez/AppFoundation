@@ -11,6 +11,11 @@ struct LiveProfileRepository: ProfileRepository {
 }
 
 final class CheckoutCart {
+    // `deinit {}` explícito: bajo `defaultIsolation(MainActor)` una clase sin él recibe
+    // un deinit AISLADO sintetizado que en sistemas anteriores al runtime del toolchain
+    // pasa por un shim que aborta (regla R16 de ArchitectureLint).
+    deinit {}
+
     var items: [String] = []
 }
 

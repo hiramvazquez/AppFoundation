@@ -19,6 +19,15 @@ import UIKit
 /// `chrome: .native` never need it, since the native bar never disables the gesture.
 struct PopGestureEnabler: UIViewControllerRepresentable {
     final class ViewController: UIViewController {
+        // `deinit {}` explícito (regla R16). Bajo `defaultIsolation(MainActor)` una clase sin
+        // él recibe un deinit AISLADO sintetizado que, en sistemas anteriores al runtime del
+        // toolchain, pasa por `swift_task_deinitOnExecutorMainActorBackDeploy` — el shim que
+        // abortó con un double free de libmalloc en iOS 26.2
+        // (`docs/repros/isolated-deinit-backdeploy.md`). Esta clase se quedó fuera del barrido
+        // de 1.2.2/1.2.3 porque `archlint` nunca se ejecutaba sobre las fuentes del propio
+        // paquete; ahora el job `archlint-self` del CI lo impide.
+        deinit {}
+
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
             navigationController?.interactivePopGestureRecognizer?.delegate = nil

@@ -1,0 +1,27 @@
+# Configuración de `archlint` para las FUENTES DEL PROPIO AppFoundation.
+#
+# Las reglas de capas (R1–R15) describen la arquitectura de una app CONSUMIDORA —
+# View → ViewModel → Logic → Services/Stores— y no tienen sentido aplicadas al paquete que
+# define esas primitivas. Comprobado: sobre `Sources/AppFoundation` producen diez
+# diagnósticos y los diez son falsos positivos por construcción.
+#
+#   R2  en `Logic.swift`               — es el protocolo marcador, no una Logic
+#   R1  en `BaseViewModel`             — es la clase base, no un ViewModel de pantalla
+#   R1  y R15 en `LogicViewModel`      — clase base genérica; el `@Observable` lo pone la subclase
+#   R4  en `CoordinatorView`/`PhaseView` — `CoordinatorViewLogic`, `ScreenPresentationLogic` y
+#                                          `NavigationBarLogic` son enums PUROS internos, que la
+#                                          regla (léxica, basada en el sufijo del nombre)
+#                                          confunde con la Logic de un feature
+#
+# R16 es la excepción y por eso es la única que queda activa: no habla de capas, habla de
+# que toda `class` no `nonisolated` declare un `deinit {}` explícito, porque sin él el
+# compilador sintetiza uno AISLADO que en sistemas anteriores al runtime del toolchain pasa
+# por `swift_task_deinitOnExecutorMainActorBackDeploy` — el shim que abortó con un double
+# free de libmalloc en iOS 26.2 (`docs/repros/isolated-deinit-backdeploy.md`). Eso aplica
+# igual al framework que a la app, y de hecho el framework se había saltado dos:
+# `PopGestureEnabler.ViewController` y `ResourceBundle.Finder`, ambas publicadas en 1.2.4.
+#
+# El job `archlint-self` del CI del monorepo ejecuta esto en cada push. Los cuatro ejemplos
+# de `Examples/` NO usan este fichero: corren con la configuración por defecto (las quince
+# reglas de capas incluidas), porque ellos sí son apps consumidoras y son la referencia.
+disabled: [R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15]

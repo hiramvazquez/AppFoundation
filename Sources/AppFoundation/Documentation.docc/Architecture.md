@@ -112,7 +112,7 @@ protocol CatalogLogicProtocol: Logic, Sendable {
     func refresh() async throws(CatalogError) -> [Item]
 }
 
-final class CatalogLogic: CatalogLogicProtocol {
+nonisolated final class CatalogLogic: CatalogLogicProtocol {
     private let service: any CatalogServicing
     private let store: any CatalogStoring
 

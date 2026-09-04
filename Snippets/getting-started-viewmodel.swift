@@ -8,7 +8,7 @@ protocol GreetingLogicProtocol: Logic {
     func greeting(for name: String) -> String
 }
 
-final class GreetingLogic: GreetingLogicProtocol {
+nonisolated final class GreetingLogic: GreetingLogicProtocol {
     func greeting(for name: String) -> String {
         "Hola, \(name)"
     }
