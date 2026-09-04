@@ -1,6 +1,37 @@
 #if canImport(SwiftUI)
 import SwiftUI
 
+// MARK: - Presentation Logic
+
+/// Pure presentation decisions for `CoordinatorView`'s modal bindings, extracted from the
+/// `Binding` closures in `modalPresentedBinding(for:)` so they're testable without
+/// constructing a live `Coordinator`/SwiftUI hierarchy (same pattern as
+/// `ScreenPresentationLogic` in `ScreenContainer.swift`).
+nonisolated enum CoordinatorViewLogic {
+    /// The `get` half of `modalPresentedBinding(for:)`: a `style`-specific sheet/full-screen
+    /// binding reports "presented" only while the ACTIVE modal is that exact style — not
+    /// merely "some modal exists" (that would present both the sheet AND the cover bindings
+    /// at once whenever either is up).
+    static func isPresented(currentModalStyle: PresentationStyle?, for style: PresentationStyle) -> Bool {
+        currentModalStyle == style
+    }
+
+    /// The `set` half of `modalPresentedBinding(for:)`: SwiftUI calls every modifier's
+    /// binding with `isPresented: false` on interactive dismissal, teardown, or simply
+    /// because ITS style stopped being active (e.g. `.present(_:as: .fullScreenCover)`
+    /// replaced a sheet — the sheet's own binding fires too). Only dismiss the coordinator
+    /// when the modal that is being turned off is still the one actually presented (A7):
+    /// otherwise a stale `.sheet` binding closing out from under a newer `.fullScreenCover`
+    /// would dismiss the WRONG presentation.
+    static func shouldDismiss(
+        settingPresentedTo isPresented: Bool,
+        currentModalStyle: PresentationStyle?,
+        for style: PresentationStyle
+    ) -> Bool {
+        !isPresented && currentModalStyle == style
+    }
+}
+
 // MARK: - CoordinatorView
 
 /// A SwiftUI view that renders navigation state managed by a `Coordinator`.
@@ -110,9 +141,13 @@ public struct CoordinatorView<Route: Hashable, Content: View>: View {
     /// dismissal included) clears the modal state through `dismiss()` (A7).
     private func modalPresentedBinding(for style: PresentationStyle) -> Binding<Bool> {
         Binding(
-            get: { coordinator.modal?.style == style },
+            get: { CoordinatorViewLogic.isPresented(currentModalStyle: coordinator.modal?.style, for: style) },
             set: { isPresented in
-                if !isPresented, coordinator.modal?.style == style {
+                if CoordinatorViewLogic.shouldDismiss(
+                    settingPresentedTo: isPresented,
+                    currentModalStyle: coordinator.modal?.style,
+                    for: style
+                ) {
                     coordinator.dismiss()
                 }
             }

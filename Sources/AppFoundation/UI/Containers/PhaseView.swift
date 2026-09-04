@@ -102,10 +102,10 @@ public struct PhaseView<Content: View>: View {
     @ViewBuilder
     private func loadingOverlay(style: ActivityStyle) -> some View {
         let loadingBody = loadingStyle.makeBody(configuration: LoadingConfiguration(style: style))
-        switch style {
-        case .fullScreen, .overlay:
+        switch ScreenPresentationLogic.activityContainer(for: style) {
+        case .opaque, .dimmed:
             loadingBody
-        case .inline:
+        case .topAligned:
             VStack {
                 loadingBody
                 Spacer()

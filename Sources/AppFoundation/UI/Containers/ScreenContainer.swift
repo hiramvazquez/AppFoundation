@@ -91,6 +91,29 @@ nonisolated enum ScreenPresentationLogic {
         case .custom: return true
         }
     }
+
+    /// How an activity indicator's container is composed for a given style. `ScreenContainer`
+    /// (full-screen background vs. dimming scrim vs. plain) and `PhaseView` (no background at
+    /// all, only alignment) each render this differently, but WHICH style gets WHICH
+    /// treatment is one shared, pure decision — extracted so both call sites can't drift out
+    /// of sync with each other, and so the mapping is tested once instead of via two renders.
+    enum ActivityContainer: Equatable {
+        /// Opaque background behind the indicator, centered — blocks interaction.
+        case opaque
+        /// A dimming scrim behind the indicator, centered — content stays visible beneath it.
+        case dimmed
+        /// No background of its own; pinned to the top of the available space so the rest
+        /// of the content remains visible and interactive below it.
+        case topAligned
+    }
+
+    static func activityContainer(for style: ActivityStyle) -> ActivityContainer {
+        switch style {
+        case .fullScreen: return .opaque
+        case .overlay: return .dimmed
+        case .inline: return .topAligned
+        }
+    }
 }
 
 // MARK: - ScreenContainer
@@ -310,19 +333,19 @@ public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
     @ViewBuilder
     private func activityView(style: ActivityStyle) -> some View {
         let loadingBody = loadingStyle.makeBody(configuration: LoadingConfiguration(style: style))
-        switch style {
-        case .fullScreen:
+        switch ScreenPresentationLogic.activityContainer(for: style) {
+        case .opaque:
             ZStack {
                 backgroundColor.ignoresSafeArea()
                 loadingBody
             }
-        case .overlay:
+        case .dimmed:
             ZStack {
                 Color.black.opacity(0.25)
                     .ignoresSafeArea()
                 loadingBody
             }
-        case .inline:
+        case .topAligned:
             VStack {
                 loadingBody
                 Spacer()

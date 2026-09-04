@@ -41,6 +41,56 @@ import SwiftUI
 ///     )
 /// )
 /// ```
+// MARK: - Presentation Logic
+
+/// Pure presentation decisions for `CustomNavigationBar` and its subviews, extracted from
+/// `body`/`@ViewBuilder` code so they're testable without rendering (same pattern as
+/// `ScreenPresentationLogic` in `ScreenContainer.swift`).
+nonisolated enum NavigationBarLogic {
+    /// Whether `items` contains a back-role item — drives the back button's fade-in
+    /// animation (`leftItemsView.onAppear`), not just whether one is drawn.
+    ///
+    /// Checks `role` directly rather than the `isBackButton` convenience (a MainActor-
+    /// isolated computed property, unreachable from this `nonisolated` decision type)
+    /// — both express the exact same condition.
+    static func hasBackButton(in items: [NavigationBarItem]) -> Bool {
+        items.contains { $0.role == .back }
+    }
+
+    /// A badge only renders for a positive count — `nil` or `0` render nothing.
+    static func shouldShowBadge(_ count: Int) -> Bool {
+        count > 0
+    }
+
+    /// Badge text caps at "99+" instead of ever showing a 3+ digit count.
+    static func badgeText(for count: Int) -> String {
+        count > 99 ? "99+" : "\(count)"
+    }
+
+    /// Only the back item renders with emphasized (headline) icon weight; every other
+    /// role uses subheadline. Keyed off role (A11), never off the icon name.
+    static func isEmphasizedIcon(for role: NavigationBarItem.Role) -> Bool {
+        role == .back
+    }
+
+    /// Close-role items get the localized "Close" accessibility label (AF-13/AF-16);
+    /// every other role keeps whatever label its content already implies.
+    static func needsCloseAccessibilityLabel(for role: NavigationBarItem.Role) -> Bool {
+        role == .close
+    }
+
+    /// The search field's clear ("x") button only shows once there is text to clear.
+    static func shouldShowClearButton(text: String) -> Bool {
+        !text.isEmpty
+    }
+
+    /// The Cancel button next to the search field only shows when the caller opted in
+    /// AND the field is currently focused — never while unfocused, even if opted in.
+    static func shouldShowCancelButton(showsCancelButton: Bool, isFocused: Bool) -> Bool {
+        showsCancelButton && isFocused
+    }
+}
+
 public struct CustomNavigationBar: View {
     private let configuration: NavigationBarConfiguration
     @State private var isSearchFocused = false
@@ -113,7 +163,7 @@ public struct CustomNavigationBar: View {
     // MARK: - Subviews
 
     private var hasBackButton: Bool {
-        configuration.leftItems.contains { $0.isBackButton }
+        NavigationBarLogic.hasBackButton(in: configuration.leftItems)
     }
 
     @ViewBuilder
@@ -214,14 +264,15 @@ struct NavigationBarItemView: View {
         }
         .buttonStyle(NavigationBarButtonStyle())
         .accessibilityAddTraits(.isButton)
-        .modifier(CloseButtonAccessibility(isClose: item.role == .close))
+        .modifier(CloseButtonAccessibility(isClose: NavigationBarLogic.needsCloseAccessibilityLabel(for: item.role)))
     }
 
     @ViewBuilder
     private var itemContent: some View {
         switch item.content {
         case .systemIcon(let name, let badge):
-            iconWithBadge(systemName: name, badge: badge, emphasized: item.role == .back)
+            let emphasized = NavigationBarLogic.isEmphasizedIcon(for: item.role)
+            iconWithBadge(systemName: name, badge: badge, emphasized: emphasized)
 
         case .icon(let name, let badge):
             customIconWithBadge(name: name, badge: badge)
@@ -246,7 +297,7 @@ struct NavigationBarItemView: View {
                 .foregroundStyle(tintColor)
                 .frame(width: 44, height: 44)
 
-            if let badge = badge, badge > 0 {
+            if let badge, NavigationBarLogic.shouldShowBadge(badge) {
                 BadgeView(count: badge)
                     .offset(x: 8, y: -4)
             }
@@ -263,7 +314,7 @@ struct NavigationBarItemView: View {
                 .foregroundStyle(tintColor)
                 .frame(width: 44, height: 44)
 
-            if let badge = badge, badge > 0 {
+            if let badge, NavigationBarLogic.shouldShowBadge(badge) {
                 BadgeView(count: badge)
                     .offset(x: 8, y: -4)
             }
@@ -293,7 +344,7 @@ struct BadgeView: View {
     let count: Int
 
     var body: some View {
-        Text(count > 99 ? "99+" : "\(count)")
+        Text(NavigationBarLogic.badgeText(for: count))
             .font(.system(size: 10, weight: .bold))
             .foregroundStyle(Color.white)
             .padding(.horizontal, 5)
@@ -355,7 +406,7 @@ struct NavigationSearchBar: View {
                     }
 
                 // Clear button
-                if !configuration.text.wrappedValue.isEmpty {
+                if NavigationBarLogic.shouldShowClearButton(text: configuration.text.wrappedValue) {
                     Button {
                         configuration.text.wrappedValue = ""
                     } label: {
@@ -372,7 +423,11 @@ struct NavigationSearchBar: View {
             .clipShape(.rect(cornerRadius: 10))
 
             // Cancel button
-            if configuration.showsCancelButton && isFocused {
+            let showsCancel = NavigationBarLogic.shouldShowCancelButton(
+                showsCancelButton: configuration.showsCancelButton,
+                isFocused: isFocused
+            )
+            if showsCancel {
                 Button {
                     configuration.text.wrappedValue = ""
                     textFieldFocused = false
