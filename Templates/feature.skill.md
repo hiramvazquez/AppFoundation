@@ -25,10 +25,24 @@ Elige las opciones según de qué depende la pantalla:
 | API + local | `--api --local` | ambos, política cache-then-network |
 | Sin datos | (ninguna) | nada — Logic sigue existiendo, pura |
 
-Otras opciones: `--module` (M8: separa Core/UI en subcarpetas), `--analytics` (M10: deja el
-hueco para inyectar un tracker en la Logic), `--no-logic` (solo para una pantalla sin
-regla de negocio propia — úsalo poco), `--no-tests`, `--path Features` (carpeta destino),
-`--dry-run` (lista lo que generaría sin escribir nada).
+Otras opciones: `--module` (M8: separa Core/UI en subcarpetas — o en dos targets reales,
+ver «Modo multi» abajo), `--analytics` (M10: deja el hueco para inyectar un tracker en la
+Logic), `--no-logic` (solo para una pantalla sin regla de negocio propia — úsalo poco),
+`--no-tests`, `--path Features` (carpeta destino, ignorada en modo multi), `--dry-run`
+(lista lo que generaría sin escribir nada).
+
+### Modo multi (PRD-AF-10)
+
+Si este proyecto tiene un `.archinit-multi` en la raíz del paquete donde se invoca el
+comando (lo deja `archinit --multi`), cada feature es un target real —
+`Sources/<Nombre>Feature/…`, o `<Nombre>FeatureCore`/`<Nombre>FeatureUI` con `--module` —
+y el generador da de alta el target y el producto en `Package.swift`, e inserta
+`<Nombre>Module()`/`case <nombre>` en `App/AppModule.swift`/`App/AppRoute.swift` si esos
+ficheros y sus markers existen. `--no-register` desactiva las tres ediciones (el feature
+se genera igual, sin registrar nada). Si el target ya existe o falta un marker, el
+comando falla con un error claro sin tocar ni el manifiesto ni los ficheros del feature.
+Fuera de ese `.archinit-multi`, nada de esto aplica — comportamiento idéntico al de
+siempre.
 
 ¿La pantalla necesita el Service/Store de OTRO feature ya generado (p. ej. el detalle de un
 producto reutilizando `ProductsServicing`)? `--service-from <Feature>`/`--store-from

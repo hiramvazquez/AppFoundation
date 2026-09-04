@@ -67,7 +67,66 @@ completa vive en `Examples/`.
 Límites honestos, iguales para un humano y para un agente: el generador escribe ficheros,
 **nunca** edita el `.xcodeproj` (los proyectos con carpetas sincronizadas de Xcode 16+ lo
 recogen solos; los antiguos requieren arrastrar la carpeta) ni añade el `case` al `enum
-AppRoute` — los imprime como pasos siguientes al terminar.
+AppRoute` — los imprime como pasos siguientes al terminar. En **modo multi** (ver abajo)
+el generador sí añade ese `case` (y el alta en `AppModule`), porque ahí sabe dónde: los
+markers documentados por `archinit --multi`.
+
+## Modo multi
+
+PRD-AF-10: cuando el paquete donde se invoca `generate-feature` (el paquete `Features` de
+una app modular de tres niveles: cáscara `App/` + `Packages/Platform` + `Packages/
+Features`) contiene un fichero `.archinit-multi` en su raíz — lo deja `archinit --multi`
+(`Plugins/ArchInit`) —, el generador cambia de comportamiento:
+
+- Cada feature es un **target real** propio: `Sources/<Nombre>Feature/…` y
+  `Tests/<Nombre>FeatureTests/…`, en vez de una subcarpeta `Features/<Nombre>/` dentro de
+  un target existente. `--module` genera DOS targets reales — `<Nombre>FeatureCore`
+  (Logic/Service/Store/Module, sin SwiftUI) y `<Nombre>FeatureUI` (View/ViewModel,
+  depende de Core) — en vez de las subcarpetas `<Nombre>Core`/`<Nombre>UI` que produce
+  fuera de modo multi.
+- El generador **da de alta el target (o los dos) y su test target** entre
+  `// archinit:features-begin` / `// archinit:features-end` en la sección `targets:` del
+  `Package.swift` del paquete `Features`, y el producto `.library(name: "<Nombre>Feature",
+  targets: […])` entre `// archinit:products-begin` / `// archinit:products-end` en
+  `products:` — la única edición de manifiesto que hace este generador, y solo en modo
+  multi. Dependencias: `AppFoundation` y `Domain` (producto del paquete local `Platform`)
+  siempre; `CoreNetworking` solo con `--api`. `ArchitectureLint` se añade al target Core
+  siempre y al target único (sin `--module`) siempre; al target UI de un `--module` NO se
+  le añade — ver la nota en el código (`MultiMode.swift`): la regla R5 ("un ViewModel
+  tiene su Logic") la comprueba el build-tool plugin mirando solo los ficheros del target
+  que está compilando, y en modo `--module` la Logic vive en el otro target — `swift
+  package archlint` (que sí recorre el paquete entero) sigue comprobando UI igualmente.
+  Si ya existe un `.plugin(name: "SwiftLintBuildToolPlugin", …)` en el manifiesto, se
+  reutiliza tal cual en los targets nuevos.
+- Si el target ya está registrado, o si los markers no existen, el comando **falla con un
+  error claro y no toca nada** — ni el `Package.swift` ni los ficheros del feature: la
+  validación del manifiesto ocurre ANTES de escribir un solo fichero generado.
+- Además, si `../../App/AppModule.swift` existe y tiene el marker `// archinit:modules`,
+  se inserta `<Nombre>Module(),`; si `../../App/AppRoute.swift` existe y tiene
+  `// archinit:routes`, se inserta `case <nombre>`. Estas dos ediciones son best-effort:
+  si el fichero o el marker no existen, el generador no falla — imprime el paso manual,
+  igual que fuera de modo multi.
+- `--no-register` desactiva las tres ediciones (Package.swift, AppModule.swift,
+  AppRoute.swift): el generador solo escribe los ficheros del feature.
+
+```bash
+cd Packages/Features
+swift package --allow-writing-to-package-directory generate-feature Contratos --api
+swift package --allow-writing-to-package-directory generate-feature MisCasos --api --local --module
+swift package --allow-writing-to-package-directory generate-feature Standalone --no-register
+```
+
+`--path`/`--target` no tienen efecto en modo multi (no hay un target existente donde
+elegir una subcarpeta: cada feature es su propio target, con su propia ruta fija).
+`--service-from`/`--store-from` combinan con modo multi para la Logic, pero con un límite
+conocido: cada feature tiene su propio target de tests en modo multi, así que reutilizar
+el mock de OTRO feature (p. ej. `ProductsServiceMock`) desde `DetailFeatureTests` solo
+compila si ese mock es visible entre targets de test distintos — el generador lo avisa en
+los pasos siguientes en vez de fingir que funciona igual que en modo no-multi (un único
+target de tests, donde siempre es visible).
+
+Fuera de modo multi, `generate-feature` se comporta exactamente igual que siempre — el
+`.archinit-multi` es lo único que activa este modo, y su ausencia lo deja todo sin cambios.
 
 ### `archinit`
 
