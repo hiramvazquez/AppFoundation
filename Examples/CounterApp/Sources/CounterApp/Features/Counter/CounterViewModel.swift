@@ -7,6 +7,11 @@ import Observation
 @MainActor
 @Observable
 public final class CounterViewModel: LogicViewModel<any CounterLogicProtocol>, ActionHandling {
+    // Nonisolated on purpose: without an explicit deinit the compiler synthesizes an isolated
+    // one that goes through a back-deploy shim on older OS versions (see AppFoundation's
+    // `docs/repros/isolated-deinit-backdeploy.md`). Nothing to clean up here.
+    deinit {}
+
     public private(set) var count = 0
 
     /// Every action `CounterView` recognizes.

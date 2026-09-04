@@ -9,6 +9,11 @@ import Observation
 @MainActor
 @Observable
 public final class NotesViewModel: LogicViewModel<any NotesLogicProtocol>, ActionHandling {
+    // Nonisolated on purpose: without an explicit deinit the compiler synthesizes an isolated
+    // one that goes through a back-deploy shim on older OS versions (see AppFoundation's
+    // `docs/repros/isolated-deinit-backdeploy.md`). Nothing to clean up here.
+    deinit {}
+
     public private(set) var notes: [Note] = []
 
     /// Every action `NotesView` recognizes.

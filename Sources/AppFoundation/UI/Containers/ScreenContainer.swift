@@ -446,6 +446,13 @@ public extension ScreenContainer {
 @MainActor
 @Observable
 public final class BindingBackedState: ScreenState, ActionHandling {
+    // Explicit, nonisolated `deinit` on purpose. Under `defaultIsolation(MainActor)` a class
+    // WITHOUT one gets a synthesized *isolated* deinit, which on OS versions older than the
+    // toolchain's runtime goes through `swift_task_deinitOnExecutorMainActorBackDeploy`; two
+    // of those nested (a ViewModel releasing its Coordinator) aborted with a libmalloc
+    // double free on iOS 26.2 (AppStarter CI, Xcode 26.3). Nothing here needs the actor.
+    deinit {}
+
     private let phaseBinding: Binding<ViewPhase>
     private let activityBinding: Binding<ActivityState>
     private let alertBinding: Binding<AlertState?>
@@ -503,6 +510,13 @@ public final class BindingBackedState: ScreenState, ActionHandling {
 @MainActor
 @Observable
 public final class ObservingScreenState<Wrapped: ScreenState>: ScreenState, ActionHandling {
+    // Explicit, nonisolated `deinit` on purpose. Under `defaultIsolation(MainActor)` a class
+    // WITHOUT one gets a synthesized *isolated* deinit, which on OS versions older than the
+    // toolchain's runtime goes through `swift_task_deinitOnExecutorMainActorBackDeploy`; two
+    // of those nested (a ViewModel releasing its Coordinator) aborted with a libmalloc
+    // double free on iOS 26.2 (AppStarter CI, Xcode 26.3). Nothing here needs the actor.
+    deinit {}
+
     let wrapped: Wrapped
 
     init(_ wrapped: Wrapped) {

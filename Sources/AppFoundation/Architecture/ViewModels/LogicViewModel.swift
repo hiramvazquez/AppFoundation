@@ -45,6 +45,13 @@ import Foundation
 /// protocol.
 @MainActor
 open class LogicViewModel<L>: BaseViewModel {
+    // Explicit, nonisolated `deinit` on purpose. Under `defaultIsolation(MainActor)` a class
+    // WITHOUT one gets a synthesized *isolated* deinit, which on OS versions older than the
+    // toolchain's runtime goes through `swift_task_deinitOnExecutorMainActorBackDeploy`; two
+    // of those nested (a ViewModel releasing its Coordinator) aborted with a libmalloc
+    // double free on iOS 26.2 (AppStarter CI, Xcode 26.3). Nothing here needs the actor.
+    deinit {}
+
     /// This view model's `Logic` — the only place its business logic lives. Injected once
     /// through `init`, never mutated afterwards.
     public let logic: L

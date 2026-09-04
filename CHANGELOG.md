@@ -6,6 +6,18 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-09-04
+
+### Corregido
+
+- **`deinit {}` explícito en toda clase `@MainActor` del kit** (`Coordinator`, `Container`, `Inject`,
+  `LogicViewModel`, `ObservingScreenState`, `BindingBackedState`), en la plantilla del ViewModel, los
+  ejemplos y los snippets. Bajo `defaultIsolation(MainActor)`, una clase sin `deinit` recibe uno
+  AISLADO sintetizado que en sistemas anteriores al runtime del toolchain pasa por
+  `swift_task_deinitOnExecutorMainActorBackDeploy`; dos anidados (un ViewModel liberando su
+  `Coordinator`) abortaron con un double free de libmalloc en iOS 26.2 (CI de AppStarter, Xcode
+  26.3). Repro y símbolos en `docs/repros/isolated-deinit-backdeploy.md`.
+
 ## [1.2.1] - 2026-09-04
 
 ### Corregido

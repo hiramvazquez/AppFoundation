@@ -104,6 +104,10 @@ con `generate-feature` (abajo) y deja que `ArchitectureLint` valide el build.
 
 ## Qué NO hacer
 
+- Toda clase `@MainActor` (ViewModels incluidos) lleva `deinit {}` explícito aunque no limpie
+  nada: sin él el compilador sintetiza un `deinit` AISLADO que en sistemas anteriores al runtime
+  del toolchain pasa por un shim que abortó en iOS 26.2 (`docs/repros/isolated-deinit-backdeploy.md`).
+  El generador ya lo pone.
 - No uses `try!`, `as!`, `x!`, `T!` ni `[unowned self]`: SwiftLint (`.swiftlint.yml`, instalado
   por `archinit`) los convierte en error de build. Una excepción se justifica en el sitio con
   `// swiftlint:disable:next <regla>` y el motivo en el comentario, nunca bajando el umbral.

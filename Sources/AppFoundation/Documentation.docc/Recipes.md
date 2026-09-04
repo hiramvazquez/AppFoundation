@@ -24,6 +24,11 @@ protocol FeedLoading: Sendable {
 
 @Observable
 final class FeedViewModel: BaseViewModel, ActionHandling {
+    // Nonisolated on purpose: without an explicit deinit the compiler synthesizes an isolated
+    // one that goes through a back-deploy shim on older OS versions (see AppFoundation's
+    // `docs/repros/isolated-deinit-backdeploy.md`). Nothing to clean up here.
+    deinit {}
+
     private(set) var items: [String] = []
     private var currentPage = 0
     private var hasMore = true
@@ -83,6 +88,11 @@ protocol ItemsLoading: Sendable {
 
 @Observable
 final class ItemsViewModel: BaseViewModel, ActionHandling {
+    // Nonisolated on purpose: without an explicit deinit the compiler synthesizes an isolated
+    // one that goes through a back-deploy shim on older OS versions (see AppFoundation's
+    // `docs/repros/isolated-deinit-backdeploy.md`). Nothing to clean up here.
+    deinit {}
+
     private(set) var items: [String] = []
     private let service: any ItemsLoading
 
@@ -155,6 +165,11 @@ protocol SignupLogicProtocol: Logic, Sendable {
 
 @Observable
 final class SignupViewModel: LogicViewModel<any SignupLogicProtocol>, ActionHandling {
+    // Nonisolated on purpose: without an explicit deinit the compiler synthesizes an isolated
+    // one that goes through a back-deploy shim on older OS versions (see AppFoundation's
+    // `docs/repros/isolated-deinit-backdeploy.md`). Nothing to clean up here.
+    deinit {}
+
     var email = ""
     var password = ""
 
