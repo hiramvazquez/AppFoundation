@@ -50,6 +50,10 @@ public enum AppFoundationDiagnostics {
 
     // MARK: - Nonisolated entry point (AF-11: ResourceBundle's silent bundle-lookup fallback)
 
+    /// `internal`, no `public` como su hermano `assertOnDroppedAction`: esto existe solo para
+    /// que los tests del propio paquete observen el fallo (lo alcanzan con `@testable`), no
+    /// para que una app lo configure. Hacerlo público el día que haga falta es aditivo.
+    ///
     /// Like `assertOnDroppedAction`, but for diagnostics reported from `nonisolated` code
     /// that cannot touch a `@MainActor` static var synchronously.
     ///
@@ -59,13 +63,13 @@ public enum AppFoundationDiagnostics {
     /// `droppedActionHandler`'s callers already follow, just without an actor to enforce
     /// the serialization (see `ResourceBundleTests`, `.serialized`, for how tests honor it).
     /// Defaults to `false`. Only observed in `DEBUG` builds.
-    public nonisolated(unsafe) static var assertOnNonisolatedFailure = false
+    nonisolated(unsafe) static var assertOnNonisolatedFailure = false
 
     /// Like `droppedActionHandler`, but `nonisolated` and `@Sendable` so `nonisolated` code
     /// can invoke it directly, from any thread, without an actor hop. Meant for tests that
     /// verify a `nonisolated` failure is reported; `nil` by default. Only invoked in `DEBUG`
     /// builds.
-    public nonisolated(unsafe) static var nonisolatedFailureHandler: (@Sendable (String) -> Void)?
+    nonisolated(unsafe) static var nonisolatedFailureHandler: (@Sendable (String) -> Void)?
 
     /// Reports one failure from a `nonisolated` context: logs it through `os.Logger`,
     /// forwards it to `nonisolatedFailureHandler`, and asserts if `assertOnNonisolatedFailure`
