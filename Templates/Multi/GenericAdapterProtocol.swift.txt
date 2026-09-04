@@ -1,0 +1,9 @@
+import Foundation
+
+/// Contract for the {{Sdk}} integration, implemented by the `{{Sdk}}Adapters` target.
+/// Features depend on THIS protocol, never on the {{Sdk}} SDK directly — `{{Sdk}}Adapters`
+/// is the only module allowed to import it (`.archlint.yml`, R13:
+/// `allowedImports: [Foundation, Domain, {{Sdk}}*]`).
+public protocol {{Sdk}}Adapting: Sendable {
+    func isConfigured() -> Bool
+}

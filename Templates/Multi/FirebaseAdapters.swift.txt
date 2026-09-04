@@ -1,0 +1,42 @@
+import Domain
+import Foundation
+
+#if canImport(FirebaseAnalytics)
+import FirebaseAnalytics
+#endif
+#if canImport(FirebaseCrashlytics)
+import FirebaseCrashlytics
+#endif
+
+/// The ONLY module allowed to import a Firebase product (`.archlint.yml`, R13:
+/// `FirebaseAdapters` allows `[Foundation, Domain, Firebase*]`; every other module
+/// forbids `Firebase*`). Falls back to a no-op when the SDK product isn't resolved yet
+/// (`#if canImport`), so this target — and `swift build`/`swift test` on the whole
+/// package — compiles standalone before `firebase-ios-sdk` is fetched or on a machine
+/// that hasn't resolved it.
+public struct FirebaseAnalyticsTracker: AnalyticsTracking {
+    public init() {}
+
+    public func track(event: String, parameters: [String: String]) {
+        #if canImport(FirebaseAnalytics)
+        Analytics.logEvent(event, parameters: parameters)
+        #endif
+    }
+}
+
+/// See `FirebaseAnalyticsTracker` above — same `#if canImport` fallback.
+public struct FirebaseCrashReporter: CrashReporting {
+    public init() {}
+
+    public func record(error: Error) {
+        #if canImport(FirebaseCrashlytics)
+        Crashlytics.crashlytics().record(error: error)
+        #endif
+    }
+
+    public func log(_ message: String) {
+        #if canImport(FirebaseCrashlytics)
+        Crashlytics.crashlytics().log(message)
+        #endif
+    }
+}

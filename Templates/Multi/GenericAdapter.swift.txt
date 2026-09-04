@@ -1,0 +1,13 @@
+import Domain
+import Foundation
+
+/// Stub — wire the real {{Sdk}} SDK here (its own dependency in `Package.swift`, its own
+/// `import {{Sdk}}...`). `.archlint.yml` restricts this target to `[Foundation, Domain,
+/// {{Sdk}}*]`: it is the ONLY module allowed to import the {{Sdk}} SDK (R13).
+public struct {{Sdk}}AdapterStub: {{Sdk}}Adapting {
+    public init() {}
+
+    public func isConfigured() -> Bool {
+        false
+    }
+}

@@ -1,0 +1,10 @@
+import Foundation
+
+/// Crash-reporting contract, implemented by the `FirebaseAdapters` target
+/// (`FirebaseCrashReporter`). Features depend on THIS protocol, never on the Firebase SDK
+/// directly — `FirebaseAdapters` is the ONLY module allowed to `import Firebase*`
+/// (`.archlint.yml`, R13).
+public protocol CrashReporting: Sendable {
+    func record(error: Error)
+    func log(_ message: String)
+}

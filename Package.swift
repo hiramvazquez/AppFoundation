@@ -148,6 +148,23 @@ let package = Package(
             swiftSettings: toolSwiftSettings
         ),
 
+        // PRD-AF-10 (`archinit --multi`): mismo truco que `GenerateFeatureSupport` de
+        // arriba — `Plugins/ArchInit/ArchInitSupport.swift` es un symlink A ESTE fichero,
+        // así el command plugin `ArchInit` compila el código directamente (sin `import`
+        // cruzado, que SwiftPM rechaza entre un plugin y un target de biblioteca) y
+        // `ArchInitSupportTests` prueba exactamente ese código con `@testable import`.
+        .target(
+            name: "ArchInitSupport",
+            path: "Sources/ArchInitSupport",
+            swiftSettings: toolSwiftSettings
+        ),
+        .testTarget(
+            name: "ArchInitSupportTests",
+            dependencies: ["ArchInitSupport"],
+            path: "Tests/ArchInitSupportTests",
+            swiftSettings: toolSwiftSettings
+        ),
+
         // Build-tool plugin: se añade a un target con
         // `plugins: [.plugin(name: "ArchitectureLint", package: "AppFoundation")]`. Invoca
         // el ejecutable `archlint` sobre `target.sourceFiles`; un error hace fallar el build
