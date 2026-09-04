@@ -73,6 +73,31 @@ struct LocalizationTests {
         }
     }
 
+    // MARK: - AF-11: ResourceBundle no debe caer en silencio a su bundle de fallback
+
+    /// `ResourceBundle.current` cae a `Bundle(for: Finder.self)` (el binario que contiene
+    /// al módulo, sin recursos) cuando no encuentra `AppFoundation_AppFoundation.bundle` en
+    /// ninguno de sus candidatos — y entonces cualquier `String(localized:bundle:)` devuelve
+    /// su clave literal sin traducir, en silencio. Un `#expect(!texto.isEmpty)` no
+    /// distinguiría ese fallback de una traducción real (la clave nunca está vacía). Lo que
+    /// SÍ lo distingue es una traducción cuyo valor DIFIERE de su clave en algún idioma: el
+    /// fallback nunca puede producir ese valor porque nunca localiza nada. Se usa español
+    /// (el inglés coincide con la clave para casi todos los strings del paquete, así que no
+    /// serviría como prueba) para que el resultado no dependa del idioma del runner.
+    @Test func resourceBundleResolvesToTheRealBundleNotTheFallback() throws {
+        // 1) El bundle encontrado es el real, no el binario de fallback (que tendría otro
+        //    nombre: el del target de test o el propio módulo, nunca el del paquete).
+        #expect(L10n.bundle.bundleURL.lastPathComponent == ResourceBundle.bundleName)
+
+        // 2) Y localiza de verdad: la traducción difiere de la clave.
+        let search = try localizedValue(forKey: "Search", language: "es")
+        #expect(search == "Buscar")
+        #expect(
+            search != "Search",
+            "Si esto fuera \"Search\", ResourceBundle.current habría caído al bundle de fallback"
+        )
+    }
+
     /// Independiente del idioma del runner (el simulador puede correr en español):
     /// los defaults deben resolver a un valor del catálogo de CUALQUIER idioma
     /// soportado. La completitud por idioma la fijan los dos tests de arriba.

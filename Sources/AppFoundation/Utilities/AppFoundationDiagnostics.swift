@@ -47,4 +47,43 @@ public enum AppFoundationDiagnostics {
         }
         #endif
     }
+
+    // MARK: - Nonisolated entry point (AF-11: ResourceBundle's silent bundle-lookup fallback)
+
+    /// Like `assertOnDroppedAction`, but for diagnostics reported from `nonisolated` code
+    /// that cannot touch a `@MainActor` static var synchronously.
+    ///
+    /// `nonisolated(unsafe)`: a `Bool` that test code sets once, before triggering the
+    /// nonisolated failure it wants to observe, and that `reportNonisolatedFailure` only
+    /// reads — the same "configure before exercising, don't race" contract
+    /// `droppedActionHandler`'s callers already follow, just without an actor to enforce
+    /// the serialization (see `ResourceBundleTests`, `.serialized`, for how tests honor it).
+    /// Defaults to `false`. Only observed in `DEBUG` builds.
+    public nonisolated(unsafe) static var assertOnNonisolatedFailure = false
+
+    /// Like `droppedActionHandler`, but `nonisolated` and `@Sendable` so `nonisolated` code
+    /// can invoke it directly, from any thread, without an actor hop. Meant for tests that
+    /// verify a `nonisolated` failure is reported; `nil` by default. Only invoked in `DEBUG`
+    /// builds.
+    public nonisolated(unsafe) static var nonisolatedFailureHandler: (@Sendable (String) -> Void)?
+
+    /// Reports one failure from a `nonisolated` context: logs it through `os.Logger`,
+    /// forwards it to `nonisolatedFailureHandler`, and asserts if `assertOnNonisolatedFailure`
+    /// is set. Compiles to nothing outside `DEBUG` — release builds must not crash over a
+    /// diagnostic.
+    ///
+    /// `nonisolated` — unlike `reportDrop` — so a caller that is itself `nonisolated` (like
+    /// `ResourceBundle`, whose whole reason to exist is staying `nonisolated` under
+    /// `defaultIsolation(MainActor.self)`) can call this synchronously, from whatever thread
+    /// first triggers its one-time lazy state, without hopping to the main actor.
+    static nonisolated func reportNonisolatedFailure(_ message: @autoclosure () -> String) {
+        #if DEBUG
+        let message = message()
+        AppFoundationLogger.resourceBundle.error("\(message, privacy: .public)")
+        nonisolatedFailureHandler?(message)
+        if assertOnNonisolatedFailure {
+            assertionFailure(message)
+        }
+        #endif
+    }
 }

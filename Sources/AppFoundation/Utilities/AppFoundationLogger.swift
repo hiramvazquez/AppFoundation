@@ -23,4 +23,9 @@ nonisolated enum AppFoundationLogger {
     /// because the view model was already deallocated (`AppFoundationDiagnostics`, A7).
     /// DEBUG only.
     static let actionSender = Logger(subsystem: subsystem, category: "ActionSender")
+
+    /// The package's resource bundle falling back to the module binary, which leaves every
+    /// localized default string showing its literal key (`ResourceBundle`). DEBUG only,
+    /// reported through `AppFoundationDiagnostics.reportNonisolatedFailure`.
+    static let resourceBundle = Logger(subsystem: subsystem, category: "ResourceBundle")
 }

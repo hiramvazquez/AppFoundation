@@ -1,3 +1,4 @@
 
 # Los ejemplos siguen CoreNetworking por branch: main; el pin lo decide cada consumidor.
 Examples/*/Package.resolved
+*.profraw
