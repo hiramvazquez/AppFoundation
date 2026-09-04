@@ -423,6 +423,12 @@ de cualquier paso que use `xcodebuild`/`swift`.
 El `.github/workflows/ci.yml` completo de AppStarter tiene los tres jobs (lint + unit,
 `xcodebuild test`, integración real) con estos nueve puntos aplicados.
 
+## App grande: tres niveles en un comando
+
+Para una app con varios equipos o muchas features, `archinit --multi` deja la estructura
+modular por targets (cáscara + `Packages/Platform` + `Packages/Features`) con las reglas de
+dependencia vigiladas por el linter: <doc:MultiModule>.
+
 ## De aquí en adelante
 
 - Una Logic que depende de una API o de datos locales: <doc:Architecture>.

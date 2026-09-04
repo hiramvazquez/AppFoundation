@@ -27,6 +27,7 @@ punto de referencia de este catálogo.
 
 - <doc:GettingStarted>
 - <doc:Architecture>
+- <doc:MultiModule>
 
 ### Estado de pantalla
 

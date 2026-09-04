@@ -142,6 +142,15 @@ escribir código de una capa a mano, repasa la tabla de reglas en el artículo `
 que un `APIError`/DTO llegue al ViewModel (R7/R8), o llamar a `Container.shared` fuera
 del `XxxModule` (R10) hacen fallar el build, no solo el code review.
 
+## Si el proyecto es multi-módulo (`archinit --multi`)
+
+Cada feature es un target de `Packages/Features`; `Domain`, los `<Cap>Kit` y los
+`<Sdk>Adapters` viven en `Packages/Platform`. Una feature NUNCA importa otra feature, un
+SDK ni un Kit (regla R13, error de build): navega por `AppRoute` y recibe protocolos de
+`Domain` por `init`. La tabla de dependencias con los nombres reales está más abajo en este
+fichero si `archinit --multi` la generó. Las features nuevas se crean con `generate-feature`
+desde `Packages/Features`: da de alta el target y el módulo por ti.
+
 ## Definition of Done
 
 Nada está terminado hasta que estos comandos se han EJECUTADO y su salida real aparece

@@ -6,8 +6,40 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-04
+
+### Añadido
+
+- **`archinit --multi`** (PRD-AF-10): deja en un comando la app modular de tres niveles por
+  targets, no por manifiestos: cáscara (`App/` con `@main`, `RootView`, `AppModule` y
+  `AppRoute` con markers), `Packages/Platform` (`Domain`, un `<Cap>Kit` por `--capability`,
+  un `<Sdk>Adapters` por `--adapter`; `Firebase` con `AnalyticsTracking`/`CrashReporting` y
+  un adapter que compila con y sin el SDK), `Packages/Features` (manifiesto con markers para
+  el alta automática de targets), `.archlint.yml` raíz con `modules:`, `.swiftlint.yml`,
+  `.swift-format`, `AGENTS.md` con la tabla de dependencias real, `project.yml`, `Scripts/
+  bootstrap.sh`, `ci.yml` con matriz por paquete. Idempotente, `--dry-run`, `--no-xcodegen`.
+  `Scripts/bootstrap-multi.sh <Name>` crea el manifiesto mínimo y lo invoca. Plantillas en
+  `Templates/Multi/`; lógica testeable en `ArchInitSupport` (24 tests).
+- **`generate-feature` en modo multi**: detecta `.archinit-multi` y los markers, genera
+  `Sources/<Name>Feature` y `Tests/<Name>FeatureTests`, da de alta el target, su test target
+  y el producto entre los markers (única edición de manifiesto que hace; `--no-register` la
+  desactiva) y añade el módulo al composition root y el `case` a `AppRoute`. `--module` crea
+  `<Name>FeatureCore` y `<Name>FeatureUI` como targets reales. Fuera del modo multi, sin cambios.
+- **Regla R13 (error)**: aislamiento entre módulos. `.archlint.yml` gana `modules:` (anidado o
+  plano `modules.<glob>.allowedImports`), con globs en nombres e imports; el módulo se deduce
+  de `Sources/<Target>/` o del `--module` que pasa el build-tool plugin; la config raíz se
+  busca subiendo directorios. Sin `modules:`, nada cambia.
+- **Regla R14 (aviso)**: dependencia por `branch:`/`revision:` en `Package.swift` (solo en
+  `swift package archlint`).
+- `Scripts/verify-multi.sh` y job `multi` en CI: arranque, `archinit --multi`, dos features
+  generadas, build y tests de ambos paquetes, `archlint` limpio, y la prueba negativa de un
+  `import` entre features que rompe el build con `[ArchLint.R13]`.
+
 ### Documentación
 
+- Artículo `MultiModule` (por qué targets y no paquetes, la tabla de dependencias, el
+  arranque, migrar una app existente en cinco pasos, qué vigilar), sección en
+  `GettingStarted`, README y `AGENTS.md`.
 - Artículo `Theming` («Adopta tu maqueta»): cómo una app sustituye carga, error, vacío,
   banners y barra de navegación por su diseño vía `Environment`, sin tocar el paquete; la
   tabla de lo que el paquete garantiza frente a lo que la app decide; el orden de trabajo

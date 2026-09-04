@@ -111,6 +111,14 @@ cáscara de Xcode) lista para clonar. Ver el artículo `GettingStarted` de DocC,
 «Desde un proyecto Xcode», para lo que ese repo enseñó sobre integrar este kit fuera de un
 paquete SPM puro.
 
+## App grande: `archinit --multi`
+
+Estructura modular de tres niveles en un comando: cáscara de app, `Packages/Platform` (Domain,
+un Kit por capacidad, un Adapters por SDK) y `Packages/Features` (un target por feature), dos
+manifiestos locales, `project.yml`, CI por paquete y la regla R13 del linter para que una
+feature nunca importe otra feature ni un SDK. `Scripts/bootstrap-multi.sh MiApp --capability
+Camera --adapter Firebase`. Artículo `MultiModule` en DocC.
+
 ## Tu maqueta, no la del paquete
 
 Las pantallas de carga, error, vacío, los banners y la barra custom se sustituyen por
