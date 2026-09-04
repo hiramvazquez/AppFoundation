@@ -6,6 +6,123 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-09-04
+
+### Corregido
+
+- **`Scripts/verify-generator.sh` había divergido de su copia del monorepo sin que nadie se
+  enterara** (412 líneas frente a 231). La divergencia resultó ser INTENCIONAL: esta copia
+  cubre además el modo `multi` (PRD-AF-10), que el CI del monorepo no ejecuta. En vez de
+  forzar la convergencia y perder esa cobertura, el trozo queda delimitado por comentarios
+  `SOLO-APPFOUNDATION: begin`/`end`, y `Scripts/dedup-check.sh` (job `dedup-check` del CI del
+  monorepo) compara todo lo de fuera y falla si vuelve a derivar. `check-doc-snippets.sh`, que
+  sí debe ser idéntico en los tres sitios, queda cubierto por el mismo job.
+- **`archlint` no se ejecutaba nunca sobre las fuentes del propio paquete**, solo sobre los
+  cuatro ejemplos y sobre el código generado. Al pasarlo aparecieron once diagnósticos: diez
+  falsos positivos inevitables —R1–R15 describen la arquitectura de una app CONSUMIDORA y no
+  aplican al paquete que define esas primitivas: `Logic.swift` es el protocolo marcador,
+  `BaseViewModel` es la clase base, y `ScreenPresentationLogic`/`CoordinatorViewLogic`/
+  `NavigationBarLogic` son enums puros internos que la regla, léxica, confunde con la Logic de
+  un feature— y **uno real**: `PopGestureEnabler.ViewController`, un `UIViewController` sin
+  `deinit` explícito publicado en 1.2.4, exactamente el bug que motivó 1.2.2 y 1.2.3. Nuevo
+  `.archlint.yml` en la raíz del paquete que desactiva R1–R15 y deja SOLO R16 (que sí aplica a
+  un framework: habla de `deinit`, no de capas), y job `archlint-self` en el CI del monorepo y
+  en el del repo publicado para que no vuelva a colarse.
+- **La documentación enseñaba el bug de R16**: los `Snippets/` —que se inlinean en los
+  artículos DocC y son lo que un consumidor copia— declaraban `final class CatalogLogic`
+  mientras los ejemplos ya declaraban `public nonisolated final class CatalogLogic`. Cuatro
+  clases afectadas: los tres `*Logic` se alinean con los ejemplos (`nonisolated`) y
+  `CheckoutCart`, que no es un `Logic` sino una dependencia con estado en un contenedor hijo,
+  recibe su `deinit {}` explícito. Bloques DocC regenerados.
+- **`ResourceBundle` podía fallar en silencio**: si ninguno de sus cinco directorios candidatos
+  contenía `AppFoundation_AppFoundation.bundle`, caía a un bundle sin recursos y las cadenas
+  salían con su clave literal sin traducir — sin log, sin `assertionFailure`, sin test que lo
+  detectara. Ahora, en `DEBUG`, ese fallo se reporta en voz alta a través de un nuevo punto de
+  entrada `nonisolated` en `AppFoundationDiagnostics` (`reportNonisolatedFailure`,
+  `assertOnNonisolatedFailure`, `nonisolatedFailureHandler`): mismo patrón que ya usaban las
+  acciones perdidas de `ActionSender` (A7) — `os.Logger`, handler observable por tests,
+  `assertionFailure` opcional — resuelto para un llamador `nonisolated` que no puede tocar el
+  `@MainActor` original sin saltar de actor. En Release no cambia nada (nunca crashea por esto).
+- **`Finder` (dentro de `ResourceBundle`) incumplía R16**: la regla exige el modificador
+  `nonisolated` en la propia declaración de la clase, no basta con heredarlo del `enum`
+  contenedor que la envuelve. Añadido explícitamente (`private nonisolated final class Finder`).
+- **`LocalizationTests` no distinguía una traducción real de la clave devuelta sin traducir**:
+  los tres tests existentes podían pasar igual si `ResourceBundle` cayera a su bundle de
+  fallback, porque en inglés la traducción de casi todas las cadenas coincide con su clave.
+  Nuevo test que exige un valor DISTINTO de la clave (en español) y que el bundle resuelto sea
+  el real, no el de fallback.
+
+### Verificado
+
+- **`ResourceBundle` (el workaround de `Bundle.module`, AF-11) sigue haciendo falta**:
+  comprobado empíricamente con un paquete mínimo fuera del repo
+  (`defaultIsolation(MainActor.self)` + acceso a `Bundle.module` desde `nonisolated`). En el
+  toolchain local (Xcode 26.6 / Swift 6.3.3) el accesor que sintetiza SwiftPM ya declara
+  `nonisolated` y el workaround no hace falta ahí — pero el CI de este repo compila con Xcode
+  26.3 (Swift 6.2.x), anterior al fix (documentado en Swift Forums como corregido a partir de
+  Swift 6.3), así que retirarlo ahora rompería CI aunque compile en local. No se toca el
+  comportamiento; se documenta la condición exacta de retirada en el doc comment de
+  `ResourceBundle` y se añade un test centinela
+  (`rawBundleModuleAccessorIsNonisolatedOnThisToolchain`, gateado con `#if compiler(>=6.3)`)
+  que no existe bajo el compilador de CI hoy y empezará a compilarse y ejecutarse el día que
+  ese Xcode se actualice — señal visible en vez de quedar huérfano para siempre.
+
+### Añadido
+
+- **Cobertura de la capa SwiftUI (`UI/`, `Navigation/Views/`)**: publicada al 0-16% en varios
+  ficheros (656 líneas sin probar en `CustomNavigationBar`, 0% en `PhaseView`/`CoordinatorView`/
+  los cuatro `*ViewStyle`), sin ninguna dependencia externa añadida (ni ViewInspector, ni
+  swift-snapshot-testing: el paquete sigue teniendo cero dependencias). Dos frentes:
+  - Se extrajo la lógica pura que vivía dentro de `body`/`@ViewBuilder`, siguiendo el patrón ya
+    establecido por `ScreenPresentationLogic` (`ScreenContainer.swift`): `NavigationBarLogic`
+    (nuevo, en `CustomNavigationBar.swift`) cubre qué activa el botón de back, cuándo se muestra
+    una badge y su texto ("99+"), qué icono lleva énfasis por rol (nunca por nombre de símbolo,
+    A11), cuándo aplica la etiqueta de accesibilidad "Close", y cuándo aparecen los botones de
+    limpiar/cancelar del buscador. `ScreenPresentationLogic.activityContainer(for:)` (nuevo, en
+    `ScreenContainer.swift`) unifica una decisión que `ScreenContainer` y `PhaseView` repetían
+    cada uno por su cuenta (qué estilo de actividad lleva fondo opaco, cuál lleva scrim atenuado
+    y cuál va anclado arriba sin fondo) en un solo mapeo puro que ambas vistas consultan, así que
+    ya no pueden desincronizarse entre sí. `CoordinatorViewLogic` (nuevo, en `CoordinatorView.swift`)
+    cubre la decisión get/set de los bindings modales: que el binding de `.sheet` no se reporte
+    "presentado" mientras hay un `.fullScreenCover` activo (y viceversa), y que cerrar un binding
+    nunca descarte un modal distinto que lo haya reemplazado desde entonces (A7). Todas son
+    `nonisolated enum` con métodos estáticos, probadas caso por caso (`NavigationBarLogicTests`,
+    `ActivityContainerLogicTests`, `CoordinatorViewLogicTests`), y las vistas quedan llamando a
+    la misma lógica en vez de reimplementarla, sin cambio de comportamiento.
+  - Se probaron directamente los tipos de valor públicos de la capa UI:
+    `NavigationBarItem`/`NavigationBarTitle`/`NavigationBarStyle`/`SearchBarConfiguration`/
+    `NavigationBarConfiguration` (`NavigationBarItemTests.swift`: identidad estable por rol y
+    contenido, A10, valores por defecto, cada método de fábrica) y el mecanismo de `Environment`
+    de los cuatro `*ViewStyle` (`ViewStyleEnvironmentTests.swift`: que `.loadingViewStyle(_:)`/
+    `.errorViewStyle(_:)`/`.emptyViewStyle(_:)`/`.bannerViewStyle(_:)` instalan y recuperan
+    exactamente el estilo indicado, y que la caja `AnyXViewStyle` reenvía
+    `makeBody(configuration:)` una única vez con la configuración exacta: el contrato que
+    anuncia AF-15, en vez de asumirlo sin probarlo).
+  - Cuatro smoke tests con `ImageRenderer` (`RenderSmokeTests.swift`, iOS 16+/macOS 13+, de
+    Apple, sin dependencia añadida): `CustomNavigationBar` con back+badge+buscador, cada fase de
+    `ScreenContainer`/`PhaseView`, y `CoordinatorView` con su stack raíz, todos renderizados fuera
+    de pantalla y comprobados como "imagen no vacía sin crash". Deliberadamente NO son snapshots
+    de píxeles (frágiles entre versiones de SO): solo prueban que la vista no revienta al
+    resolverse, que es lo único honesto que se puede afirmar sin una librería de comparación de
+    imágenes; las decisiones reales de esas vistas quedan cubiertas por los tests de lógica pura
+    de arriba, no por estos.
+  - Deliberadamente NO probado: el contenido visual que producen los `Default*ViewStyle`
+    (`DefaultLoadingViewStyle`, `DefaultErrorViewStyle`, ...), porque verificarlo sin una
+    librería de snapshots sería o bien un test que no afirma nada real o bien un test frágil
+    acoplado a layout; `PopGestureEnabler` (`UIViewControllerRepresentable`, requiere una
+    jerarquía `UINavigationController` real, ya documentado en el propio fichero como no
+    cubrible por test unitario, solo manualmente en simulador/dispositivo); y la presentación
+    modal de `CoordinatorView` (`.sheet`/`.fullScreenCover` son una ventana/contexto separados
+    que `ImageRenderer` no captura), aunque su lógica de qué binding debe disparar `dismiss()`
+    sí queda cubierta por `CoordinatorViewLogicTests` — solo el renderizado del modal en sí
+    queda fuera.
+  - Cobertura de líneas (con `xcrun llvm-cov`, ignorando `Tests`): `NavigationBarItem.swift`
+    16%→99%, `CustomNavigationBar.swift` 0%→72%, `ScreenContainer.swift` 12%→73%,
+    `PhaseView.swift` 0%→89%, `CoordinatorView.swift` 0%→45%, `ErrorViewStyle.swift` 15%→85%,
+    `LoadingViewStyle.swift`/`EmptyViewStyle.swift`/`BannerViewStyle.swift` 0%→93%/92%/94%. Total
+    del paquete (con `archlint`), líneas: 57.1%→76.9%. Los 342 tests existentes siguen en verde;
+    86 tests nuevos (428 en total).
+
 ## [1.2.4] - 2026-09-04
 
 ### Corregido
