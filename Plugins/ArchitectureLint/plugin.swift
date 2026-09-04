@@ -29,6 +29,10 @@ struct ArchitectureLint: BuildToolPlugin {
 
         var arguments = swiftFiles.map(\.path)
         arguments.append(contentsOf: ["--root", packageDirectory.path])
+        // R13 (PRD-AF-10): pass SwiftPM's own module name — authoritative over deriving it
+        // from each file's `Sources/<name>/…` path, which is what the command plugin falls
+        // back to when it scans several targets in one run.
+        arguments.append(contentsOf: ["--module", sourceModule.name])
 
         let configURL = packageDirectory.appendingPathComponent(".archlint.yml")
         if FileManager.default.fileExists(atPath: configURL.path) {

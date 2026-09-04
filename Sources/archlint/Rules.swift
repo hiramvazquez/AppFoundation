@@ -54,6 +54,9 @@ enum RuleEngine {
             if config.isEnabled("R10") { diagnostics += checkR10(file, layer: layer) }
             if config.isEnabled("R11"), layer == .logic { diagnostics += checkR11(file) }
             if config.isEnabled("R12"), layer == .view { diagnostics += checkR12(file) }
+            // R13 applies to every file, regardless of layer — it is about which MODULE a
+            // file lives in, not which architectural layer within that module.
+            if config.isEnabled("R13") { diagnostics += checkR13(file, config: config) }
         }
 
         if config.isEnabled("R5") {
@@ -578,6 +581,115 @@ enum RuleEngine {
                         "La View debe retener su ViewModel con `@State` (`_viewModel = State(initialValue:)`); "
                         + "con `let`, un ViewModel transitorio se libera cuando SwiftUI reevalúa el builder de "
                         + "destino y la acción `.load` se pierde."
+                )
+            )
+        }
+        return out
+    }
+
+    // MARK: - R13 — module isolation (PRD-AF-10)
+
+    /// The module a file belongs to, derived from the `Sources/<Target>/…` segment of its
+    /// relative path — a target named `MisCasosFeatureCore` (the `--module` split of
+    /// `generate-feature`) lives at `Sources/MisCasosFeatureCore/…`, so this returns exactly
+    /// that folder name; no extra `Core`/`UI` handling is needed since the generator already
+    /// gives the target that literal name. `nil` for a file with no `Sources/` segment
+    /// (`Package.swift`, or a file outside any target) — `config.moduleOverride` (`--module`,
+    /// set by the build-tool plugin from `sourceModule.name`) takes priority over this and is
+    /// authoritative when present, so a nonstandard layout still resolves correctly.
+    static func moduleName(relativePath: String) -> String? {
+        let components = relativePath.split(separator: "/").map(String.init)
+        guard let sourcesIndex = components.firstIndex(of: "Sources"), sourcesIndex + 1 < components.count else {
+            return nil
+        }
+        return components[sourcesIndex + 1]
+    }
+
+    private static func checkR13(_ file: ParsedFile, config: ArchLintConfig) -> [Diagnostic] {
+        guard !config.modules.isEmpty else { return [] }
+        guard let moduleName = config.moduleOverride ?? Self.moduleName(relativePath: file.relativePath) else {
+            return []
+        }
+        guard let rule = config.moduleRule(for: moduleName) else { return [] }
+
+        var out: [Diagnostic] = []
+        for ref in file.imports {
+            let imported = ref.module
+            // `import Testing`/`XCTest` never count — tests are ignored by default already
+            // (`ignoreGlobs`), but a fixture/config that re-enables them should not suddenly
+            // flag the test framework itself.
+            if imported == "Testing" || imported == "XCTest" { continue }
+
+            if rule.forbiddenImports.contains(where: { Glob.matches($0, path: imported) }) {
+                out.append(
+                    Diagnostic(
+                        path: file.path,
+                        line: ref.line,
+                        col: ref.col,
+                        severity: .error,
+                        rule: "R13",
+                        message: r13Message(module: moduleName, imported: imported)
+                    )
+                )
+                continue
+            }
+            if !rule.allowedImports.isEmpty, !rule.allowedImports.contains(where: { Glob.matches($0, path: imported) })
+            {
+                out.append(
+                    Diagnostic(
+                        path: file.path,
+                        line: ref.line,
+                        col: ref.col,
+                        severity: .error,
+                        rule: "R13",
+                        message: r13Message(module: moduleName, imported: imported)
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /// Two phrasings for the same violation (PRD-AF-10): feature-to-feature — `AGENTS.md`'s
+    /// "las features se comunican por Domain y por AppRoute" — vs. reaching straight for an
+    /// SDK/Kit instead of the Domain protocol an Adapter/Kit implements.
+    private static func r13Message(module: String, imported: String) -> String {
+        if imported.hasSuffix("Feature") {
+            return
+                "'\(module)' no puede importar '\(imported)': las features se comunican por Domain y por AppRoute."
+        }
+        return
+            "'\(module)' no puede importar '\(imported)': entra por un protocolo de Domain implementado en un Adapter/Kit."
+    }
+
+    // MARK: - R14 — a dependency pinned to a branch/commit instead of a tag (warning)
+
+    /// Scans `Package.swift`'s own source for `branch:`/`revision:` used as a `.package(...)`
+    /// call-argument label (never as a `let`/`var` declaration that happens to share the
+    /// name) — lexical, like every other rule here: no PackageDescription parsing, just the
+    /// same tokenizer. Called only from the command plugin path (`main.swift`, gated behind
+    /// `--check-package-swift`) — a `Package.swift` is never one of a target's `sourceFiles`,
+    /// so the build-tool plugin never sees it and never runs this.
+    static func checkR14(packageSwiftSource: String, path: String) -> [Diagnostic] {
+        let tokens = Lexer.tokenize(packageSwiftSource)
+        var out: [Diagnostic] = []
+        for (idx, token) in tokens.enumerated()
+        where token.kind == .identifier && (token.text == "branch" || token.text == "revision") {
+            guard idx + 1 < tokens.count, tokens[idx + 1].kind == .punctuation, tokens[idx + 1].text == ":" else {
+                continue
+            }
+            guard idx > 0, tokens[idx - 1].kind == .punctuation,
+                tokens[idx - 1].text == "," || tokens[idx - 1].text == "("
+            else { continue }
+            out.append(
+                Diagnostic(
+                    path: path,
+                    line: token.line,
+                    col: token.col,
+                    severity: .warning,
+                    rule: "R14",
+                    message:
+                        "Dependencia por rama/commit ('\(token.text):' en Package.swift): no es reproducible; usa un tag."
                 )
             )
         }

@@ -23,6 +23,10 @@ struct ArchLintCommand: CommandPlugin {
 
         let archlint = try context.tool(named: "archlint")
         var toolArguments = [scanTarget.path, "--root", packageDirectory.path]
+        // R14 (PRD-AF-10): a dependency pinned to a branch/commit, checked only here — a
+        // `Package.swift` is never part of any target's `sourceFiles`, so the build-tool
+        // plugin (`ArchitectureLint`) never sees it and never passes this.
+        toolArguments.append("--check-package-swift")
 
         let configURL = packageDirectory.appendingPathComponent(".archlint.yml")
         if FileManager.default.fileExists(atPath: configURL.path) {

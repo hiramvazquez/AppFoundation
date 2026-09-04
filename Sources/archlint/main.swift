@@ -17,15 +17,28 @@ import Foundation
 //   SwiftPM plugins cannot set a working directory for the tools they invoke, so relative
 //   paths would otherwise depend on an unspecified cwd.
 // - `--strict`: same as `.archlint.yml`'s `strict: true`, for a quick one-off run.
+// - `--module NAME` (R13): the module every scanned file belongs to — the build-tool plugin
+//   passes SwiftPM's `sourceModule.name`. Without it, the module is derived per file from
+//   its `Sources/<name>/…` path segment (the command plugin's multi-target scan).
+// - `--modules-config PATH` (R13): loads `PATH`'s `modules:` section unconditionally,
+//   instead of the local config's own `modules:` (if any) or the default walk-up — see
+//   `ArchLintConfig.resolveModules`.
+// - `--check-package-swift` (R14): also scans `<root>/Package.swift` for a dependency
+//   pinned to a `branch:`/`revision:` instead of a tag. Command plugin only — the build-tool
+//   plugin never passes this, since a target's `sourceFiles` never include `Package.swift`.
 //
-// Exit code: 1 if any `error` diagnostic was emitted, 0 otherwise (warnings, R11's `@MainActor`
-// Logic notice among them, never fail the build on their own).
+// Exit code: 1 if any `error` diagnostic was emitted, 0 otherwise (warnings — R11's
+// `@MainActor` Logic notice, R14's branch/revision notice among them — never fail the build
+// on their own).
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 var configPathArgument: String?
 var rootArgument: String?
 var stampArgument: String?
+var moduleArgument: String?
+var modulesConfigArgument: String?
 var forceStrict = false
+var checkPackageSwift = false
 var positionals: [String] = []
 
 var index = 0
@@ -41,8 +54,16 @@ while index < arguments.count {
     case "--stamp":
         index += 1
         if index < arguments.count { stampArgument = arguments[index] }
+    case "--module":
+        index += 1
+        if index < arguments.count { moduleArgument = arguments[index] }
+    case "--modules-config":
+        index += 1
+        if index < arguments.count { modulesConfigArgument = arguments[index] }
     case "--strict":
         forceStrict = true
+    case "--check-package-swift":
+        checkPackageSwift = true
     default:
         positionals.append(arg)
     }
@@ -88,6 +109,16 @@ if let explicit = configPathArgument {
     config = ArchLintConfig.load(from: URL(fileURLWithPath: configSearchDir))
 }
 if forceStrict { config.strict = true }
+if let moduleArgument { config.moduleOverride = moduleArgument }
+
+// R13: `modules:` lives in the repo-root `.archlint.yml` in a multi-module repo — see
+// `ArchLintConfig.resolveModules` for the search order (local file's own `modules:`, then
+// walking up from `root`, then `--modules-config` as an explicit override).
+config.modules = ArchLintConfig.resolveModules(
+    currentModules: config.modules,
+    root: root,
+    explicitPath: modulesConfigArgument.map { resolvedPath($0, relativeTo: cwd) }
+)
 
 // MARK: - File discovery
 
@@ -138,7 +169,23 @@ for path in candidateFiles {
     parsedFiles.append(FileParser.parse(path: path, relativePath: rel, source: source))
 }
 
-let diagnostics = RuleEngine.run(files: parsedFiles, config: config)
+var diagnostics = RuleEngine.run(files: parsedFiles, config: config)
+
+// R14 (command plugin only, see the usage note above `--check-package-swift`): a
+// dependency pinned to a branch/commit instead of a tag, read straight from `Package.swift`
+// at `--root` — it is never one of `parsedFiles` (not under `Sources/`, and not a target's
+// `sourceFiles` either).
+if config.isEnabled("R14"), checkPackageSwift {
+    let packageSwiftPath = (root as NSString).appendingPathComponent("Package.swift")
+    if let data = fileManager.contents(atPath: packageSwiftPath), let source = String(data: data, encoding: .utf8) {
+        diagnostics += RuleEngine.checkR14(packageSwiftSource: source, path: packageSwiftPath)
+        diagnostics.sort {
+            if $0.path != $1.path { return $0.path < $1.path }
+            if $0.line != $1.line { return $0.line < $1.line }
+            return $0.col < $1.col
+        }
+    }
+}
 
 for diagnostic in diagnostics {
     print(diagnostic.formatted)
