@@ -1,5 +1,6 @@
 import AppFoundation
-import Foundation
+{{#splitModule}}import {{CoreModule}}
+{{/splitModule}}import Foundation
 
 /// Generado por `swift package generate-feature {{Feature}}`. Orquesta: recibe una
 /// `Action`, llama a `logic`, actualiza `items`. Nunca importa CoreNetworking ni

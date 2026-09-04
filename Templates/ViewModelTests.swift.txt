@@ -2,7 +2,8 @@ import Foundation
 import Testing
 
 @testable import {{Module}}
-
+{{#splitModule}}@testable import {{CoreModule}}
+{{/splitModule}}
 /// `{{Feature}}ViewModel` probado solo contra `{{Feature}}LogicMock` — sin
 /// `{{Feature}}Service`/`{{Feature}}Store` real, sin red, sin SwiftData involucrados.
 @Suite("{{Feature}}ViewModel")
