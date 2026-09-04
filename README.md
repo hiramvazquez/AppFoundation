@@ -111,6 +111,13 @@ cáscara de Xcode) lista para clonar. Ver el artículo `GettingStarted` de DocC,
 «Desde un proyecto Xcode», para lo que ese repo enseñó sobre integrar este kit fuera de un
 paquete SPM puro.
 
+## Tu maqueta, no la del paquete
+
+Las pantallas de carga, error, vacío, los banners y la barra custom se sustituyen por
+`Environment` (`.errorViewStyle(BrandErrorStyle())`…) una vez en la raíz, sin tocar el
+paquete: el kit decide cuándo se muestra cada estado, la app cómo se ve. Artículo `Theming`
+en DocC («Adopta tu maqueta»).
+
 ## Calidad de código
 
 `archinit` deja también `.swiftlint.yml`, la configuración curada de SwiftLint (`only_rules`,

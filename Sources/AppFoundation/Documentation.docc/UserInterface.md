@@ -60,7 +60,8 @@ ScreenContainer(
 ### Estilos por `Environment`, sin `AnyView`
 
 `LoadingViewStyle`/`ErrorViewStyle`/`EmptyViewStyle`/`BannerViewStyle` siguen el mismo
-patrón que `ButtonStyle`/`ProgressViewStyle` de SwiftUI:
+patrón que `ButtonStyle`/`ProgressViewStyle` de SwiftUI (la guía completa para adoptar la
+maqueta de tu app, con los cuatro estilos y la barra, está en <doc:Theming>):
 
 <!-- snippet: ui-custom-error-style -->
 ```swift

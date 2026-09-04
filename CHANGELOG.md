@@ -6,6 +6,15 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+### Documentación
+
+- Artículo `Theming` («Adopta tu maqueta»): cómo una app sustituye carga, error, vacío,
+  banners y barra de navegación por su diseño vía `Environment`, sin tocar el paquete; la
+  tabla de lo que el paquete garantiza frente a lo que la app decide; el orden de trabajo
+  cuando llega la maqueta; y qué debe (y qué no) contener un `DesignSystem` sin diseño.
+  Snippet `ui-brand-theme` con los cuatro estilos, verificado por CI. Enlazado desde el
+  índice, `UserInterface` y el README.
+
 ## [1.1.0] - 2026-09-03
 
 ### Añadido

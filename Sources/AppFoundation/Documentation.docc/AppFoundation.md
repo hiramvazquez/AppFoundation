@@ -47,6 +47,7 @@ punto de referencia de este catálogo.
 ### UI
 
 - <doc:UserInterface>
+- <doc:Theming>
 
 ### Utilidades
 
