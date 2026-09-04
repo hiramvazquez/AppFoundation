@@ -1,0 +1,28 @@
+import AppFoundation
+{{ModuleImports}}
+
+/// Composition root (`AppFoundation/AGENTS.md` § generador y linter): assembles every
+/// `DependencyModule` {{Name}} registers at startup. `PlatformModule` (below) wires
+/// navigation, Domain (nothing of its own — pure models/protocols), and every Kit/Adapter
+/// `archinit --multi` generated; `generate-feature` (modo multi) appends `<Name>Module()`
+/// right below the marker — nothing above it changes when a feature is added.
+enum AppModule {
+    @MainActor
+    static let modules: [DependencyModule] = [
+        PlatformModule(),
+        // archinit:modules
+    ]
+}
+
+/// Registers navigation (`Coordinator<AppRoute>`), Domain (no bindings of its own), and
+/// every Kit/Adapter this project generated. A feature NEVER resolves a Kit/Adapter
+/// concrete type directly — always the Domain protocol this registers it against
+/// (`.archlint.yml`, R13).
+struct PlatformModule: DependencyModule {
+    func register(in container: Container) {
+        // MARK: Navigation
+        container.register(Coordinator<AppRoute>.self) { _ in Coordinator(root: .placeholder) }
+        container.register((any Router<AppRoute>).self) { c in c.resolve(Coordinator<AppRoute>.self) }
+{{KitRegistrations}}{{AdapterRegistrations}}
+    }
+}

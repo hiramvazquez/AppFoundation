@@ -1,0 +1,17 @@
+# Xcode — el .xcodeproj lo genera Scripts/bootstrap.sh (xcodegen generate) a partir de
+# project.yml; no se versiona.
+*.xcodeproj/
+DerivedData/
+.DS_Store
+
+# SwiftPM
+.build/
+.swiftpm/
+Packages/*/.build/
+Packages/*/.swiftpm/
+
+# xcodegen cache
+.xcodegen/
+
+# Simulator/test artifacts
+*.xcresult

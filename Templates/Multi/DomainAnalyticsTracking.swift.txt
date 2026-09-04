@@ -1,0 +1,9 @@
+import Foundation
+
+/// Analytics contract, implemented by the `FirebaseAdapters` target
+/// (`FirebaseAnalyticsTracker`). Features depend on THIS protocol, never on the Firebase
+/// SDK directly — `FirebaseAdapters` is the ONLY module allowed to `import Firebase*`
+/// (`.archlint.yml`, R13).
+public protocol AnalyticsTracking: Sendable {
+    func track(event: String, parameters: [String: String])
+}

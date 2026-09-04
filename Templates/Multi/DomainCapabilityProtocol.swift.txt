@@ -1,0 +1,10 @@
+import Foundation
+
+/// Capability contract for {{Cap}}, implemented by the `{{Cap}}Kit` target
+/// (`{{Cap}}KitProvider`). Features depend on THIS protocol, never on `{{Cap}}Kit`
+/// directly — the concrete type is wired once, in `App/AppModule.swift` (the composition
+/// root); `.archlint.yml` (R13) blocks a feature from importing `{{Cap}}Kit`.
+public protocol {{Cap}}Providing: Sendable {
+    /// Whether this capability is currently available on the device.
+    func isAvailable() -> Bool
+}

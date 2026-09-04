@@ -1,0 +1,38 @@
+import AppFoundation
+import SwiftUI
+
+/// The app's navigation shell: `CoordinatorView` over the `Coordinator<AppRoute>`
+/// `AppModule.swift` registers. Resolves every `ViewModel` from `Container.shared` —
+/// never constructs one directly (the composition root already did that work).
+///
+/// `generate-feature` (modo multi) never edits this file: it adds the `case` to
+/// `AppRoute` automatically (marker `// archinit:routes`) but always prints the matching
+/// `switch` arm to add here by hand — the same manual step single-module `archinit`
+/// already documents.
+struct RootView: View {
+    @State private var coordinator = Container.shared.resolve(Coordinator<AppRoute>.self)
+
+    var body: some View {
+        CoordinatorView(coordinator: coordinator) { route in
+            switch route {
+            case .placeholder:
+                PlaceholderView()
+            }
+        }
+    }
+}
+
+/// Shown until the first feature exists. Once `generate-feature` adds a real root
+/// screen, point `.placeholder` at it (or drop the case and route straight to the new
+/// screen as the coordinator's root).
+private struct PlaceholderView: View {
+    var body: some View {
+        ContentUnavailableView(
+            "{{Name}}",
+            systemImage: "hammer",
+            description: Text(
+                "Genera tu primer feature: swift package --allow-writing-to-package-directory generate-feature <Nombre> --api"
+            )
+        )
+    }
+}

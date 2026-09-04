@@ -1,0 +1,110 @@
+name: CI
+
+# NOTA para quien edite esto a mano: este fichero NO pasa por el motor de plantillas
+# {{...}} de GenerateFeatureSupport (colisiona con la sintaxis ${{ }} de GitHub Actions) —
+# `archinit --multi` solo sustituye el literal '{{Name}}' con reemplazo de texto plano.
+# Cualquier otro '{{ }}' de aquí abajo es GitHub Actions, no una variable del generador.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  packages:
+    name: ${{ matrix.package }} (swift test + archlint)
+    runs-on: macos-15
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        package: [Platform, Features]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest available Xcode (swift-tools 6.2 mínimo)
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$LATEST" ]; then
+            LATEST=/Applications/Xcode.app
+          fi
+          sudo xcode-select -s "$LATEST"
+          swift --version
+
+      - name: swift test (Packages/${{ matrix.package }})
+        working-directory: Packages/${{ matrix.package }}
+        run: swift test
+
+      - name: swift package archlint (Packages/${{ matrix.package }})
+        working-directory: Packages/${{ matrix.package }}
+        run: swift package archlint
+
+      # Calidad de código (PRD-AF-09): SwiftLint --strict promueve los warning a error;
+      # swift-format valida el formato con la misma configuración que AppFoundation.
+      - name: SwiftLint --strict + swift-format lint (Packages/${{ matrix.package }})
+        working-directory: Packages/${{ matrix.package }}
+        run: |
+          brew install swiftlint
+          swiftlint lint --strict --quiet Sources Tests
+          swift format lint --strict --configuration ../../.swift-format --recursive Sources Tests
+
+  app:
+    name: App (xcodebuild test, offline)
+    runs-on: macos-15
+    timeout-minutes: 30
+    needs: packages
+    env:
+      # Ver la nota de project.yml: horneada en el .xcscheme por xcodegen AL GENERAR, así
+      # que debe estar presente en el entorno ANTES de Scripts/bootstrap.sh, no solo antes
+      # de xcodebuild test.
+      UI_TEST_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest available Xcode (swift-tools 6.2 mínimo)
+        run: |
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$LATEST" ]; then
+            LATEST=/Applications/Xcode.app
+          fi
+          sudo xcode-select -s "$LATEST"
+          xcodebuild -version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project (Scripts/bootstrap.sh)
+        run: ./Scripts/bootstrap.sh
+
+      - name: Pick a simulator (iPhone 17 Pro if available, else newest iPhone)
+        id: sim
+        run: |
+          NAME=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          devices = [d for runtime in data["devices"].values() for d in runtime if "iPhone" in d["name"]]
+          preferred = [d for d in devices if d["name"] == "iPhone 17 Pro"]
+          chosen = preferred[0] if preferred else (devices[-1] if devices else None)
+          print(chosen["name"] if chosen else "")
+          ')
+          if [ -z "$NAME" ]; then
+            echo "No se encontró ningún simulador de iPhone disponible" >&2
+            exit 1
+          fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: xcodebuild test ({{Name}}, -skipPackagePluginValidation)
+        run: |
+          xcodebuild -scheme {{Name}} \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            -skipPackagePluginValidation \
+            -resultBundlePath TestResults.xcresult \
+            test
+
+      - name: Upload TestResults.xcresult (only on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TestResults.xcresult
+          path: TestResults.xcresult
+          if-no-files-found: ignore

@@ -1,0 +1,25 @@
+import AppFoundation
+import Testing
+
+@testable import {{Name}}
+
+/// A smoke test for the composition root itself: every `DependencyModule` {{Name}}
+/// registers at startup (`AppModule.modules`) resolves without crashing. Layered unit
+/// tests (one Logic/Service/Store mapping at a time, with spies/mocks) live in
+/// `Packages/Platform`/`Packages/Features`' own test targets — this target exists to
+/// catch the one thing those can't: a DI wiring mistake (a missing registration, a cycle)
+/// that only shows up when every module registers together, the way the real app does it.
+@Suite("Composition root")
+@MainActor
+struct CompositionRootTests {
+    @Test("Every module registers without crashing, and the navigation root resolves")
+    func allModulesResolve() {
+        let container = Container()
+        for module in AppModule.modules {
+            module.register(in: container)
+        }
+
+        #expect(container.canResolve(Coordinator<AppRoute>.self))
+        _ = container.resolve(Coordinator<AppRoute>.self)
+    }
+}
