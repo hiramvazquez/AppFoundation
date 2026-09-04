@@ -27,7 +27,7 @@ public struct LoginView: View {
 #if canImport(SwiftUI) && DEBUG
 import CoreNetworkingTestSupport
 
-private final class LoginPreviewLogic: LoginLogicProtocol {
+private nonisolated final class LoginPreviewLogic: LoginLogicProtocol {
     func load() async throws -> [LoginItem] { [] }
 }
 

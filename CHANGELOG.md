@@ -6,6 +6,19 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-09-04
+
+### Corregido
+
+- `Throttler` también declara `deinit {}` (era el `deinit` anidado bajo `GalleryViewModel` en el
+  segundo abort de iOS 26.2: 1.2.2 cubrió `Coordinator` y compañía, pero no este).
+
+### Añadido
+
+- **Regla R16** (error): toda `class` que no sea `nonisolated` ni `actor` debe declarar un `deinit`
+  en su fichero. Es la garantía mecánica de que ninguna clase del proyecto vuelve a caer en el
+  shim de deinit aislado; las plantillas y los ejemplos ya cumplen.
+
 ## [1.2.2] - 2026-09-04
 
 ### Corregido

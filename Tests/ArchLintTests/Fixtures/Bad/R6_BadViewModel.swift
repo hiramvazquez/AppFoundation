@@ -5,6 +5,7 @@ import Foundation
 // XxxLogicProtocol`.
 @MainActor
 public final class BadViewModel: ActionHandling {
+    deinit {}
     public enum Action: Sendable { case load }
 
     public init(logic: BadLogic) {}

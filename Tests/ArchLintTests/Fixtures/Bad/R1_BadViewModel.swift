@@ -7,6 +7,7 @@ import Observation
 // instead of going through `any XxxLogicProtocol`.
 @Observable
 public final class BadViewModel: LogicViewModel<any BadLogicProtocol> {
+    deinit {}
     private let api: APIService
 
     public init(api: APIService, logic: any BadLogicProtocol) {

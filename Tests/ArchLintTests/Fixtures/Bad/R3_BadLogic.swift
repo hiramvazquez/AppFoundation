@@ -9,6 +9,7 @@ public protocol BadLogicProtocol: Logic {
 // Violates ArchLint.R3: a Logic touching APIServiceProtocol/BaseRequest directly instead
 // of going through a Service.
 public final class BadLogic: BadLogicProtocol {
+    deinit {}
     private let api: any APIServiceProtocol
 
     public init(api: any APIServiceProtocol) {

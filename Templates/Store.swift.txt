@@ -12,6 +12,10 @@ import SwiftData
 /// fichero — de ahí `public` en vez de `internal`.
 @Model
 public final class {{Feature}}Record {
+    // Explicit, nonisolated deinit (linter rule R16): avoids the synthesized isolated deinit
+    // and its back-deploy shim on older OS versions. Nothing to clean up.
+    deinit {}
+
     // `public`: the `@Model` macro synthesizes `{{Feature}}Record: Identifiable`, and a
     // public type's `id` must satisfy that public protocol requirement with a public
     // property too — the compiler enforces it, not a style choice.

@@ -7,6 +7,10 @@ import SwiftData
 /// (the domain model) on the way out, and back on the way in.
 @Model
 final class ItemRecord {
+    // Explicit, nonisolated deinit (linter rule R16): avoids the synthesized isolated deinit
+    // and its back-deploy shim on older OS versions. Nothing to clean up.
+    deinit {}
+
     @Attribute(.unique) var id: UUID
     var title: String
 

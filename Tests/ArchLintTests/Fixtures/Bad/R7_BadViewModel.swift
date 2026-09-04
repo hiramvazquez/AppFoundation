@@ -7,6 +7,7 @@ import Observation
 @MainActor
 @Observable
 public final class BadViewModel: LogicViewModel<any BadLogicProtocol>, ActionHandling {
+    deinit {}
     public enum Action: Sendable { case load }
     public var lastError: APIError?
     public func handle(_ action: Action) {}

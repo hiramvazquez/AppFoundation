@@ -35,6 +35,10 @@ public protocol SessionExpiring: Sendable {
 @MainActor
 @Observable
 public final class AppSessionState: SessionExpiring {
+    // Explicit, nonisolated deinit (linter rule R16): avoids the synthesized isolated deinit
+    // and its back-deploy shim on older OS versions. Nothing to clean up.
+    deinit {}
+
     public private(set) var isLoggedOut = false
 
     public init() {}

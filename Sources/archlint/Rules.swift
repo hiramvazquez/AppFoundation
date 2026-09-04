@@ -55,6 +55,7 @@ enum RuleEngine {
             if config.isEnabled("R11"), layer == .logic { diagnostics += checkR11(file) }
             if config.isEnabled("R12"), layer == .view { diagnostics += checkR12(file) }
             if config.isEnabled("R15"), layer == .viewModel { diagnostics += checkR15(file, config: config) }
+            if config.isEnabled("R16") { diagnostics += checkR16(file) }
             // R13 applies to every file, regardless of layer — it is about which MODULE a
             // file lives in, not which architectural layer within that module.
             if config.isEnabled("R13") { diagnostics += checkR13(file, config: config) }
@@ -610,6 +611,36 @@ enum RuleEngine {
                     message:
                         "'\(decl.name)' debe declarar @Observable: el macro no se hereda de BaseViewModel, y sin él "
                         + "las propiedades propias del ViewModel no refrescan la vista."
+                )
+            )
+        }
+        return out
+    }
+
+    // MARK: - R16 — every (non-nonisolated) class declares a deinit (PRD-AF-11 A8)
+
+    /// Under `defaultIsolation(MainActor)`, a class WITHOUT an explicit `deinit` gets a
+    /// synthesized *isolated* one that, on OS versions older than the toolchain's runtime,
+    /// runs through `swift_task_deinitOnExecutorMainActorBackDeploy`; two of those nested
+    /// (a ViewModel releasing its Coordinator/Throttler) aborted with a libmalloc double
+    /// free on iOS 26.2. An explicit `deinit {}` is nonisolated and avoids the shim.
+    /// Per file: one `deinit` covers the classes declared in it (a lexical check, not a
+    /// per-type one); `nonisolated` classes and actors are exempt.
+    private static func checkR16(_ file: ParsedFile) -> [Diagnostic] {
+        guard file.deinitCount == 0 else { return [] }
+        var out: [Diagnostic] = []
+        for decl in file.typeDecls where decl.keyword == "class" && !decl.modifiers.contains("nonisolated") {
+            out.append(
+                Diagnostic(
+                    path: file.path,
+                    line: decl.line,
+                    col: decl.col,
+                    severity: .error,
+                    rule: "R16",
+                    message:
+                        "'\(decl.name)' necesita un `deinit {}` explícito: sin él, el compilador sintetiza un deinit "
+                        + "AISLADO que en sistemas anteriores al runtime del toolchain pasa por un shim que aborta "
+                        + "(docs/repros/isolated-deinit-backdeploy.md). Marca la clase `nonisolated` si no es del actor."
                 )
             )
         }

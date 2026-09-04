@@ -5,6 +5,7 @@ import Observation
 @MainActor
 @Observable
 public final class LoginViewModel: LogicViewModel<any LoginLogicProtocol>, ActionHandling {
+    deinit {}
     public private(set) var items: [LoginItem] = []
 
     public enum Action: Sendable {

@@ -7,5 +7,6 @@ public protocol BadLogicProtocol: Logic {}
 // actor independence.
 @MainActor
 public final class BadLogic: BadLogicProtocol {
+    deinit {}
     public init() {}
 }

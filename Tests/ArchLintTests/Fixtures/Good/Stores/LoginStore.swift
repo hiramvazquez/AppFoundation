@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 final class LoginRecord {
+    deinit {}
     @Attribute(.unique) var id: UUID
     var title: String
 

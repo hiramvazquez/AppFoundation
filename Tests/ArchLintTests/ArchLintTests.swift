@@ -158,6 +158,23 @@ struct ArchLintRuleTests {
         #expect(r15.first?.message.contains("@Observable") == true)
     }
 
+    @Test("R16: a class without an explicit deinit is an error")
+    func r16FiresWithoutDeinit() {
+        let file = parse("R16_NoDeinitViewModel", in: "Bad")
+        let diags = diagnostics(for: [file])
+        let r16 = diags.filter { $0.rule == "R16" }
+        #expect(r16.count == 1)
+        #expect(r16.first?.severity == .error)
+    }
+
+    @Test("R16 does not fire on a class with deinit nor on a nonisolated class")
+    func r16DoesNotFireWithDeinitOrNonisolated() {
+        let good = parse("LoginViewModel", in: "Good")
+        #expect(!diagnostics(for: [good]).contains { $0.rule == "R16" })
+        let helper = parse("NonisolatedHelper", in: "Good")
+        #expect(!diagnostics(for: [helper]).contains { $0.rule == "R16" })
+    }
+
     @Test("R15 does not fire on a ViewModel that declares @Observable (the Good fixture)")
     func r15DoesNotFireWithObservable() {
         let file = parse("LoginViewModel", in: "Good")

@@ -248,6 +248,11 @@ public final class Debouncer {
 /// ```
 @MainActor
 public final class Throttler {
+    // Explicit, nonisolated on purpose (R16): without it the compiler synthesizes an isolated
+    // deinit that goes through a back-deploy shim on older OS versions — the exact frame
+    // under `GalleryViewModel.deinit` in the iOS 26.2 abort. Nothing to cancel here.
+    deinit {}
+
     private let stopwatch: ClockStopwatch
     private let interval: Duration
     private var lastExecutionTime: Duration?

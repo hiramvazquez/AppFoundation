@@ -8,6 +8,7 @@ import Observation
 @MainActor
 @Observable
 public final class StrictBadViewModel: BaseViewModel, ActionHandling {
+    deinit {}
     public enum Action: Sendable { case load }
     public func handle(_ action: Action) {}
 }

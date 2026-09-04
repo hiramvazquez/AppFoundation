@@ -16,6 +16,8 @@ struct TypeDecl {
     let name: String
     let inheritanceTokens: [String]
     let attributes: [String]
+    /// Modifiers directly preceding the declaration (`public`, `final`, `nonisolated`…).
+    let modifiers: [String]
     let line: Int
     let col: Int
 
@@ -79,6 +81,8 @@ struct ParsedFile {
     let references: [IdentifierRef]
     /// Every `let`/`var name: Type` declaration in the file (R12).
     let properties: [PropertyDecl]
+    /// Number of `deinit` declarations in the file (outside exempt ranges).
+    let deinitCount: Int
 }
 
 enum FileParser {
@@ -177,10 +181,12 @@ enum FileParser {
                         // Attributes directly preceding the declaration (walk back over
                         // modifiers and `@Attr` pairs).
                         var attributes: [String] = []
+                        var modifiers: [String] = []
                         var b = i - 1
                         while b >= 0 {
                             let t = tokens[b]
                             if t.kind == .identifier && modifierKeywords.contains(t.text) {
+                                modifiers.append(t.text)
                                 b -= 1
                                 continue
                             }
@@ -199,6 +205,7 @@ enum FileParser {
                                 name: name,
                                 inheritanceTokens: inheritance,
                                 attributes: attributes,
+                                modifiers: modifiers,
                                 line: token.line,
                                 col: token.col
                             )
@@ -248,6 +255,10 @@ enum FileParser {
             i += 1
         }
 
+        var deinitCount = 0
+        for (index, token) in tokens.enumerated() where token.kind == .identifier && token.text == "deinit" {
+            if !isExempt(index) { deinitCount += 1 }
+        }
         return ParsedFile(
             path: path,
             relativePath: relativePath,
@@ -256,7 +267,8 @@ enum FileParser {
             typeDecls: typeDecls,
             inits: inits,
             references: references,
-            properties: properties
+            properties: properties,
+            deinitCount: deinitCount
         )
     }
 

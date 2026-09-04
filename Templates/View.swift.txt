@@ -40,7 +40,7 @@ public struct {{Feature}}View: View {
 #if canImport(SwiftUI) && DEBUG
 /// Stub de `{{Feature}}LogicProtocol` solo para el `#Preview` de abajo. La spy con
 /// contadores para los tests (M9) es `{{Feature}}LogicMock`, en el target de tests.
-private final class {{Feature}}PreviewLogic: {{Feature}}LogicProtocol {
+private nonisolated final class {{Feature}}PreviewLogic: {{Feature}}LogicProtocol {
 {{#both}}
     func cached() async -> [{{Feature}}Item] { [] }
     func refresh() async throws -> [{{Feature}}Item] {
