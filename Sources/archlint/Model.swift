@@ -20,6 +20,11 @@ struct TypeDecl {
     let modifiers: [String]
     let line: Int
     let col: Int
+    /// Whether this declaration's OWN body (not a nested type's body) contains a `deinit`
+    /// (R16). Computed once, right after parsing, by attributing every non-exempt `deinit`
+    /// token to the innermost enclosing type declaration's brace range — so a `deinit` in a
+    /// nested class satisfies only that nested class, never its enclosing one.
+    var hasDeinit: Bool = false
 
     func inherits(_ name: String) -> Bool {
         inheritanceTokens.contains(name)
@@ -81,8 +86,6 @@ struct ParsedFile {
     let references: [IdentifierRef]
     /// Every `let`/`var name: Type` declaration in the file (R12).
     let properties: [PropertyDecl]
-    /// Number of `deinit` declarations in the file (outside exempt ranges).
-    let deinitCount: Int
 }
 
 enum FileParser {
@@ -90,6 +93,10 @@ enum FileParser {
         let tokens = Lexer.tokenize(source)
         var imports: [ImportRef] = []
         var typeDecls: [TypeDecl] = []
+        // Parallel to `typeDecls`: the token-index range of each declaration's own `{ … }`
+        // body (nil when no body is found, e.g. a bodiless `protocol` in a fixture), used
+        // below to attribute each `deinit` to its innermost enclosing type (R16).
+        var bodyRanges: [Range<Int>?] = []
         var inits: [InitDecl] = []
         var references: [IdentifierRef] = []
         var properties: [PropertyDecl] = []
@@ -210,6 +217,7 @@ enum FileParser {
                                 col: token.col
                             )
                         )
+                        bodyRanges.append(Self.findBodyRange(tokens: tokens, from: k))
                     }
                 }
 
@@ -255,10 +263,23 @@ enum FileParser {
             i += 1
         }
 
-        var deinitCount = 0
+        // Attribute every non-exempt `deinit` to the innermost enclosing type declaration
+        // (R16): the one whose body range contains the `deinit` token and starts latest —
+        // since body ranges are either disjoint or strictly nested, that is always the
+        // narrowest (innermost) one. A `deinit` outside every body range (shouldn't happen
+        // for valid Swift) is simply attributed to nothing.
         for (index, token) in tokens.enumerated() where token.kind == .identifier && token.text == "deinit" {
-            if !isExempt(index) { deinitCount += 1 }
+            guard !isExempt(index) else { continue }
+            var owner: Int?
+            for (declIndex, range) in bodyRanges.enumerated() {
+                guard let range, range.contains(index) else { continue }
+                if owner == nil || range.lowerBound > bodyRanges[owner!]!.lowerBound {
+                    owner = declIndex
+                }
+            }
+            if let owner { typeDecls[owner].hasDeinit = true }
         }
+
         return ParsedFile(
             path: path,
             relativePath: relativePath,
@@ -267,9 +288,35 @@ enum FileParser {
             typeDecls: typeDecls,
             inits: inits,
             references: references,
-            properties: properties,
-            deinitCount: deinitCount
+            properties: properties
         )
+    }
+
+    /// The token-index range of the `{ … }` body that begins at or after `start` — the first
+    /// top-level `{` found while skipping over nested `(...)`/`[...]`/`<...>` (so a `where`
+    /// clause's generic constraints, e.g. `where T: Collection<Element == Int>`, don't fool
+    /// the scan into stopping early). Returns `nil` when no such body exists before the end
+    /// of the file (a bodiless `protocol` in a fixture).
+    private static func findBodyRange(tokens: [Token], from start: Int) -> Range<Int>? {
+        var idx = start
+        var depth = 0
+        while idx < tokens.count {
+            let t = tokens[idx].text
+            if depth == 0, t == "{" {
+                var braceDepth = 1
+                var j = idx + 1
+                while j < tokens.count, braceDepth > 0 {
+                    if tokens[j].text == "{" { braceDepth += 1 }
+                    if tokens[j].text == "}" { braceDepth -= 1 }
+                    j += 1
+                }
+                return idx..<j
+            }
+            if t == "(" || t == "[" || t == "<" { depth += 1 }
+            if t == ")" || t == "]" || t == ">" { depth = max(0, depth - 1) }
+            idx += 1
+        }
+        return nil
     }
 
     /// Splits a parenthesized parameter list into top-level parameters, taking the type

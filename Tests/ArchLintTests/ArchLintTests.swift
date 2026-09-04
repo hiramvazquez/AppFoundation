@@ -175,6 +175,86 @@ struct ArchLintRuleTests {
         #expect(!diagnostics(for: [helper]).contains { $0.rule == "R16" })
     }
 
+    // MARK: - R16 is per-class, not per-file (regression: a `deinit` anywhere in the file
+    // used to silence the check for every OTHER class in it)
+
+    @Test("R16: only the class missing its own deinit is reported, not its neighbor that has one")
+    func r16FiresOnlyForTheClassMissingItsOwnDeinit() {
+        let source = """
+            import Foundation
+
+            final class HasDeinit {
+                var x = 0
+                deinit {}
+            }
+
+            final class MissingDeinit {
+                var y = 0
+            }
+            """
+        let file = FileParser.parse(path: "Two.swift", relativePath: "Two.swift", source: source)
+        let r16 = diagnostics(for: [file]).filter { $0.rule == "R16" }
+        #expect(r16.count == 1)
+        #expect(r16.first?.message.contains("MissingDeinit") == true)
+    }
+
+    @Test("R16: two classes in the same file, both declaring their own deinit, produce no diagnostics")
+    func r16DoesNotFireWhenEveryClassHasItsOwnDeinit() {
+        let source = """
+            import Foundation
+
+            final class FirstWithDeinit {
+                var x = 0
+                deinit {}
+            }
+
+            final class SecondWithDeinit {
+                var y = 0
+                deinit {}
+            }
+            """
+        let file = FileParser.parse(path: "Two.swift", relativePath: "Two.swift", source: source)
+        #expect(!diagnostics(for: [file]).contains { $0.rule == "R16" })
+    }
+
+    @Test("R16: a nonisolated class without deinit stays exempt alongside a non-exempt one that also lacks it")
+    func r16ExemptsOnlyTheNonisolatedClass() {
+        let source = """
+            import Foundation
+
+            nonisolated final class ExemptNoDeinit {
+                var x = 0
+            }
+
+            final class NotExemptNoDeinit {
+                var y = 0
+            }
+            """
+        let file = FileParser.parse(path: "Two.swift", relativePath: "Two.swift", source: source)
+        let r16 = diagnostics(for: [file]).filter { $0.rule == "R16" }
+        #expect(r16.count == 1)
+        #expect(r16.first?.message.contains("NotExemptNoDeinit") == true)
+    }
+
+    @Test("R16: a nested class without its own deinit is reported even though its enclosing class has one")
+    func r16FiresOnNestedClassMissingItsOwnDeinit() {
+        let source = """
+            import Foundation
+
+            final class Outer {
+                deinit {}
+
+                final class Inner {
+                    var x = 0
+                }
+            }
+            """
+        let file = FileParser.parse(path: "Nested.swift", relativePath: "Nested.swift", source: source)
+        let r16 = diagnostics(for: [file]).filter { $0.rule == "R16" }
+        #expect(r16.count == 1)
+        #expect(r16.first?.message.contains("Inner") == true)
+    }
+
     @Test("R15 does not fire on a ViewModel that declares @Observable (the Good fixture)")
     func r15DoesNotFireWithObservable() {
         let file = parse("LoginViewModel", in: "Good")

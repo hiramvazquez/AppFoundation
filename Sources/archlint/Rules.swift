@@ -624,12 +624,14 @@ enum RuleEngine {
     /// runs through `swift_task_deinitOnExecutorMainActorBackDeploy`; two of those nested
     /// (a ViewModel releasing its Coordinator/Throttler) aborted with a libmalloc double
     /// free on iOS 26.2. An explicit `deinit {}` is nonisolated and avoids the shim.
-    /// Per file: one `deinit` covers the classes declared in it (a lexical check, not a
-    /// per-type one); `nonisolated` classes and actors are exempt.
+    /// Per class, not per file: `TypeDecl.hasDeinit` is computed by attributing every
+    /// `deinit` to the innermost type declaration whose body actually contains it, so a
+    /// `deinit` in one class of a file no longer silences the check for its neighbors (or
+    /// for an unrelated nested class inside it). `nonisolated` classes and actors are exempt.
     private static func checkR16(_ file: ParsedFile) -> [Diagnostic] {
-        guard file.deinitCount == 0 else { return [] }
         var out: [Diagnostic] = []
-        for decl in file.typeDecls where decl.keyword == "class" && !decl.modifiers.contains("nonisolated") {
+        for decl in file.typeDecls
+        where decl.keyword == "class" && !decl.modifiers.contains("nonisolated") && !decl.hasDeinit {
             out.append(
                 Diagnostic(
                     path: file.path,
