@@ -6,6 +6,40 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-09-04
+
+### Corregido
+
+- **`archlint` R16 contaba `deinit` por fichero, no por clase**: bastaba con que UNA clase del
+  fichero declarase `deinit` para que la regla dejara de mirar el resto — exactamente el caso que
+  R16 existe para atrapar (dos clases en el mismo fichero, o una clase anidada dentro de otra que
+  sí tiene `deinit`, podían quedarse sin el suyo y recibir el `deinit` AISLADO sintetizado sin que
+  nadie lo avisara). Ahora cada `deinit` se atribuye al `TypeDecl` que lexicamente lo contiene (el
+  más interno cuando hay anidamiento), así que la regla evalúa clase por clase.
+- **`Examples/LoginApp` y `Examples/CatalogApp` no probaban el CoreNetworking del monorepo**:
+  `Package.swift` apuntaba AppFoundation al `path:` local pero CoreNetworking a la versión 1.0.0
+  ya publicada en GitHub — un cambio rompedor en el árbol de trabajo de CoreNetworking no lo
+  detectaba nadie hasta después de publicarlo, y el CI dependía de red para algo que vive en el
+  mismo repo. Ahora el manifiesto se autoconfigura según dónde viva: si
+  `../../../CoreNetworking` existe (el monorepo) resuelve por `path:`, y si no (el repositorio
+  PUBLICADO de AppFoundation, que el `subtree split` deja sin ese hermano) cae a la versión
+  publicada por URL. Un solo `Package.swift` sirve a los dos sitios sin variable de entorno ni
+  paso de sustitución al publicar, y sin tocar ningún workflow: el CI del monorepo gana la
+  detección temprana y el del repo publicado sigue en verde. Verificado en ambos contextos —
+  en el monorepo resuelve por `path:`, y sobre una copia del árbol sin el hermano
+  `CoreNetworking` (el repo publicado simulado) `LoginApp` y `CatalogApp` compilan y pasan sus
+  tests resolviendo `CoreNetworking` 1.0.0 desde GitHub.
+- **Una cancelación de red se presentaba como "Something went wrong"**: `CoreNetworking.APIError(code:
+  .cancelled)` no es ni `CancellationError` ni `URLError(.cancelled)`, así que
+  `DefaultCancellationRecognizer` no la reconocía, y `LoginLogic.mapError` tampoco tenía un caso
+  para ella (caía en `default: .unknown`). AppFoundation no puede importar CoreNetworking para
+  arreglarlo por su cuenta — el arreglo vive en `Examples/LoginApp`, como material didáctico de la
+  costura que cualquier consumidor de los dos paquetes necesita: `LoginError` gana un caso
+  `.cancelled` (que `mapError` produce en vez de `.unknown`) y `AppCancellationRecognizer`
+  (nuevo, junto a `AppErrorPresenter`) reconoce tanto `APIError.isCancellation` como
+  `LoginError.cancelled`, delegando en `DefaultCancellationRecognizer` para lo demás. Documentado
+  en el README de AppFoundation, el de `Examples/LoginApp` y el artículo `ErrorHandling` de DocC.
+
 ## [1.2.3] - 2026-09-04
 
 ### Corregido
