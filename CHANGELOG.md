@@ -31,10 +31,32 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
   original de que "`onDisappear` dispara en cada push" no se pudo reproducir en este SDK; no
   invalida la elección de `.task`, pero sugiere que el riesgo concreto que la motivó puede
   haber cambiado desde que se escribió.
-  Añadido a CI (`.github/workflows/ci.yml`, job `lifecycle-contract-probe`) con
-  `continue-on-error: true` temporal: necesita un WindowServer activo y, honestamente, solo
-  se ha confirmado en local — no se ha podido ejecutar de verdad en GitHub Actions todavía.
-  `swift test` sigue en 475 tests, mismo tiempo: nada de esto se ejecuta desde el test target.
+  Añadido a CI (`.github/workflows/ci.yml`, job `lifecycle-contract-probe`) y BLOQUEANTE:
+  los runners `macos-15` sí dan WindowServer a una app con ventana que no es un target de
+  UI tests — confirmado en un run real, y el log trae la secuencia completa, incluida la
+  aserción de que B no se cancela mientras está tapada. Un gate que no puede fallar no es un
+  gate. `swift test` sigue en 475 tests, mismo tiempo: nada de esto se ejecuta desde el test
+  target.
+- **La sonda pasa a estar bajo `#if os(macOS)`.** Es macOS-only por construcción
+  (`NSApplication` + una ventana real), y sin la guarda rompía la compilación del paquete
+  para iOS: `AppFoundation-Package` — el scheme que `xcodebuild test` necesita — construye
+  TODOS los targets contra el simulador, y allí no hay `AppKit`. En iOS queda un `main.swift`
+  vacío.
+
+### Corregido
+
+- **Los tests vuelven a compilar para iOS, y ahora se ejecutan allí de verdad.** El job de
+  `xcodebuild test` sobre simulador llevaba desde su primer run fallando con "Scheme
+  AppFoundation is not currently configured for the test action" (exit 66): igual que en
+  CoreNetworking, con varios productos el scheme con el nombre del paquete cubre solo la
+  librería y el que trae acción de test es el agregado `AppFoundation-Package`. Ese error
+  tapaba una rotura real: `NavigationBarItemTests` no compilaba en iOS, porque allí `SwiftUI`
+  exporta su propio `NavigationBarItem` (deprecado, pero presente) y la ANOTACIÓN de tipo
+  `[NavigationBarItem.Role]` es ambigua con los dos módulos importados. El test pasa a
+  resolver por miembro, que no lo es. Compilando solo en macOS nada de esto se veía. Aviso
+  para quien consuma el paquete en iOS: el nombre a secas es ambiguo también fuera, y
+  cualificar con `AppFoundation.` no sirve — el módulo trae un `public enum AppFoundation`
+  que tapa su propio nombre.
 
 ## [1.3.1] - 2026-09-05
 

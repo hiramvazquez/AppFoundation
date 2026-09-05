@@ -112,7 +112,15 @@ struct NavigationBarItemTests {
     // MARK: - Role equality
 
     @Test func rolesDistinguishAllThreeCases() {
-        let roles: [NavigationBarItem.Role] = [.back, .close, .plain]
+        // Sin anotación de tipo A PROPÓSITO: en iOS, `SwiftUI` exporta su propio
+        // `NavigationBarItem` (deprecado, pero presente), y con los dos módulos
+        // importados `[NavigationBarItem.Role]` COMO ANOTACIÓN es ambiguo. Los accesos
+        // por miembro sí resuelven — solo el tipo de AppFoundation tiene `Role`, igual
+        // que solo él tiene los factory de arriba. Cualificar con `AppFoundation.` no es
+        // salida: el módulo trae un `public enum AppFoundation` que tapa el nombre del
+        // propio módulo. Compilando solo en macOS nada de esto se veía: ahí el
+        // `NavigationBarItem` de SwiftUI no existe.
+        let roles = [NavigationBarItem.Role.back, .close, .plain]
         for (i, lhs) in roles.enumerated() {
             for (j, rhs) in roles.enumerated() where i != j {
                 #expect(lhs != rhs)

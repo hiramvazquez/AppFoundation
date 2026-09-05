@@ -1,3 +1,11 @@
+// Todo el fichero va bajo `#if os(macOS)`: la sonda es macOS-only por construcción
+// (`NSApplication` + una ventana real), y sin la guarda el target rompe la compilación
+// para iOS — `AppFoundation-Package`, el scheme que `xcodebuild test` necesita en CI,
+// construye TODOS los targets del paquete, también este, contra el simulador, donde
+// `AppKit` no existe. En iOS queda un `main.swift` vacío: un ejecutable que no hace
+// nada y que nadie invoca allí.
+#if os(macOS)
+
 import AppKit
 import SwiftUI
 
@@ -7,9 +15,10 @@ import SwiftUI
 // `ScreenContainer(cancelsInFlightWorkOnRemoval:)` (AF-11, 1.3.0): que SwiftUI cancele el
 // `.task` de una pantalla SOLO cuando la elimina de verdad de la jerarquía, y NUNCA
 // cuando simplemente queda tapada por un push. Ver `ProbeDriver` para la secuencia y
-// `Scripts/verify-lifecycle-contract.sh` para cómo se invoca y por qué solo corre en
-// local (no en CI) — no toca `swift test` ni `swift build --build-tests` para nada más
-// que compilar este target: no se ejecuta desde ningún test ni desde ningún job de CI.
+// `Scripts/verify-lifecycle-contract.sh` para cómo se invoca. Lo ejecuta el job
+// `lifecycle-contract-probe` de CI (bloqueante desde 2026-09-05, confirmado en un run
+// real sobre `macos-15`) y se puede correr a mano en local; lo que NO lo toca es
+// `swift test`: esto no es un test target, solo se compila.
 //
 // Necesita una app real con ventana (`ScreenContainer` monta su `.task` sobre una vista
 // SwiftUI de verdad; `ImageRenderer` no dispara ese ciclo de vida — ver el doc comment de
@@ -50,3 +59,5 @@ app.setActivationPolicy(.regular)
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()
+
+#endif
