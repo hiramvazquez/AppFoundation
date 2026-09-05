@@ -88,6 +88,22 @@ BaseViewModel.errorPresenter = AppErrorPresenter()
 La vía más simple para conectar un error de dominio: no requiere ningún `ErrorPresenting`
 propio, solo `var screenError: ScreenError { get }`. `WrappedError` conforma así.
 
+### `WrappedError`: contexto de desarrollador, nunca copy de pantalla
+
+`WrappedError` guarda `underlying` (el error original) y `context` (una descripción tipo
+`"Loading user profile"` que escribe el desarrollador en el call site). Ninguno de los dos es
+apto para pantalla: `context` no está localizado ni pensado para un usuario, y `underlying`
+puede venir de un SDK de terceros o de una capa de datos y traer PII, una ruta de fichero o
+texto crudo del servidor.
+
+Por eso `screenError`, `message` y `errorDescription` (y por tanto
+`Error.localizedDescription`, que Foundation lee de `errorDescription` sin pasar por ningún
+`ErrorPresenting`) son siempre el mismo genérico localizado
+(`ScreenError(title: L10n.error, message: L10n.genericErrorMessage)`) — la misma protección
+que `DefaultErrorPresenter` ya aplica a cualquier error ajeno, ahora también para el suyo
+propio. El detalle técnico completo sigue disponible íntegro para quien mira el log:
+`description`, `debugDescription`, `underlying`, `context`, `rootCause` y `contextChain`.
+
 ### Cancelación
 
 Una carga cancelada nunca llega a `.error`. Más allá de `CancellationError` tipado,

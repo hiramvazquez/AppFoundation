@@ -42,6 +42,14 @@ import Foundation
 ///     setError(wrapped.screenError)
 /// }
 /// ```
+///
+/// ## Screen text vs. debug text
+///
+/// `screenError`/`message`/`errorDescription` (`Error.localizedDescription`) are always the
+/// generic, localized fallback — never `context` or `underlying`, which can carry PII, file
+/// paths, or raw server/SDK text you never vetted for display. The full technical detail is
+/// still there, just not through those: log ``description``/``debugDescription``, or read
+/// ``underlying``, ``context``, ``rootCause``, and ``contextChain`` directly.
 public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible {
     /// The original error that was caught.
     public let underlying: Error
@@ -93,9 +101,25 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
         self.timestamp = now()
     }
 
-    /// User-friendly error message combining context and underlying error.
+    /// The safe, user-facing error message: always the generic localized fallback
+    /// (`L10n.genericErrorMessage`), never `context` or `underlying`.
+    ///
+    /// This is what `screenError` and `errorDescription` (hence `Error.localizedDescription`)
+    /// show. `context` is developer-authored (`"Loading user profile"`, not localized, not
+    /// written for an end user) and `underlying` can come from a third-party SDK or a data
+    /// layer and may embed PII, file paths, or raw server text — neither is safe to put on
+    /// screen, for the exact reason `DefaultErrorPresenter` never shows a foreign error's
+    /// `localizedDescription`.
+    ///
+    /// For the full technical detail — needed to reconstruct what actually happened, e.g. in
+    /// logs or a crash report — use ``description``, ``debugDescription``, ``rootCause``, or
+    /// ``contextChain`` instead. Those are unaffected by this and stay complete.
     public var message: String {
-        "\(context): \(underlying.localizedDescription)"
+        // No componer nada a partir de `context`/`underlying` aquí: es precisamente la puerta
+        // de atrás que este tipo abría antes (ver WrappedErrorTests / CHANGELOG). El detalle
+        // técnico sigue disponible íntegro por la vía de depuración (description,
+        // debugDescription, rootCause, contextChain) — nunca por esta.
+        L10n.genericErrorMessage
     }
 
     /// Detailed description for debugging.
@@ -141,6 +165,9 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
 
 nonisolated extension WrappedError: AppErrorConvertible {
     /// Converts this wrapped error to a screen error for UI display.
+    ///
+    /// Always `ScreenError(title: L10n.error, message: L10n.genericErrorMessage)` — never
+    /// `context` and never the `underlying` error's text. See ``message`` for why.
     public var screenError: ScreenError {
         ScreenError(
             title: L10n.error,
@@ -188,14 +215,31 @@ nonisolated extension WrappedError: CustomDebugStringConvertible {
 // MARK: - LocalizedError
 
 nonisolated extension WrappedError: LocalizedError {
+    /// Same safe, generic text as ``screenError``.
+    ///
+    /// `Error.localizedDescription` reads this ambiently, without going through
+    /// `ErrorPresenting` — any code that calls it directly (a third-party crash reporter, an
+    /// OS alert built straight from the error) must see the same safe text `screenError`
+    /// shows, not the technical detail. That's the whole point of fixing this here instead of
+    /// only in `screenError`.
     public var errorDescription: String? {
         message
     }
 
+    /// `nil`: no additional structured reason beyond ``errorDescription``.
+    ///
+    /// This used to be `underlying.localizedDescription` — the exact same unvetted text
+    /// ``message`` no longer exposes. `failureReason` is meant for display
+    /// (`NSError.localizedFailureReason`), so it gets the same treatment rather than a
+    /// second, easy-to-miss leak of the same information.
     public var failureReason: String? {
-        underlying.localizedDescription
+        nil
     }
 
+    /// Forwarded from `underlying` when it opts in by conforming to `LocalizedError` itself.
+    ///
+    /// Unlike `localizedDescription`, this isn't raw internal text: it's a recovery message
+    /// the underlying error's own author deliberately wrote for display. Safe to forward as-is.
     public var recoverySuggestion: String? {
         (underlying as? LocalizedError)?.recoverySuggestion
     }

@@ -22,7 +22,7 @@ nonisolated enum TestDeepLink: DeepLinkType, Equatable {
 @Suite("Deep links → Coordinator")
 struct DeepLinkTests {
     enum TestRoute: Hashable {
-        case home, notifications, settings
+        case home, notifications, settings, login
         case profile(userId: String)
     }
 
@@ -93,5 +93,57 @@ struct DeepLinkTests {
         coordinator.handle(.present(.settings, style: .fullScreenCover))
         #expect(coordinator.isFullScreenPresented)
         #expect(coordinator.fullScreenStack?.root == .settings)
+    }
+
+    // MARK: - HALLAZGO 2: patrón documentado — `map` valida sesión antes de navegar
+
+    /// El patrón que documenta `Coordinator.handle(_:as:map:)`: una ruta que asume sesión
+    /// iniciada se comprueba DENTRO de `map`, antes de devolver la acción — nunca se confía
+    /// en que la vista destino compruebe la sesión por su cuenta.
+    private func mapRequiringSession(isAuthenticated: Bool) -> (TestDeepLink) -> DeepLinkAction<TestRoute>? {
+        { link in
+            switch link {
+            case .notifications:
+                return .setStack([.notifications])
+            case .profile(let id):
+                guard isAuthenticated else {
+                    // Sin sesión: nunca se devuelve la ruta protegida, ni siquiera para
+                    // ignorarla en silencio — se redirige a login. `nil` también sería
+                    // válido si la app prefiere ignorar el enlace en vez de redirigir.
+                    return .setStack([.login])
+                }
+                return .push(.profile(userId: id))
+            }
+        }
+    }
+
+    @Test func mapRedirectsToLoginInsteadOfProtectedRouteWhenNotAuthenticated() throws {
+        let url = try #require(URL(string: "https://example.com/profile/42"))
+
+        let handled = coordinator.handle(url, as: TestDeepLink.self, map: mapRequiringSession(isAuthenticated: false))
+
+        #expect(handled)
+        #expect(coordinator.mainStack.path == [.login])
+        #expect(coordinator.mainStack.path != [.profile(userId: "42")])
+    }
+
+    @Test func mapAppliesProtectedRouteWhenAuthenticated() throws {
+        let url = try #require(URL(string: "https://example.com/profile/42"))
+
+        let handled = coordinator.handle(url, as: TestDeepLink.self, map: mapRequiringSession(isAuthenticated: true))
+
+        #expect(handled)
+        #expect(coordinator.mainStack.path == [.profile(userId: "42")])
+    }
+
+    /// Un enlace sin gate (rutas que no requieren sesión) sigue funcionando igual: la
+    /// comprobación solo se añade donde la ruta lo necesita, no globalmente.
+    @Test func mapWithoutSessionRequirementIsUnaffectedByTheGuard() throws {
+        let url = try #require(URL(string: "myapp://open/notifications"))
+
+        let handled = coordinator.handle(url, as: TestDeepLink.self, map: mapRequiringSession(isAuthenticated: false))
+
+        #expect(handled)
+        #expect(coordinator.mainStack.path == [.notifications])
     }
 }

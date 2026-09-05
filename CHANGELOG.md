@@ -6,6 +6,47 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+### Seguridad
+
+- **`WrappedError` enseñaba el error interno al USUARIO.** `screenError`/`message` componían
+  `"\(context): \(underlying.localizedDescription)"` y ese texto llegaba tal cual a la
+  pantalla — `DefaultErrorPresenter` mira `AppErrorConvertible` antes que nada, así que
+  `WrappedError` se saltaba por la puerta de atrás la misma protección que el propio
+  `DefaultErrorPresenter` aplica a cualquier error ajeno (nunca mostrar su
+  `localizedDescription` crudo). Como también conforma `LocalizedError`, `errorDescription` —
+  y por tanto `Error.localizedDescription`, un canal ambiental que no pasa por
+  `ErrorPresenting` — hacía exactamente lo mismo. En una app empresarial, `underlying` puede
+  venir de un SDK de terceros o de una capa de datos y traer PII, rutas de fichero o texto
+  crudo del servidor; `context` es texto de desarrollador, no localizado y no pensado para un
+  usuario. **BREAKING:** `message`, `screenError.message`, `errorDescription` y
+  `Error.localizedDescription` de un `WrappedError` son ahora siempre
+  `L10n.genericErrorMessage` (el mismo genérico que ya usaba `DefaultErrorPresenter` para
+  cualquier error que no sabe presentar); `failureReason` pasa a `nil` en vez de repetir la
+  misma fuga por una segunda vía. Nada de esto toca el detalle técnico para desarrolladores,
+  que sigue íntegro: `description`, `debugDescription`, `underlying`, `context`, `rootCause`,
+  `contextChain`, `code`, `file`, `line`, `timestamp`. `recoverySuggestion` se sigue
+  reenviando desde `underlying` sin cambios — es contenido que el propio autor del error
+  original escribió a propósito para mostrarse, no texto crudo interno.
+  Migración: quien mostraba `wrappedError.message`/`.screenError.message` directamente en
+  pantalla no necesita cambiar nada (deja de filtrar información, no rompe); quien lo leía
+  para RECONSTRUIR qué pasó (logs, tickets de soporte) debe pasar a `description` /
+  `debugDescription` / `rootCause` / `contextChain`, que ya cubrían ese caso de uso y no han
+  cambiado. `Sources/AppFoundation/Architecture/AppError/WrappedError.swift`.
+- **Los deep links no documentaban ningún vector de seguridad.** `Coordinator.handle(_:as:map:)`
+  delega el 100% del parseo y mapeo a la app (correcto arquitectónicamente: solo la app conoce
+  su grafo de rutas), pero no había ni una advertencia sobre que la `URL` de entrada es no
+  confiable (universal link, esquema propio, notificación push, otra app) ni sobre que
+  `.setStack` descarta el modal activo y reemplaza toda la pila sin preguntar. Sin guía, es
+  fácil que un enlace mal mapeado salte login/onboarding. No se añadió API nueva — `map` ya se
+  ejecuta síncrono con captura completa del cierre, así que ya puede leer sesión/auth y vetar
+  o redirigir una acción; un parámetro `guard:` adicional solo envolvería ese `if` en ceremonia
+  sin dar ninguna garantía que `map` no diera ya. En su lugar: doc comment de seguridad en
+  `Coordinator.handle(_:as:map:)` y en `DeepLinkAction.setStack`
+  (`Sources/AppFoundation/Navigation/DeepLink.swift`), sección "Seguridad" nueva en el artículo
+  de navegación con el patrón concreto de comprobar sesión antes de devolver la acción
+  (`Sources/AppFoundation/Documentation.docc/Navigation.md`, `Snippets/navigation-deeplink.swift`),
+  y tests que ejercitan el patrón documentado (`Tests/AppFoundationTests/DeepLinkTests.swift`).
+
 ## [1.2.5] - 2026-09-04
 
 ### Corregido
