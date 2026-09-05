@@ -127,3 +127,31 @@ jobs:
           xcode-version: latest-stable
       - run: swift build --product archlint
       - run: .build/debug/archlint --root . Sources/AppFoundation Snippets
+
+  # PRD (verificación del contrato de cancelación de ScreenContainer, sept. 2026): la mitad
+  # NO cubierta por `swift test` de `ScreenContainer(cancelsInFlightWorkOnRemoval:)` — que
+  # SwiftUI cancele el `.task` de una pantalla solo al eliminarla de la jerarquía, nunca al
+  # taparla con un push — verificada antes solo a mano (ver el doc comment de
+  # `ScreenContainerCancellationTests.swift`). `Scripts/verify-lifecycle-contract.sh` monta
+  # una app real (`Sources/LifecycleContractProbeApp/`, un ejecutable, no un test) con una
+  # ventana de verdad y reproduce la secuencia push → push → pop, saliendo con exit != 0 si
+  # el orden observado no es el esperado.
+  #
+  # `continue-on-error: true` es deliberado y TEMPORAL: esta app necesita un WindowServer
+  # activo, y aunque hay buenas razones para creer que los runners `macos-15` lo tienen
+  # (el job `test` de más arriba ya arranca un simulador iOS, que también lo necesita), no
+  # se ha podido confirmar ejecutando este job de verdad en GitHub Actions — ver el
+  # encabezado de `Scripts/verify-lifecycle-contract.sh`. En cuanto confirmes en el Actions
+  # tab de un run real que este job pasa (o falla) por el motivo correcto y no por un
+  # problema de infraestructura (ventana que no llega a crearse, timeout de arranque),
+  # quita `continue-on-error` para que empiece a bloquear el merge de verdad.
+  lifecycle-contract-probe:
+    name: ScreenContainer — cancela solo al eliminar, nunca al tapar (probe con ventana real)
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - run: Scripts/verify-lifecycle-contract.sh

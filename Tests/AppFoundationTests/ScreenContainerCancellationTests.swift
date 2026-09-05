@@ -44,6 +44,27 @@ import Testing
 //    shipping a screen that leans on this: push forward from it while a `performLoad` is in
 //    flight and confirm (breakpoint/log on `cancelInFlightWork()`) it does NOT fire, then pop
 //    back and confirm it does.
+//
+//    ACTUALIZACIÓN (sept. 2026): el punto 2 de arriba ya NO depende solo de esta QA manual.
+//    `Scripts/verify-lifecycle-contract.sh` + `Sources/LifecycleContractProbeApp/` (un
+//    ejecutable, no un test — `swift test` no lo toca) reproducen exactamente esta secuencia
+//    en una app real con ventana, y salen con exit != 0 si el orden observado no es el
+//    esperado. Ver el encabezado de ese script para cómo se invoca y por qué, honestamente,
+//    solo está confirmado en local por ahora (el job de CI que lo invoca arranca con
+//    `continue-on-error: true` hasta confirmar un run limpio en GitHub Actions).
+//
+//    Al reverificar para construir ese script (Xcode/macOS con toolchain Swift 6.3.3) salió
+//    un hallazgo que vale la pena dejar por escrito: `onDisappear` NO disparó al tapar B con
+//    C, ni con este harness (`NSApplication` a mano) ni con una `App`/`WindowGroup` real —
+//    solo disparó junto con la eliminación genuina en el pop. Es decir, la frase de arriba
+//    ("onDisappear fires on every push, covered or not") no se pudo reproducir en este SDK:
+//    en la versión de SwiftUI probada aquí, `onDisappear` parece seguir la misma semántica de
+//    IDENTIDAD que `.task`, no la de visibilidad en pantalla. Eso no invalida la elección de
+//    `.task` como mecanismo — sigue siendo correcto — pero sí sugiere que el riesgo concreto
+//    que motivó descartar `onDisappear` puede haber cambiado (o no aplicar igual en macOS
+//    que en iOS, o nunca haberse revalidado desde que se escribió este comentario). Es
+//    precisamente el tipo de deriva de comportamiento de SwiftUI entre versiones que
+//    `verify-lifecycle-contract.sh` existe para detectar automáticamente en vez de a ojo.
 /// Minimal `ScreenViewModel` that only exists to record whether/how many times
 /// `cancelInFlightWork()` was called — the container-level tests below don't need a real
 /// `BaseViewModel` (that contract is `BaseViewModelMemoryTests`' job); they need to prove

@@ -6,6 +6,36 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+### Pruebas
+
+- **La mitad no automatizada del contrato de `ScreenContainer(cancelsInFlightWorkOnRemoval:)`
+  (AF-11, 1.3.0) deja de ser QA manual.** Que SwiftUI cancele el `.task` de una pantalla SOLO
+  al eliminarla de la jerarquía — nunca al taparla con un push, que perdería la carga de la
+  pantalla anterior al volver — se verificaba una vez a mano, con una app SwiftUI de usar y
+  tirar montada fuera del repo. `swift test` no puede cubrirlo (headless, sin ventana, sin
+  `NavigationStack` real; `ImageRenderer` no dispara el ciclo de vida de `.task` — verificado
+  empíricamente). `Scripts/verify-lifecycle-contract.sh` + el nuevo target ejecutable
+  `Sources/LifecycleContractProbeApp/` (NO un test — no lo toca `swift test`, ni
+  `swift build --build-tests` lo ejecuta, solo lo compila) montan una app real con ventana y
+  `NavigationStack`, reproducen la secuencia push B → push C (tapa a B) → pop a root, y salen
+  con exit != 0 si el orden observado no es el esperado — cada paso espera una señal
+  observable con timeout explícito, nunca un `sleep` fijo.
+  Probado que detecta la regresión real: en una copia descartable fuera del repo, romper la
+  distinción "cancelación genuina vs. cualquier otro motivo" en
+  `ScreenContainer.runRemovalWatchdog()` hace que el script falle con el motivo correcto
+  ("B se canceló al quedar TAPADA — REGRESIÓN..."), no con un timeout genérico.
+  Hallazgo colateral, documentado en el doc comment de
+  `ScreenContainerCancellationTests.swift`: en el SDK usado para esta verificación,
+  `onDisappear` NO disparó al tapar una pantalla con un push (ni con `NSApplication` a mano
+  ni con una `App`/`WindowGroup` real) — solo junto con la eliminación genuina. La premisa
+  original de que "`onDisappear` dispara en cada push" no se pudo reproducir en este SDK; no
+  invalida la elección de `.task`, pero sugiere que el riesgo concreto que la motivó puede
+  haber cambiado desde que se escribió.
+  Añadido a CI (`.github/workflows/ci.yml`, job `lifecycle-contract-probe`) con
+  `continue-on-error: true` temporal: necesita un WindowServer activo y, honestamente, solo
+  se ha confirmado en local — no se ha podido ejecutar de verdad en GitHub Actions todavía.
+  `swift test` sigue en 475 tests, mismo tiempo: nada de esto se ejecuta desde el test target.
+
 ## [1.3.1] - 2026-09-05
 
 ### Pruebas

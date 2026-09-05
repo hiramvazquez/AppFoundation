@@ -173,13 +173,22 @@ nonisolated enum ScreenPresentationLogic {
 /// cancels a view's `.task` when the view's identity leaves the hierarchy for good — a
 /// `NavigationStack` push does NOT do that to the view it covers: the covered view stays
 /// mounted (so its scroll position, focus, and running tasks survive an eventual pop), only
-/// `onAppear`/`onDisappear` fire on a push. That distinction is exactly why
-/// `onDisappear` was rejected for this feature: it fires on every push too, which would
-/// cancel the PREVIOUS screen's in-flight load the instant the user navigates forward — the
-/// opposite of what this feature is for. This was verified empirically (not assumed) with a
-/// throwaway SwiftUI app instrumenting three nested `.task`s across a two-level push/pop —
-/// see the task's final report for the transcript — and is also Apple's documented behavior
-/// for `task(priority:_:)`. `ScreenPresentationLogic.shouldCancelInFlightWork` is the pure,
+/// `onAppear`/`onDisappear` fire on a push.
+///
+/// What is MEASURED, and re-measured on every run of
+/// `Scripts/verify-lifecycle-contract.sh`: a covered view's `.task` is **not** cancelled,
+/// and is cancelled on genuine removal. That is the property this feature rests on, and it
+/// matches Apple's documented behavior for `task(priority:_:)`.
+///
+/// What is NOT measured, and must not be read as if it were: whether `onDisappear` fires
+/// when a view is merely covered. `onDisappear` was rejected for this feature on the
+/// strength of that belief, and it is the right call regardless — `.task` is the signal
+/// whose semantics are documented AND verified here, so it needs no such argument. But the
+/// belief itself did not survive contact with a probe: on macOS with the Swift 6.3
+/// toolchain, `onDisappear` did **not** fire on a cover, only alongside genuine removal.
+/// The concern originates in `UINavigationController` behavior on iOS, which this package
+/// has not measured — the probe runs on macOS. Treat "onDisappear fires on every push" as
+/// an unverified platform-specific claim, not as this package's finding. `ScreenPresentationLogic.shouldCancelInFlightWork` is the pure,
 /// unit-tested decision of whether the watchdog above should actually call
 /// `cancelInFlightWork()` once it resolves.
 public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {

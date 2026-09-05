@@ -108,6 +108,23 @@ let package = Package(
             swiftSettings: swiftSettings
         ),
 
+        // App de verificación (no un test): la mitad NO automatizable en `swift test` del
+        // contrato de `ScreenContainer(cancelsInFlightWorkOnRemoval:)` — que SwiftUI
+        // cancele el `.task` de una pantalla solo al eliminarla de la jerarquía, nunca al
+        // taparla con un push — necesita una `NavigationStack` real montada en una
+        // ventana de verdad (`ImageRenderer`, el resto de este paquete, no dispara ese
+        // ciclo de vida; ver `Tests/AppFoundationTests/ScreenContainerCancellationTests.swift`).
+        // Un target de ejecutable de macOS (AppKit + `NSApplication` a mano, sin bundle
+        // `.app`) es la forma más simple de conseguir esa ventana sin añadir un target de
+        // UI tests solo para esto; solo se compila aquí — nada la ejecuta como parte de
+        // `swift test` ni de ningún test target. Ver `Scripts/verify-lifecycle-contract.sh`.
+        .executableTarget(
+            name: "LifecycleContractProbeApp",
+            dependencies: ["AppFoundation"],
+            path: "Sources/LifecycleContractProbeApp",
+            swiftSettings: swiftSettings
+        ),
+
         // MARK: - PRD-AF-08: archlint, generador, plugins
 
         // El analizador léxico: sin dependencias externas (`ARQUITECTURA-KIT-2026-09-02.md`
