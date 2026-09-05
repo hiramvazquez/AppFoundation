@@ -6,6 +6,8 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-09-04
+
 ### Seguridad
 
 - **`WrappedError` enseñaba el error interno al USUARIO.** `screenError`/`message` componían
