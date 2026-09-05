@@ -90,6 +90,26 @@ struct RenderSmokeTests {
         #expect((size?.height ?? 0) > 0)
     }
 
+    /// `cancelsInFlightWorkOnRemoval: false` (the opt-out for work that must survive the
+    /// view — see `ScreenContainer`'s doc comment) is a new initializer parameter as of this
+    /// change: this only proves it doesn't break rendering. The behavioral claim (the
+    /// watchdog never calls `cancelInFlightWork()` when opted out) is
+    /// `ScreenContainerCancellationTests.optingOutNeverCallsCancelInFlightWorkEvenWhenCancelled`
+    /// — `ImageRenderer` doesn't drive `.task` attach/cancel at all (see that file's doc
+    /// comment), so it couldn't verify that even if it rendered twice.
+    @MainActor
+    @Test func screenContainerOptedOutOfCancelOnRemovalStillRendersANonEmptyImage() {
+        let container = ScreenContainer(
+            phase: .constant(.content),
+            cancelsInFlightWorkOnRemoval: false
+        ) {
+            Text("Content")
+        }
+        let size = renderedImageSize(container)
+        #expect((size?.width ?? 0) > 0)
+        #expect((size?.height ?? 0) > 0)
+    }
+
     @MainActor
     @Test func screenContainerWithCustomChromeRendersANonEmptyImage() {
         let container = ScreenContainer(

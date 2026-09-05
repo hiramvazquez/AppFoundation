@@ -26,6 +26,32 @@ public protocol ScreenState: AnyObject, Observable {
     /// Current banner/toast notification to display, if any. Settable so the shell can
     /// dismiss it (tap, or auto-dismiss).
     var banner: BannerState? { get set }
+
+    /// Cancels whatever unstructured work this screen state owns in flight.
+    ///
+    /// `ScreenContainer` calls this when its view is actually removed from the view
+    /// hierarchy — not merely covered by a pushed screen — for a state that opts in
+    /// (`ScreenContainer`'s `cancelsInFlightWorkOnRemoval`, the default). It exists because
+    /// `performLoad`/`performActivity` start an unstructured `Task` that a view model
+    /// retains: while that `Task`'s `work` is actually running, it holds the view model
+    /// strongly, so releasing the view's last reference to it does not free it, and
+    /// `deinit` cannot cancel a `Task` it no longer has the chance to run before
+    /// deallocation. Cancelling from the view's lifecycle — before the last reference is
+    /// even released — reaches the `Task` while it is still cancellable. See
+    /// `BaseViewModel`'s "What `deinit` actually cancels" for the full contract.
+    ///
+    /// Defaults to a no-op via the extension below, so this requirement is purely
+    /// additive: any existing `ScreenState` conformance outside this package keeps
+    /// compiling unchanged. `BaseViewModel` overrides it to cancel `inFlightLoad` and
+    /// `inFlightActivity`.
+    func cancelInFlightWork()
+}
+
+extension ScreenState {
+    /// No-op default — see the requirement's doc comment. A conformance that has no
+    /// unstructured work to cancel (or that manages its own lifecycle independently of
+    /// `ScreenContainer`) never needs to implement this.
+    public func cancelInFlightWork() {}
 }
 
 extension BaseViewModel: ScreenState {}

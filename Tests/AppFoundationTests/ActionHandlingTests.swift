@@ -155,4 +155,25 @@ struct ActionHandlingTests {
 
         #expect(viewModel.count == 1)
     }
+
+    // MARK: - `ScreenState.cancelInFlightWork()` default is a genuine no-op (additive requirement)
+
+    /// `StandaloneCounterViewModel` conforms to `ScreenState` and never overrides
+    /// `cancelInFlightWork()` — proving the protocol's default extension is what makes this
+    /// requirement purely additive. Before this test existed as a real conformance (not just
+    /// a doc claim), a typo in the default implementation's signature could silently turn
+    /// every non-`BaseViewModel` `ScreenState` in the wild into a build break the moment this
+    /// package's version bumped.
+    @Test @MainActor func screenStateDefaultCancelInFlightWorkIsANoOpForAConformerThatDoesNotOverrideIt() {
+        let viewModel = StandaloneCounterViewModel()
+        viewModel.handle(.increment)
+
+        // Calling it does nothing observable — no crash, no state change — and is safe to
+        // call as many times as `ScreenContainer` likes.
+        viewModel.cancelInFlightWork()
+        viewModel.cancelInFlightWork()
+
+        #expect(viewModel.count == 1)
+        #expect(viewModel.phase == .content)
+    }
 }

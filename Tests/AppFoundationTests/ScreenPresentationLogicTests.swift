@@ -44,5 +44,36 @@ struct ScreenPresentationLogicTests {
             #expect(ScreenPresentationLogic.phaseOverlay(for: phase) == .none)
         }
     }
+
+    // MARK: - `shouldCancelInFlightWork`: the pure decision behind ScreenContainer's
+    // cancel-on-removal watchdog (see its doc comment on `ScreenContainer`).
+
+    /// Opted in, and the watchdog's wait was actually interrupted by cancellation (the view
+    /// was genuinely removed) — the only case that should fire.
+    @Test func firesOnlyWhenEnabledAndTheWatchdogWasCancelled() {
+        #expect(
+            ScreenPresentationLogic.shouldCancelInFlightWork(cancelsOnRemoval: true, watchdogWasCancelled: true)
+        )
+    }
+
+    /// Opted out (`cancelsInFlightWorkOnRemoval: false`) never fires, even if the watchdog
+    /// were somehow cancelled anyway — the escape hatch for work that must survive the view.
+    @Test func neverFiresWhenOptedOut() {
+        #expect(
+            !ScreenPresentationLogic.shouldCancelInFlightWork(cancelsOnRemoval: false, watchdogWasCancelled: true)
+        )
+        #expect(
+            !ScreenPresentationLogic.shouldCancelInFlightWork(cancelsOnRemoval: false, watchdogWasCancelled: false)
+        )
+    }
+
+    /// Opted in, but the wait ended WITHOUT cancellation — the (never actually reached in
+    /// practice) case of the sleep's duration elapsing on its own. Must not fire: nothing
+    /// was removed.
+    @Test func doesNotFireWhenEnabledButNotCancelled() {
+        #expect(
+            !ScreenPresentationLogic.shouldCancelInFlightWork(cancelsOnRemoval: true, watchdogWasCancelled: false)
+        )
+    }
 }
 #endif

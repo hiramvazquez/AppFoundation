@@ -165,6 +165,129 @@ struct BaseViewModelMemoryTests {
         )
     }
 
+    // MARK: - `cancelInFlightWork()` (`ScreenState` requirement): the ScreenContainer-facing
+    // answer to the two tests above — cancelling BEFORE the last external reference is
+    // released, not after, is what lets a `Task` still mid-`work` actually be reached.
+
+    /// The `ScreenContainer` story for (b) above: instead of the test itself calling
+    /// `task.cancel()`, the view model's OWN `cancelInFlightWork()` does — while `vm` is
+    /// still very much alive and referenced. This is exactly what `ScreenContainer` calls
+    /// when its view is genuinely removed from the hierarchy, and it's the reason a screen
+    /// built with it doesn't have to wait for `deinit` to fail at cancelling a running load.
+    @Test func cancelInFlightWorkCancelsAnInFlightLoadAndAllowsDeallocation() async throws {
+        weak var weakVM: BaseViewModel?
+        let clock = TestClock()
+        let recorder = Recorder()
+
+        var vm: BaseViewModel? = BaseViewModel()
+        weakVM = vm
+
+        let task = vm!
+            .performLoad { _ in
+                do {
+                    try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
+                } catch {
+                    recorder.record(Task.isCancelled ? "cancelled" : "other")
+                    throw error
+                }
+            }
+
+        await clock.waitForSleepers()
+        vm!.cancelInFlightWork()  // called while `vm` is still alive — the whole point
+        await task.value
+        vm = nil  // only now does the test release its own last reference
+
+        #expect(recorder.events == ["cancelled"])
+        #expect(weakVM == nil)
+    }
+
+    /// Same story as above, for `inFlightActivity`.
+    @Test func cancelInFlightWorkCancelsAnInFlightActivityAndAllowsDeallocation() async throws {
+        weak var weakVM: BaseViewModel?
+        let clock = TestClock()
+        let recorder = Recorder()
+
+        var vm: BaseViewModel? = BaseViewModel()
+        weakVM = vm
+
+        let task = vm!
+            .performActivity { _ in
+                do {
+                    try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
+                } catch {
+                    recorder.record(Task.isCancelled ? "cancelled" : "other")
+                    throw error
+                }
+            }
+
+        await clock.waitForSleepers()
+        vm!.cancelInFlightWork()
+        await task.value
+        vm = nil
+
+        #expect(recorder.events == ["cancelled"])
+        #expect(weakVM == nil)
+    }
+
+    /// `cancelInFlightWork()` also cancels `bannerDismissTask` — see its doc comment for why
+    /// that inclusion is "for completeness," not for a memory reason: `bannerDismissTask`
+    /// captures `self` weakly, so it was never the thing keeping the view model alive. The
+    /// observable signal is the same one `deinitAloneCancelsBannerDismissTask` uses:
+    /// `TestClock.sleeperCount` drops to 0 once the pending sleep is cancelled.
+    @Test func cancelInFlightWorkCancelsAPendingBannerDismiss() async {
+        let clock = TestClock()
+        let vm = BaseViewModel(clock: clock)
+
+        vm.showBanner(BannerState(message: "Bye", style: .info, duration: .seconds(5)))
+        await clock.waitForSleepers()
+        #expect(clock.sleeperCount == 1)
+
+        vm.cancelInFlightWork()
+
+        await spin(until: { clock.sleeperCount == 0 })
+        #expect(clock.sleeperCount == 0)
+    }
+
+    /// The three-in-one call fires all three cancellations from a single call, matching
+    /// `deinit`'s own trio — but callable while the view model is still alive.
+    @Test func cancelInFlightWorkCancelsLoadActivityAndBannerTogether() async throws {
+        let clock = TestClock()
+        let vm = BaseViewModel(clock: clock)
+        let recorder = Recorder()
+
+        let loadTask = vm.performLoad { _ in
+            do {
+                try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
+            } catch {
+                recorder.record("load-cancelled")
+                throw error
+            }
+        }
+        await clock.waitForSleepers(1)
+
+        // A fresh `BaseViewModel` only has one `Task`-driving path active at a time for
+        // `phase` (the load above), so activity and banner are started independently here.
+        let activityTask = vm.performActivity { _ in
+            do {
+                try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
+            } catch {
+                recorder.record("activity-cancelled")
+                throw error
+            }
+        }
+        vm.showBanner(BannerState(message: "Bye", style: .info, duration: .seconds(5)))
+        await clock.waitForSleepers(3)  // load + activity + banner dismiss, all pending
+
+        vm.cancelInFlightWork()
+
+        await loadTask.value
+        await activityTask.value
+        await spin(until: { clock.sleeperCount == 0 })
+
+        #expect(Set(recorder.events) == ["load-cancelled", "activity-cancelled"])
+        #expect(clock.sleeperCount == 0)
+    }
+
     /// El retry guardado en `ScreenError` no captura el VM: tras un error, sueltas la
     /// última referencia externa SIN invocar el retry, y el VM se libera igual — antes
     /// del fix, `retry` cerraba el ciclo permanentemente sobre `self`.

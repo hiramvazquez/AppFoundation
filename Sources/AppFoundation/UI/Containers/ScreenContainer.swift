@@ -114,6 +114,19 @@ nonisolated enum ScreenPresentationLogic {
         case .inline: return .topAligned
         }
     }
+
+    /// Whether `ScreenContainer`'s cancel-on-removal watchdog (see its doc comment) should
+    /// call `ScreenState.cancelInFlightWork()`.
+    ///
+    /// Extracted as a pure decision — testable without `ImageRenderer` or any SwiftUI
+    /// lifecycle at all — even though it's a one-line `&&`: it's the one place that decides
+    /// whether cancellation fires, and keeping it out of the `.task` closure means a test
+    /// can pin the truth table (opted out never fires; opted in fires only when the wait was
+    /// actually interrupted by cancellation, never on the "the app ran for a literal century"
+    /// non-cancellation exit) without spinning up a view at all.
+    static func shouldCancelInFlightWork(cancelsOnRemoval: Bool, watchdogWasCancelled: Bool) -> Bool {
+        cancelsOnRemoval && watchdogWasCancelled
+    }
 }
 
 // MARK: - ScreenContainer
@@ -143,11 +156,38 @@ nonisolated enum ScreenPresentationLogic {
 /// Observation: `state` is read directly during `body` evaluation (no `@Bindable`/`Binding`
 /// needed for reads — that's how `Observable` tracking works), so updates are tracked
 /// automatically (A4 — no hand-rolled closures over an unobserved object).
+///
+/// ## Cancelling in-flight work when the screen is actually removed
+///
+/// `ScreenContainer` calls `state.cancelInFlightWork()` — a no-op unless `state` overrides
+/// it, which `BaseViewModel` does — the moment its view is genuinely removed from the view
+/// hierarchy, not merely covered by a pushed screen. This closes the one gap
+/// `BaseViewModel.deinit` can't: see its "What `deinit` actually cancels" for the full
+/// story, and `cancelsInFlightWorkOnRemoval` below to opt out for work that must survive
+/// the view on purpose.
+///
+/// The mechanism is a `.task` that suspends for as long as the view stays mounted and never
+/// resolves on its own — `Task.sleep(for:)` is specifically documented to observe
+/// cancellation immediately and throw, rather than waiting out its duration, so the
+/// (deliberately enormous) duration below is never actually reached in practice. SwiftUI
+/// cancels a view's `.task` when the view's identity leaves the hierarchy for good — a
+/// `NavigationStack` push does NOT do that to the view it covers: the covered view stays
+/// mounted (so its scroll position, focus, and running tasks survive an eventual pop), only
+/// `onAppear`/`onDisappear` fire on a push. That distinction is exactly why
+/// `onDisappear` was rejected for this feature: it fires on every push too, which would
+/// cancel the PREVIOUS screen's in-flight load the instant the user navigates forward — the
+/// opposite of what this feature is for. This was verified empirically (not assumed) with a
+/// throwaway SwiftUI app instrumenting three nested `.task`s across a two-level push/pop —
+/// see the task's final report for the transcript — and is also Apple's documented behavior
+/// for `task(priority:_:)`. `ScreenPresentationLogic.shouldCancelInFlightWork` is the pure,
+/// unit-tested decision of whether the watchdog above should actually call
+/// `cancelInFlightWork()` once it resolves.
 public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
     private let state: State
     private let chrome: ScreenChrome
     private let content: (ActionSender<State.Action>) -> Content
     private let backgroundColor: Color
+    private let cancelsInFlightWorkOnRemoval: Bool
 
     @Environment(\.loadingViewStyle) private var loadingStyle
     @Environment(\.errorViewStyle) private var errorStyle
@@ -160,16 +200,31 @@ public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
     /// (`ScreenState`) plus a single action entry point (`ActionHandling`). The content
     /// closure receives an `ActionSender<State.Action>` — send an action with
     /// `send(.load)`, never call a method on `state` directly.
+    ///
+    /// - Parameters:
+    ///   - state: The screen's observable state and action entry point.
+    ///   - chrome: Navigation chrome — `.native` (default) leaves the system bar alone;
+    ///     `.custom(_:placement:)` opts out in favor of `CustomNavigationBar`.
+    ///   - backgroundColor: The color behind content and every phase overlay.
+    ///   - cancelsInFlightWorkOnRemoval: Whether `state.cancelInFlightWork()` is called when
+    ///     this view is genuinely removed from the hierarchy (see the type's doc comment).
+    ///     Defaults to `true` — the safe default matches what `deinit` is already trying,
+    ///     and failing, to do promptly on its own. Pass `false` for a screen whose work must
+    ///     survive the view on purpose (an upload, a form submit that shouldn't be lost just
+    ///     because the user navigated away).
+    ///   - content: The screen's own content, below/behind every phase overlay.
     public init(
         _ state: State,
         chrome: ScreenChrome = .native,
         backgroundColor: Color = .platformBackground,
+        cancelsInFlightWorkOnRemoval: Bool = true,
         @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
         self.state = state
         self.chrome = chrome
         self.content = content
         self.backgroundColor = backgroundColor
+        self.cancelsInFlightWorkOnRemoval = cancelsInFlightWorkOnRemoval
     }
 
     // MARK: - Body
@@ -195,6 +250,37 @@ public struct ScreenContainer<State: ScreenViewModel, Content: View>: View {
             } message: { alertState in
                 Text(alertState.message)
             }
+            .task { await runRemovalWatchdog() }
+    }
+
+    /// Suspends for the view's mounted lifetime, then — only if that suspension actually
+    /// ended in cancellation, i.e. the view was genuinely removed — calls
+    /// `state.cancelInFlightWork()`. See the type's doc comment for why `Task.sleep` is the
+    /// right primitive here and why the duration below is never really reached.
+    ///
+    /// Not `private`: `ScreenContainerCancellationTests` (`@testable import`) drives this
+    /// directly with an explicit `Task` it cancels itself, instead of going through real
+    /// SwiftUI view attachment/removal — the SwiftUI-side half of the contract (this only
+    /// runs when the view is genuinely removed, never when merely covered by a push) isn't
+    /// something this package's test target can exercise at all; see that test file's doc
+    /// comment for why, and what was verified manually instead.
+    func runRemovalWatchdog() async {
+        // Skip the sleep entirely when opted out — no point suspending on a `Task` whose
+        // cancellation nobody is going to act on.
+        guard cancelsInFlightWorkOnRemoval else { return }
+
+        var watchdogWasCancelled = false
+        do {
+            try await Task.sleep(for: .seconds(60 * 60 * 24 * 365 * 100))
+        } catch {
+            watchdogWasCancelled = Task.isCancelled
+        }
+        if ScreenPresentationLogic.shouldCancelInFlightWork(
+            cancelsOnRemoval: cancelsInFlightWorkOnRemoval,
+            watchdogWasCancelled: watchdogWasCancelled
+        ) {
+            state.cancelInFlightWork()
+        }
     }
 
     /// Installs chrome exactly once around the whole screen (content + every phase
@@ -383,11 +469,13 @@ public extension ScreenContainer {
         title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         navigationPlacement: NavigationPlacement = .stack,
+        cancelsInFlightWorkOnRemoval: Bool = true,
         @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
         self.init(
             state,
             chrome: .custom(.title(title, style: style), placement: navigationPlacement),
+            cancelsInFlightWorkOnRemoval: cancelsInFlightWorkOnRemoval,
             content: content
         )
     }
@@ -401,12 +489,14 @@ public extension ScreenContainer {
         title: LocalizedStringResource,
         style: NavigationBarStyle = .default,
         navigationPlacement: NavigationPlacement = .stack,
+        cancelsInFlightWorkOnRemoval: Bool = true,
         onBack: @escaping Action,
         @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
         self.init(
             state,
             chrome: .custom(.withBack(title: title, style: style, backAction: onBack), placement: navigationPlacement),
+            cancelsInFlightWorkOnRemoval: cancelsInFlightWorkOnRemoval,
             content: content
         )
     }
@@ -422,6 +512,7 @@ public extension ScreenContainer {
         searchPlaceholder: LocalizedStringResource? = nil,
         style: NavigationBarStyle = .solid,
         navigationPlacement: NavigationPlacement = .stack,
+        cancelsInFlightWorkOnRemoval: Bool = true,
         onSearchSubmit: Action? = nil,
         @ViewBuilder content: @escaping (ActionSender<State.Action>) -> Content
     ) {
@@ -437,6 +528,7 @@ public extension ScreenContainer {
                 ),
                 placement: navigationPlacement
             ),
+            cancelsInFlightWorkOnRemoval: cancelsInFlightWorkOnRemoval,
             content: content
         )
     }
@@ -557,6 +649,15 @@ public final class ObservingScreenState<Wrapped: ScreenState>: ScreenState, Acti
         set { wrapped.banner = newValue }
     }
 
+    /// Forwards to `wrapped.cancelInFlightWork()` — this class stores no work of its own to
+    /// cancel (see the type's doc comment: it's a transparent pass-through), so a read-only
+    /// screen built with `ScreenContainer(observing:)` gets the exact same
+    /// cancel-on-removal behavior as one built with the designated initializer, as long as
+    /// `wrapped` overrides `cancelInFlightWork()` (`BaseViewModel` does).
+    public func cancelInFlightWork() {
+        wrapped.cancelInFlightWork()
+    }
+
     public typealias Action = Never
     public func handle(_ action: Never) {}
 }
@@ -566,6 +667,12 @@ public extension ScreenContainer where State == BindingBackedState {
     /// Xcode Previews and screens with no `ScreenViewModel` of their own — there is no
     /// `ActionSender` here (`content` is a plain `() -> Content`) because there is no
     /// `ActionHandling` to send to.
+    ///
+    /// `cancelsInFlightWorkOnRemoval` has no observable effect here: `BindingBackedState`
+    /// owns no unstructured work, only bindings, so its `cancelInFlightWork()` stays the
+    /// protocol's no-op default. The parameter is still accepted (rather than omitted) so
+    /// switching a screen between this initializer and the designated one never means
+    /// adding or dropping a parameter.
     init(
         phase: Binding<ViewPhase>,
         activity: Binding<ActivityState> = .constant(.none),
@@ -573,10 +680,16 @@ public extension ScreenContainer where State == BindingBackedState {
         banner: Binding<BannerState?> = .constant(nil),
         chrome: ScreenChrome = .native,
         backgroundColor: Color = .platformBackground,
+        cancelsInFlightWorkOnRemoval: Bool = true,
         @ViewBuilder content: @escaping () -> Content
     ) {
         let state = BindingBackedState(phase: phase, activity: activity, alert: alert, banner: banner)
-        self.init(state, chrome: chrome, backgroundColor: backgroundColor) { _ in content() }
+        self.init(
+            state,
+            chrome: chrome,
+            backgroundColor: backgroundColor,
+            cancelsInFlightWorkOnRemoval: cancelsInFlightWorkOnRemoval
+        ) { _ in content() }
     }
 }
 
@@ -584,13 +697,23 @@ public extension ScreenContainer {
     /// Creates a screen container for a **read-only** screen: `state` only needs to conform
     /// to `ScreenState`, not `ActionHandling` — there is no `ActionSender` in `content`
     /// because there is nothing to send to.
+    ///
+    /// `cancelsInFlightWorkOnRemoval` reaches `state` through `ObservingScreenState`'s
+    /// pass-through `cancelInFlightWork()` (see its doc comment) exactly as it would through
+    /// the designated initializer.
     init<Wrapped: ScreenState>(
         observing state: Wrapped,
         chrome: ScreenChrome = .native,
         backgroundColor: Color = .platformBackground,
+        cancelsInFlightWorkOnRemoval: Bool = true,
         @ViewBuilder content: @escaping () -> Content
     ) where State == ObservingScreenState<Wrapped> {
-        self.init(ObservingScreenState(state), chrome: chrome, backgroundColor: backgroundColor) { _ in content() }
+        self.init(
+            ObservingScreenState(state),
+            chrome: chrome,
+            backgroundColor: backgroundColor,
+            cancelsInFlightWorkOnRemoval: cancelsInFlightWorkOnRemoval
+        ) { _ in content() }
     }
 }
 

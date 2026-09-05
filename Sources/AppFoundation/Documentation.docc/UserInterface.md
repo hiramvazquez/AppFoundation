@@ -39,6 +39,22 @@ Una pantalla de solo lectura (sin `ActionHandling`) usa `ScreenContainer(observi
 modifier `.screen(_:chrome:)` — sin `ActionSender` en `content`, porque no hay nada que
 enviar.
 
+### Cancelación al desmontar la vista
+
+`ScreenContainer` llama a `state.cancelInFlightWork()` (``ScreenState``) en cuanto su vista
+se elimina de verdad de la jerarquía de navegación — nunca cuando un push simplemente la
+tapa. Es el `cancelsInFlightWorkOnRemoval` de `init`, `true` por defecto; para trabajo que
+debe sobrevivir a la vista a propósito (una subida, un envío de formulario):
+
+```swift
+ScreenContainer(viewModel, cancelsInFlightWorkOnRemoval: false) { send in
+    UploadContent()
+}
+```
+
+Ver <doc:ScreenStateAndViewModels> ("`performLoad`/`performActivity` a través de
+`ScreenContainer`") para por qué existe y qué cancela exactamente en `BaseViewModel`.
+
 ### `ScreenChrome`: la barra nativa por defecto
 
 `.native` (por defecto) nunca oculta la barra del sistema — la pantalla la controla con

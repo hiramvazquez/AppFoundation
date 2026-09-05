@@ -64,15 +64,33 @@ public nonisolated enum LoadSuccessTransition: Equatable, Sendable {
 /// profiles memory. `performLoad`/`performActivity` chose the failure that is at worst "a
 /// load finishes a little late" over the one that is "a screen never comes back."
 ///
-/// When cancellation genuinely needs to follow the view's lifecycle — the common case for
-/// a screen's initial content — don't fight `performLoad` for it: call the structured
-/// `load(_:)`/`activity(_:)` directly from `.task { await vm.load { … } }`. SwiftUI
-/// cancels that `Task` the moment the view disappears, so the work is actually torn down
-/// instead of running to completion in the background, and `deinit` never has to get
-/// involved. `performLoad`/`performActivity` remain the right call when work has to
-/// outlive the view — a submit that shouldn't cancel just because the user navigated away
-/// — or when the call site can't `await` in the first place, such as
-/// `ActionHandling.handle(_:)`, which is synchronous by design.
+/// ### Closing the gap from the screen's lifecycle: `cancelInFlightWork()`
+///
+/// `deinit` can't reach a running `work` because nothing tells it to cancel *before* the
+/// last reference is released — by the time `deinit` runs, it's too late to matter for a
+/// `Task` that's already holding `self` strongly. `ScreenContainer` fixes the timing, not
+/// the mechanism: it calls `ScreenState.cancelInFlightWork()` — which this class
+/// implements by cancelling `inFlightLoad`/`inFlightActivity` (and, for good measure,
+/// `bannerDismissTask`) — the moment its view is actually removed from the view hierarchy,
+/// which is earlier than deallocation and, crucially, still early enough for `.cancel()` to
+/// reach `work` while it's genuinely running. That's on by default for every screen built
+/// with `ScreenContainer`; opt out with `cancelsInFlightWorkOnRemoval: false` for work that
+/// must survive the view on purpose (a submit that shouldn't cancel just because the user
+/// navigated away). A screen with no `ScreenContainer` in front of it — or a `ScreenState`
+/// conformance that isn't `BaseViewModel` and never overrides `cancelInFlightWork()` — is
+/// back to the bounded trade-off above; the no-op default is deliberate (see
+/// ``ScreenState``), not a bug.
+///
+/// When cancellation genuinely needs to follow the view's lifecycle and there's no
+/// `ScreenContainer` in the picture — or the screen isn't routed through `handle(_:)` at
+/// all — don't fight `performLoad` for it: call the structured `load(_:)`/`activity(_:)`
+/// directly from `.task { await vm.load { … } }`. SwiftUI cancels that `Task` when the
+/// view is actually removed from the hierarchy (not merely covered by a push — see
+/// `ScreenContainer`'s doc comment for how that distinction was verified), so the work is
+/// torn down at exactly the same moment `cancelInFlightWork()` fires, and neither `deinit`
+/// nor `cancelInFlightWork()` ever has to get involved. `performLoad`/`performActivity` remain the right call when work has to
+/// outlive the view on purpose, or when the call site can't `await` in the first place,
+/// such as `ActionHandling.handle(_:)`, which is synchronous by design.
 ///
 /// Whichever of the two cancels it, work closures should stay cooperative
 /// (`Task.checkCancellation()` at progress points) for cancellation to actually interrupt
@@ -184,6 +202,33 @@ open class BaseViewModel {
     deinit {
         // `Task` is Sendable, so reading these stored properties from the nonisolated
         // deinit is legal — and nothing else can observe the object anymore.
+        inFlightLoad?.cancel()
+        inFlightActivity?.cancel()
+        bannerDismissTask?.cancel()
+    }
+
+    /// `ScreenState.cancelInFlightWork()`: cancels `inFlightLoad`, `inFlightActivity`, and
+    /// `bannerDismissTask` — the same three `deinit` cancels above, but callable while the
+    /// view model is still very much alive.
+    ///
+    /// That timing is the whole point. `inFlightLoad`/`inFlightActivity` are the ones
+    /// `deinit` cannot always reach in time (see "What `deinit` actually cancels" above):
+    /// once `work` is running, its `Task` holds `self` strongly, so releasing the last
+    /// external reference does not deallocate the view model, and `deinit` never runs to
+    /// cancel anything. Calling `cancelInFlightWork()` from the view's lifecycle —
+    /// `ScreenContainer`, before that last reference is even released — reaches the same
+    /// `Task` while it is still genuinely cancellable, which is exactly what lets the view
+    /// model deallocate promptly afterward instead of waiting for `work` to finish on its
+    /// own (see `BaseViewModelMemoryTests`).
+    ///
+    /// `bannerDismissTask` has no such gap: it only ever captures `self` weakly (see
+    /// `showBanner`), so it never keeps the view model alive, and `deinit` already cancels
+    /// it unconditionally. It's cancelled here too anyway so this method is a complete
+    /// answer to "cancel everything this screen has in flight" rather than only the two
+    /// tasks that happen to need it for memory reasons — a banner tied to a screen that is
+    /// going away has no reason to keep counting down to auto-dismiss a message nobody can
+    /// see.
+    open func cancelInFlightWork() {
         inFlightLoad?.cancel()
         inFlightActivity?.cancel()
         bannerDismissTask?.cancel()

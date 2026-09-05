@@ -45,6 +45,13 @@ VM tarda un poco más en liberarse) sobre uno permanente. Ver <doc:ScreenStateAn
 para el detalle completo, y para `load(_:)`/`activity(_:)` — la vía real cuando la
 cancelación debe seguir al ciclo de vida de la vista.
 
+Si la pantalla usa `ScreenContainer`, no hace falta elegir entre esperar a `deinit` o migrar
+a `load(_:)`/`activity(_:)`: `ScreenContainer` llama a `ScreenState.cancelInFlightWork()` en
+cuanto su vista se elimina de verdad de la jerarquía (nunca cuando un push simplemente la
+tapa), y `BaseViewModel` lo implementa cancelando `inFlightLoad`/`inFlightActivity` mientras
+el view model sigue vivo — justo el momento en que la cancelación SÍ alcanza a `work`. Ver
+<doc:UserInterface> ("Cancelación al desmontar la vista").
+
 ## Localización: `Bundle.module` devuelve la cadena por defecto en vez de la traducida
 
 Un `.build` stale puede tener `en.lproj`/`es.lproj` compilados de una build vieja junto al

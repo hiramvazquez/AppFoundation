@@ -78,11 +78,25 @@ diseño:
 }
 ```
 
-SwiftUI cancela ese `Task` en cuanto la vista desaparece, así que la cancelación sigue el
-ciclo de vida de la vista con exactitud — el trabajo se desmonta de verdad, no queda
-corriendo en segundo plano a la espera de que `deinit` lo alcance. Ver ``BaseViewModel``
-("What `deinit` actually cancels") para por qué eso es justo lo que `deinit` NO puede
-garantizar por sí solo.
+SwiftUI cancela ese `Task` cuando la vista se elimina de verdad de la jerarquía — no cuando
+un push simplemente la tapa —, así que la cancelación sigue el ciclo de vida real de la
+vista: el trabajo se desmonta de verdad, no queda corriendo en segundo plano a la espera de
+que `deinit` lo alcance. Ver ``BaseViewModel`` ("What `deinit` actually cancels") para por
+qué eso es justo lo que `deinit` NO puede garantizar por sí solo.
+
+### `performLoad`/`performActivity` a través de `ScreenContainer`: `cancelInFlightWork()`
+
+`performLoad`/`performActivity` no tienen la garantía anterior por construcción — corren en
+un `Task` propio del view model, no en el de la vista. `ScreenState` añade
+`cancelInFlightWork()` (no-op por defecto — puramente aditivo, ver ``ScreenState``) para
+cerrar ese hueco desde fuera: ``ScreenContainer`` lo llama cuando su vista se elimina de
+verdad de la jerarquía (nunca cuando un push simplemente la tapa), y `BaseViewModel` lo
+implementa cancelando `inFlightLoad`/`inFlightActivity`. El resultado es que una pantalla
+construida con `ScreenContainer` obtiene, para `performLoad`/`performActivity`, la misma
+cancelación puntual que `load(_:)`/`activity(_:)` ya tenían por diseño — sin tener que elegir
+entre las dos familias solo por esto. Desactívalo con
+`ScreenContainer(vm, cancelsInFlightWorkOnRemoval: false) { … }` para el trabajo que debe
+sobrevivir a la vista a propósito (una subida, un envío de formulario).
 
 ### `performLoad`/`performActivity` — sin estructurar, devuelven `Task`
 
