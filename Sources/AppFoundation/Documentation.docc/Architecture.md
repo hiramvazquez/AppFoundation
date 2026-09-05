@@ -52,8 +52,10 @@ Features/Login/
    `@State private var viewModel: XxxViewModel` + `_viewModel = State(initialValue:
    viewModel)` en el `init`, nunca `let viewModel:`. Causa: SwiftUI reejecuta el builder de
    destino de navegación durante un push; con `let`, esa reejecución sustituye la instancia
-   que ya recibió `.load` (vía `.task`) — se libera (`performLoad` captura `[weak self]`,
-   sin error) y la instancia que queda en pantalla nunca lo recibe. Ver <doc:FAQ>.
+   que ya recibió `.load` (vía `.task`) por una nueva que nunca lo recibe — la pantalla se
+   queda vacía. La instancia sustituida queda huérfana y se libera sin error, pero no
+   necesariamente al instante: si su `work` ya estaba en curso, sigue corriendo hasta
+   terminar antes de poder liberarse. Ver <doc:FAQ>.
 5. Cada `XxxViewModel.swift` tiene su `XxxLogic.swift`.
 6. Ninguna clase concreta de Service/Store/Logic aparece en un `init` de otra capa: siempre
    `any XxxProtocol`.

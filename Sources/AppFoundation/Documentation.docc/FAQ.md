@@ -6,14 +6,19 @@ Porque el ViewModel puede ser transitorio: cuando el composition root lo constru
 del builder de destino de una navegación (`CoordinatorView`/`navigationDestination`),
 SwiftUI reejecuta ese builder durante la transición de push. Con `let viewModel:`, cada
 reejecución sustituye la instancia que ya está en el árbol de vistas por una nueva — la
-instancia A, que recibió `.load` vía `.task`/`.onAppear` y ya tiene un `performLoad` en
-vuelo, se libera unos milisegundos después (`performLoad` captura `[weak self]`, así que
-su trabajo termina sin ejecutarse y sin error); la instancia B, que queda realmente en
-pantalla, nunca recibe `.load`: la pantalla se queda vacía, sin spinner ni error. `@State
-private var viewModel: XxxViewModel` + `_viewModel = State(initialValue: viewModel)` en el
-`init` evita esto — `State` conserva la primera instancia durante toda la vida de la
-identidad de la vista e ignora las reejecuciones posteriores del builder. Ver
-<doc:Architecture>.
+instancia B, que queda realmente en pantalla, nunca recibe `.load`: la pantalla se queda
+vacía, sin spinner ni error. La instancia A (la que sí recibió `.load` vía
+`.task`/`.onAppear`) queda huérfana, ajena a la pantalla; cuándo se libera depende de en
+qué punto iba su `performLoad` cuando SwiftUI la sustituyó — si `work` no había llegado a
+arrancar, se descarta de inmediato (el `guard let self` de `performLoad` falla y registra
+el diagnóstico de deallocation temprana, ver la pregunta siguiente); si ya estaba
+corriendo, sigue corriendo hasta terminar antes de poder liberarse (`performLoad` retiene
+el view model mientras su `work` está en curso — ver <doc:ScreenStateAndViewModels>). En
+ningún caso llega a mostrarse un error: el problema real es que B, la instancia visible,
+nunca recibió `.load`. `@State private var viewModel: XxxViewModel` + `_viewModel =
+State(initialValue: viewModel)` en el `init` evita esto — `State` conserva la primera
+instancia durante toda la vida de la identidad de la vista e ignora las reejecuciones
+posteriores del builder. Ver <doc:Architecture>.
 
 En `DEBUG`, `ActionSender` (`ScreenState.sender`) y los `guard let self else { throw
 CancellationError() }` de `performLoad`/`performActivity` registran en `os_log` (subsystem
@@ -27,9 +32,18 @@ vacía. `ArchitectureLint` (regla R12) avisa cuando detecta `let viewModel:` en 
 Un closure que captura `self` en vez de usar el `vm` recibido puede recrear el ciclo
 `self → phase → retry → work → self`: la fase `.error` guarda una acción de reintento que,
 si captura `self` directamente, mantiene vivo al view model para siempre mientras la
-pantalla muestra un error. Con `vm` como parámetro, nada en `work` referencia `self`, así
-que soltar la última referencia externa libera el view model normalmente — y su `deinit`
-cancela el trabajo en vuelo. Ver <doc:ScreenStateAndViewModels>.
+pantalla muestra un error — un fallo permanente y silencioso, indistinguible del camino
+feliz hasta que alguien perfila memoria. Con `vm` como parámetro ese ciclo es imposible por
+construcción: no queda ningún `self` capturado con el que cerrarlo.
+
+La contrapartida es que el view model vive mientras `work` sigue corriendo: pasarle `vm` a
+una función `async` lo retiene durante toda su suspensión, así que soltar la última
+referencia externa con una carga genuinamente en curso NO libera el view model al
+instante, y ahí `deinit` no cancela nada — sí cancela una tarea que aún no ha llegado a
+`work`, o el aviso pendiente de un banner. Es el intercambio correcto: un fallo acotado (el
+VM tarda un poco más en liberarse) sobre uno permanente. Ver <doc:ScreenStateAndViewModels>
+para el detalle completo, y para `load(_:)`/`activity(_:)` — la vía real cuando la
+cancelación debe seguir al ciclo de vida de la vista.
 
 ## Localización: `Bundle.module` devuelve la cadena por defecto en vez de la traducida
 

@@ -34,20 +34,50 @@ public nonisolated enum LoadSuccessTransition: Equatable, Sendable {
 /// }
 /// ```
 ///
-/// This is what makes cancellation and deallocation actually work (see below) — not a
-/// convention to remember, a shape the API forces.
+/// This closes off a *permanent* retain cycle by construction: there is no `self` in
+/// scope for `work` to capture, so a screen stuck on `.error` — with its `retry` action
+/// sitting in `phase`, ready to run `work` again — can never wire
+/// `self → phase → retry → work → self` into a cycle nobody breaks. The trade-off, and
+/// it's a deliberate one (see below), is that the view model is guaranteed to live for as
+/// long as `work` is actually running: `work` still needs the view model to do anything,
+/// and Swift can't hand a value to an `async` function without keeping it alive across
+/// that function's suspensions.
 ///
-/// ## Cancellation is part of the contract
+/// ## What `deinit` actually cancels
 ///
-/// `performLoad` and `performActivity` return their `Task` and retain it: starting a new
-/// load cancels the in-flight one, and `deinit` cancels whatever is still running — and
-/// because `work` never captures the view model, releasing the last external reference
-/// while a load is in flight (or while it's showing a retryable error) actually
-/// deallocates it, which is what lets `deinit` run and cancel the work in the first
-/// place. Work closures should stay cooperative (`Task.checkCancellation()` at progress
-/// points) for cancellation to actually interrupt long operations. A cancelled load —
-/// or any error `cancellationRecognizer` recognizes as cancellation — is never surfaced
-/// as a screen error.
+/// `performLoad` and `performActivity` return their `Task` and retain it as
+/// `inFlightLoad`/`inFlightActivity`; starting a new load or activity cancels the
+/// in-flight one. `deinit` cancels both of those plus `bannerDismissTask` — but
+/// "releasing the last external reference cancels whatever is in flight" is only true for
+/// `bannerDismissTask`, and for a load/activity `Task` that hasn't reached `work` yet.
+/// Once `work` is running, the `Task` itself holds the view model strongly for the
+/// duration (see above): deallocation, and so `deinit`, has to wait for `work` to return
+/// — success, thrown error, or a `.cancel()` from whoever else retains the `Task` — it
+/// can't make `work` return. The test suite for this asymmetry is
+/// `BaseViewModelMemoryTests`.
+///
+/// This is a bounded, visible trade-off against a permanent, silent one. The classic
+/// alternative — `work` captured as `[weak self]` instead of handed in as a parameter —
+/// would let `deinit` cancel in-flight work immediately, but it reopens exactly the
+/// retain-cycle door described above: one screen's `work` that captures `self` directly
+/// instead of using `[weak self]` leaks that screen forever, silently, until someone
+/// profiles memory. `performLoad`/`performActivity` chose the failure that is at worst "a
+/// load finishes a little late" over the one that is "a screen never comes back."
+///
+/// When cancellation genuinely needs to follow the view's lifecycle — the common case for
+/// a screen's initial content — don't fight `performLoad` for it: call the structured
+/// `load(_:)`/`activity(_:)` directly from `.task { await vm.load { … } }`. SwiftUI
+/// cancels that `Task` the moment the view disappears, so the work is actually torn down
+/// instead of running to completion in the background, and `deinit` never has to get
+/// involved. `performLoad`/`performActivity` remain the right call when work has to
+/// outlive the view — a submit that shouldn't cancel just because the user navigated away
+/// — or when the call site can't `await` in the first place, such as
+/// `ActionHandling.handle(_:)`, which is synchronous by design.
+///
+/// Whichever of the two cancels it, work closures should stay cooperative
+/// (`Task.checkCancellation()` at progress points) for cancellation to actually interrupt
+/// long operations. A cancelled load — or any error `cancellationRecognizer` recognizes as
+/// cancellation — is never surfaced as a screen error.
 @MainActor
 @Observable
 open class BaseViewModel {

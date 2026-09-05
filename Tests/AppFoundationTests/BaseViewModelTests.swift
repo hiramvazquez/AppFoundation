@@ -306,6 +306,42 @@ struct BaseViewModelCancellationTests {
         #expect(viewModel.phase == .content)
     }
 
+    /// El doc de `inFlightLoad` promete que se limpia a `nil` al terminar "unless a newer
+    /// load has already replaced it by then". `newLoadCancelsInFlightLoad` (arriba) ya
+    /// prueba que la carga superada no pisa el ESTADO (`phase`); este test cierra la otra
+    /// mitad del contrato: la carga superada tampoco debe dejar `inFlightLoad` en `nil`
+    /// mientras la nueva sigue en curso — si lo hiciera, un consumidor que espera
+    /// `inFlightLoad` (el propio README lo recomienda) vería `nil` con una carga real
+    /// todavía viva. `first` usa `Task.sleep` (se cancela igual, no necesita control fino);
+    /// `second` usa un `TestClock` propio para poder mantenerla en vuelo a voluntad,
+    /// exactamente el punto que este test necesita observar.
+    @Test func supersededLoadDoesNotClobberANewerInFlightLoad() async {
+        let gate = TestClock()
+
+        let first = viewModel.performLoad { _ in
+            try await Task.sleep(for: .seconds(10))
+        }
+        let second = viewModel.performLoad { _ in
+            try await gate.sleep(until: gate.now.advanced(by: .seconds(1)), tolerance: nil)
+        }
+
+        await first.value
+        await gate.waitForSleepers()
+
+        #expect(
+            viewModel.inFlightLoad != nil,
+            """
+            La carga superada (generación vieja) terminó y no debía limpiar inFlightLoad \
+            mientras la nueva carga sigue en curso.
+            """
+        )
+
+        gate.advance(by: .seconds(1))
+        await second.value
+
+        #expect(viewModel.inFlightLoad == nil, "Al terminar la carga vigente, inFlightLoad debe quedar en nil.")
+    }
+
     /// La cancelación no es fallo: jamás debe aparecer como error de pantalla.
     @Test func cancelledLoadDoesNotSurfaceError() async {
         let task = viewModel.performLoad { _ in

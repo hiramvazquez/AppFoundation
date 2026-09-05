@@ -83,6 +83,88 @@ struct BaseViewModelMemoryTests {
         #expect(weakVM == nil)
     }
 
+    // MARK: - `deinit` cancela las tres tareas que retiene (inFlightLoad, inFlightActivity, bannerDismissTask)
+
+    /// (b) de arriba (`viewModelWithInFlightLoadIsDeallocatedAndCancelsWork`) ya es la
+    /// prueba de `inFlightLoad` para este contrato — con una salvedad real que vale la pena
+    /// dejar escrita: `_performLoad` resuelve `[weak self]` a un `self` FUERTE antes de
+    /// llamar a `_runLoad`, y esa variable local sigue viva mientras el `Task` está
+    /// suspendido dentro de `work()` — así que soltar la referencia externa (`vm = nil`)
+    /// NUNCA desaloja el VM por sí sola mientras la carga sigue realmente en curso;
+    /// `deinit` no puede correr todavía porque el propio `Task` sigue reteniendo `self`. Se
+    /// intentó aquí un test que aislara el `deinit` (sin la `task.cancel()` explícita) para
+    /// no duplicar cobertura con (b): falló contra el código CORRECTO — `weakVM` seguía sin
+    /// ser `nil` incluso pasados 2s — confirmando empíricamente que ese aislamiento no es
+    /// observable con la forma actual de `_performLoad`. La única cancelación
+    /// verdaderamente"externa" en (b) (`task.cancel()`) es, pues, necesaria — no redundante
+    /// — para que el `Task` desenrolle su marco y suelte `self`; no hay forma de exigir que
+    /// sea el propio `inFlightLoad?.cancel()` del `deinit` el que dispare esa cancelación
+    /// sin tocar `Sources/AppFoundation`. Ver informe de la tarea para la recomendación.
+    ///
+    /// `inFlightActivity` comparte la misma forma (`_performActivity` resuelve `self` fuerte
+    /// igual que `_performLoad`), así que este test es el análogo exacto de (b) para
+    /// actividad — el hueco de cobertura real que sí se podía cerrar sin duplicar nada.
+    @Test func viewModelWithInFlightActivityIsDeallocatedAndCancelsWork() async throws {
+        weak var weakVM: BaseViewModel?
+        let clock = TestClock()
+        let recorder = Recorder()
+
+        var vm: BaseViewModel? = BaseViewModel()
+        weakVM = vm
+
+        let task = vm!
+            .performActivity { _ in
+                do {
+                    try await clock.sleep(until: clock.now.advanced(by: .seconds(999)), tolerance: nil)
+                } catch {
+                    recorder.record(Task.isCancelled ? "cancelled" : "other")
+                    throw error
+                }
+            }
+
+        await clock.waitForSleepers()
+        vm = nil  // última referencia externa, soltada con la actividad en vuelo
+        task.cancel()
+        await task.value
+
+        #expect(recorder.events == ["cancelled"])
+        #expect(weakVM == nil)
+    }
+
+    /// `bannerDismissTask` no se expone públicamente (a diferencia de `inFlightLoad`/
+    /// `inFlightActivity`), así que no hay `Task` que awaitear desde el test. La señal
+    /// observable es indirecta pero precisa: `TestClock.sleeperCount` — si el `deinit`
+    /// cancela `bannerDismissTask`, su `onCancel` retira el sleeper pendiente del reloj;
+    /// si no lo hiciera, el sleeper seguiría registrado para siempre (el VM ya no existe
+    /// para nadie, pero el `Task` seguiría vivo esperando un reloj que nunca avanza).
+    @Test func deinitAloneCancelsBannerDismissTask() async {
+        weak var weakVM: BaseViewModel?
+        let clock = TestClock()
+
+        var vm: BaseViewModel? = BaseViewModel(clock: clock)
+        weakVM = vm
+
+        vm!.showBanner(BannerState(message: "Bye", style: .info, duration: .seconds(5)))
+        await clock.waitForSleepers()
+        #expect(clock.sleeperCount == 1)
+
+        vm = nil  // única fuente de cancelación en este test: el `deinit`
+        #expect(weakVM == nil)
+
+        // La cancelación del `Task` puede resolver el `onCancel` del reloj de forma no
+        // estrictamente síncrona con `.cancel()`: se espera (acotado) en vez de leer
+        // `sleeperCount` inmediatamente.
+        await spin(until: { clock.sleeperCount == 0 })
+
+        #expect(
+            clock.sleeperCount == 0,
+            """
+            El deinit debía cancelar bannerDismissTask, liberando su sleeper pendiente en el reloj; \
+            quedaron \(clock.sleeperCount).
+            """
+        )
+    }
+
     /// El retry guardado en `ScreenError` no captura el VM: tras un error, sueltas la
     /// última referencia externa SIN invocar el retry, y el VM se libera igual — antes
     /// del fix, `retry` cerraba el ciclo permanentemente sobre `self`.

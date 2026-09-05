@@ -10,6 +10,12 @@ Cada pantalla separa dos preocupaciones: `phase` (el estado principal — `.idle
 reemplaza el contenido — refresco, envío de formulario, paginación). Usa `phase` para la
 carga inicial o un fallo a pantalla completa; usa `activity` para todo lo demás.
 
+Para disparar ese trabajo hay dos familias de métodos, `load`/`activity` y
+`performLoad`/`performActivity`. Por defecto usa las primeras — atan la cancelación al
+`Task` del llamador (típicamente `.task` de SwiftUI); las segundas son la excepción,
+para cuando el punto de llamada no puede ser `async` o el trabajo debe sobrevivir a la
+vista. Ver la sección de cada una más abajo.
+
 ### `BaseViewModel`
 
 `@Observable`, `open class`. Las propiedades de una subclase se observan automáticamente
@@ -58,9 +64,32 @@ viewModel.handle(.load)
 una preferencia de estilo: un closure que captura `self` en vez de usar `vm` puede recrear
 el ciclo `self → phase → retry → work → self` que esta API existe para evitar.
 
+### `load`/`activity` — estructurado, corre en el `Task` del llamador
+
+La opción por defecto para la carga inicial de una pantalla: se llama directamente desde
+`.task`, que es `async` y puede esperarla — a diferencia de `handle(_:)`, síncrono por
+diseño:
+
+```swift
+.task {
+    await viewModel.load { vm in
+        vm.items = try await vm.service.fetch()
+    }
+}
+```
+
+SwiftUI cancela ese `Task` en cuanto la vista desaparece, así que la cancelación sigue el
+ciclo de vida de la vista con exactitud — el trabajo se desmonta de verdad, no queda
+corriendo en segundo plano a la espera de que `deinit` lo alcance. Ver ``BaseViewModel``
+("What `deinit` actually cancels") para por qué eso es justo lo que `deinit` NO puede
+garantizar por sí solo.
+
 ### `performLoad`/`performActivity` — sin estructurar, devuelven `Task`
 
-Para acciones que deben sobrevivir a un solo tap (un submit por botón):
+La excepción: para cuando el punto de llamada no puede ser `async` — típicamente porque
+pasa por `handle(_:)` junto al resto de acciones de la pantalla, para un único punto de
+entrada — o para trabajo que debe sobrevivir a la vista a propósito, como un submit que no
+debería cancelarse solo porque el usuario navegó a otra pantalla:
 
 ```swift
 performLoad(successTransition: .preserveCurrentPhase) { vm in
@@ -71,18 +100,6 @@ performLoad(successTransition: .preserveCurrentPhase) { vm in
 
 performActivity(style: .inline) { vm in
     try await vm.service.sync()
-}
-```
-
-### `load`/`activity` — estructurado, corre en el `Task` del llamador
-
-Para usar desde `.task`, donde SwiftUI ya cancela al desaparecer la vista:
-
-```swift
-.task {
-    await viewModel.load { vm in
-        vm.items = try await vm.service.fetch()
-    }
 }
 ```
 

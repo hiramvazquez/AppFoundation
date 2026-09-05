@@ -379,4 +379,105 @@ struct ContainerTests {
         let service: MockService = container.resolve()
         #expect(service.name == "Later")
     }
+
+    // MARK: - register(modules:) — orden de array (doc: "assembles them in order" / "applied in array order")
+
+    /// Grabador simple de eventos: `DependencyModule.register(in:)` no es `async`, así que
+    /// un `SpyRecorder` (actor) no serviría — no se puede `await` desde una función
+    /// síncrona. `Container`/`DependencyModule` son `@MainActor` y este archivo hereda el
+    /// mismo aislamiento por defecto, así que un array plano basta.
+    private final class ModuleOrderRecorder {
+        private(set) var events: [String] = []
+        func record(_ event: String) { events.append(event) }
+        deinit {}
+    }
+
+    /// Módulo espía: registra su paso por `register(in:)` antes de ejecutar el registro
+    /// real que le pasa el test.
+    private struct OrderRecordingModule: DependencyModule {
+        let name: String
+        let recorder: ModuleOrderRecorder
+        let work: (Container) -> Void
+
+        func register(in container: Container) {
+            recorder.record(name)
+            work(container)
+        }
+    }
+
+    /// El doc de `register(modules:)` lo promete dos veces ("assembles them in order",
+    /// "applied in array order"). Hasta ahora ningún test lo comprobaba con un espía — todo
+    /// uso real registra un único módulo. Si alguien invirtiera el `for module in modules`
+    /// a `.reversed()`, ambos módulos seguirían registrándose (nada rompería a nivel de
+    /// tipo), pero en el orden equivocado — y esto es lo único que lo detecta.
+    @Test func registerModulesCallsRegisterInInOrder() {
+        let recorder = ModuleOrderRecorder()
+        let first = OrderRecordingModule(name: "First", recorder: recorder) { _ in }
+        let second = OrderRecordingModule(name: "Second", recorder: recorder) { _ in }
+
+        container.register(modules: [first, second])
+
+        #expect(
+            recorder.events == ["First", "Second"],
+            "Se esperaba invocar register(in:) en orden de array [First, Second]; se observó \(recorder.events)."
+        )
+    }
+
+    /// Prueba el orden con algo observable además de la llamada en sí: el último módulo
+    /// que registra el MISMO tipo gana (ya cubierto arriba por `registerModulesAppliesAllInOrder`,
+    /// sin espía) — aquí se combina con el espía para dejar constancia de ambas señales a la vez.
+    @Test func registerModulesLastModuleForSameTypeWinsAndRunsLast() {
+        let recorder = ModuleOrderRecorder()
+        let first = OrderRecordingModule(name: "First", recorder: recorder) { c in
+            c.register(MockService.self) { _ in MockService(name: "From-First") }
+        }
+        let second = OrderRecordingModule(name: "Second", recorder: recorder) { c in
+            c.register(MockService.self) { _ in MockService(name: "From-Second") }
+        }
+
+        container.register(modules: [first, second])
+        let service: MockService = container.resolve()
+
+        #expect(
+            recorder.events == ["First", "Second"],
+            "Orden de registro observado: \(recorder.events)"
+        )
+        #expect(
+            service.name == "From-Second",
+            "El último módulo del array debía ganar para el mismo tipo; resolvió \(service.name)."
+        )
+    }
+
+    /// Si el segundo módulo depende de algo que registra el primero (resolviéndolo en el
+    /// momento del registro, no de forma perezosa), debe poder resolverlo — lo que solo se
+    /// cumple si `register(modules:)` de verdad aplica los módulos en orden de array.
+    @Test func aLaterModuleCanResolveWhatAnEarlierModuleRegistered() {
+        struct BaseModule: DependencyModule {
+            func register(in container: Container) {
+                container.register(MockService.self) { _ in MockService(name: "Base") }
+            }
+        }
+        struct DependentModule: DependencyModule {
+            let recorder: ModuleOrderRecorder
+            func register(in container: Container) {
+                // Resuelve YA, durante el registro — no espera a una resolución perezosa
+                // posterior — para que el orden de array importe de verdad.
+                let dependency: MockService? = container.tryResolve()
+                recorder.record(dependency == nil ? "missing" : "present:\(dependency!.name)")
+                container.register(instance: Consumer(service: dependency ?? MockService(name: "MISSING")))
+            }
+        }
+
+        let recorder = ModuleOrderRecorder()
+        container.register(modules: [BaseModule(), DependentModule(recorder: recorder)])
+        let consumer: Consumer = container.resolve()
+
+        #expect(
+            consumer.service.name == "Base",
+            """
+            El segundo módulo debía poder resolver la dependencia registrada por el primero; \
+            recorder.events=\(recorder.events)
+            """
+        )
+    }
 }
