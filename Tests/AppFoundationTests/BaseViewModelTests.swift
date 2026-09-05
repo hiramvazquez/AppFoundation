@@ -259,17 +259,41 @@ struct BaseViewModelAuditBugTests {
     /// so this specifically exercises the default static `ContinuousClock()` for real —
     /// one of the explicit real-clock exceptions listed in PRD-AF-06's report (DC-AF-2).
     @Test func bannerAutoDismissesAfterItsDuration() async throws {
+        // Reloj inyectado, no `Task.sleep` contra el reloj real. La versión anterior dormía
+        // 200 ms esperando un banner de 50 ms y fallaba entre el 5 % y el 10 % de las veces
+        // bajo `swift test --parallel` con carga: "cómodamente pasado" no es una garantía
+        // cuando el scheduler tiene 57 suites compitiendo. Un test intermitente es peor que
+        // no tenerlo — enseña a relanzar en vez de investigar.
+        let clock = TestClock()
+        let viewModel = BaseViewModel(clock: clock)
+
         viewModel.showBanner(BannerState(message: "Bye", style: .info, duration: .milliseconds(50)))
         #expect(viewModel.banner != nil)
-        try await Task.sleep(for: .milliseconds(200))  // comfortably past the 50ms duration
+
+        await clock.waitForSleepers()  // el auto-dismiss ya está registrado en el reloj
+        clock.advance(by: .milliseconds(50))
+
+        // Espera acotada por yields, no por tiempo real: cede el turno hasta que la tarea
+        // de auto-dismiss corra su cuerpo. Si el mecanismo estuviera roto, sale del bucle
+        // y FALLA — no se cuelga ni pasa por casualidad.
+        for _ in 0..<1000 where viewModel.banner != nil { await Task.yield() }
+
         #expect(viewModel.banner == nil)
     }
 
     /// A3: un banner sin duration (nil = indefinido) NO se auto-descarta.
     @Test func indefiniteBannerStaysUntilDismissed() async throws {
+        // Afirmar "sigue ahí tras dormir 150 ms" contra el reloj real es un verde falso
+        // esperando a ocurrir: un scheduler lento aprueba el test sin haber probado nada.
+        // Con reloj inyectado la aserción es más fuerte y determinista: un banner sin
+        // `duration` no registra NINGÚN sleeper, así que no hay auto-dismiss que esperar.
+        let clock = TestClock()
+        let viewModel = BaseViewModel(clock: clock)
+
         viewModel.showBanner(BannerState(message: "Stay", style: .info, duration: nil))
-        try await Task.sleep(for: .milliseconds(150))
         #expect(viewModel.banner != nil)
+        #expect(clock.sleeperCount == 0, "un banner indefinido no debe programar auto-dismiss")
+
         viewModel.dismissBanner()
         #expect(viewModel.banner == nil)
     }
