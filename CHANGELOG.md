@@ -6,6 +6,126 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-05
+
+### Añadido
+
+- **`ScreenState.cancelInFlightWork()`** y **`ScreenContainer(cancelsInFlightWorkOnRemoval:)`**:
+  la pantalla cancela su trabajo en vuelo cuando SwiftUI la elimina de la jerarquía. Cierra
+  el hueco de que `deinit` no puede cancelar un `performLoad` en curso —el propio `Task`
+  retiene el ViewModel mientras `work` corre—, que dejaba vivo el ViewModel y todo lo que
+  retuviera hasta que la petición terminase sola.
+
+  El método del protocolo lleva implementación por defecto no-op, así que **cualquier
+  conformidad de `ScreenState` existente sigue compilando sin tocarla**; el parámetro del
+  `init` es nuevo y con valor por defecto. Los cuatro ejemplos compilan y pasan sin
+  modificarse: es la prueba de que el cambio es aditivo.
+
+  Se evaluó y descartó la alternativa de hacer `ActionHandling.handle(_:)` asíncrono:
+  `handle` no bloquea nada hoy (`performLoad` arranca su `Task` y vuelve de inmediato), así
+  que lo único que compraba era que el llamador pudiera esperarlo — a cambio de una versión
+  mayor, 134 puntos de uso, las plantillas del generador y la regla R1 del linter.
+
+  `cancelsInFlightWorkOnRemoval` permite el opt-out para una pantalla cuyo trabajo deba
+  sobrevivir a la vista (una subida en curso, un envío que no debe perderse al navegar).
+
+  La señal es la cancelación de un `.task` del contenedor, NO `onDisappear`: `.task` sigue
+  la identidad en la jerarquía y no dispara cuando la pantalla queda tapada por un push;
+  `onDisappear` sí, y habría cancelado la carga al navegar hacia delante. Verificado
+  empíricamente con una app SwiftUI de usar y tirar, porque `swift test` corre headless y se
+  comprobó que `ImageRenderer` no dispara ese ciclo de vida en absoluto — queda anotada la
+  QA manual correspondiente en `ScreenContainerCancellationTests.swift`.
+
+### Documentación
+
+- **Corregida la afirmación falsa sobre `deinit` en `BaseViewModel`**: el doc decía que
+  soltar la última referencia externa con una carga en vuelo desaloja el view model y eso
+  es lo que deja correr a `deinit` para cancelar el trabajo. Un test de interacción
+  (`BaseViewModelMemoryTests`) demuestra que no es así — mientras `work` está en curso, el
+  propio `Task` retiene `self` con fuerza (`_performLoad`/`_performActivity` resuelven
+  `[weak self]` a un `self` fuerte antes de entrar en `work`, y `LoadableViewModel.load`/
+  `performLoad` retienen el view model mientras dure la suspensión, por ser el parámetro de
+  una función `async`), así que el view model no se desaloja hasta que `work` termina o
+  alguien con el `Task` en la mano lo cancela — `deinit` no puede hacerlo por sí solo.
+  Reescrito el doc comment de `BaseViewModel` ("What `deinit` actually cancels") y el de
+  `LoadableViewModel` para decir con precisión qué cancela `deinit` (`bannerDismissTask`, y
+  cualquier `Task` que aún no ha llegado a `work`) y qué no (una carga/actividad
+  genuinamente en curso), y para explicar el intercambio deliberado detrás de que `work`
+  reciba el view model como parámetro en vez de capturarlo `[weak self]`: un fallo acotado
+  (el VM tarda un poco más en liberarse) elegido sobre uno permanente y silencioso (un
+  ciclo de retención por un `work` que sí captura `self`). Mismas dos correcciones en
+  `FAQ.md` y `Architecture.md`, que repetían la misma afirmación en el contexto de `let`
+  vs. `@State`.
+- **`load(_:)`/`activity(_:)` pasan a ser la API recomendada por defecto** para la carga
+  inicial de una pantalla — atan la cancelación al `Task` del llamador (`.task` de
+  SwiftUI), sin depender de `deinit`; `performLoad`/`performActivity` quedan documentadas
+  como la excepción, para cuando el punto de llamada no puede ser `async` (normalmente
+  porque pasa por `ActionHandling.handle(_:)`, síncrono por diseño) o cuando el trabajo
+  debe sobrevivir a la vista a propósito. Reordenados los métodos en
+  `LoadableViewModel.swift` (`load`/`activity` antes que `performLoad`/`performActivity`,
+  sin cambiar firmas) y las secciones equivalentes de `ScreenStateAndViewModels.md` para
+  reflejar esa jerarquía. Sin cambios de comportamiento ni de `Snippets/`.
+
+### Pruebas
+
+- **Tests de interacción para cuatro contratos de orden/conteo que ningún test existente
+  fijaba** (espías, no asserts sobre el resultado final — atrapan que alguien borre o
+  invierta una línea aunque el camino feliz siga dando el mismo resultado):
+  - `CancellationRecognizing` se consulta ANTES que `ErrorPresenting` — el contrato que el
+    propio doc de `ErrorPresenting.screenError(for:...)` promete sobre su parámetro `error`
+    ("Never a cancellation..."). Con un `ErrorPresenterSpy` y un `CancellationRecognizerSpy`
+    inyectados por `init` (nunca por `static var`, DC-AF-3), para `performLoad` Y
+    `performActivity` (esta última pasa también por `handleActivityError`): ante una
+    cancelación reconocida, el presenter no se invoca ni una vez; ante un fallo real, se
+    invoca exactamente una — cerrando a la vez el contrato de "como mucho una presentación
+    por fallo". Verificado rompiendo a propósito, en una copia fuera del repo, tanto el
+    `guard` que consulta al recognizer (en `_runLoad` y en `_runActivity`) como una
+    duplicación de la llamada al presenter (en `_runLoad` y en `handleActivityError`): los
+    cuatro tests nuevos fallan exactamente donde se esperaba, con el conteo/eventos
+    observados en el mensaje. `Tests/AppFoundationTests/BaseViewModelErrorPipelineTests.swift`.
+  - `Container.register(modules:)` aplica los módulos EN ORDEN DE ARRAY — el doc lo promete
+    dos veces ("assembles them in order", "applied in array order") y hasta ahora ningún
+    test lo comprobaba con un espía (el único test existente probaba que el último módulo
+    gana para el mismo tipo, sin observar el orden de llamada en sí). Tres tests nuevos:
+    `register(in:)` se invoca en orden de array (espía plano, no `SpyRecorder` — el método no
+    es `async`); combinado con "el último gana"; y un módulo posterior que resuelve
+    (eagerly, durante su propio registro) una dependencia que el módulo anterior registró —
+    el caso donde el orden importa de verdad, no solo por la sobreescritura de tipo.
+    Verificado invirtiendo a `modules.reversed()` en una copia fuera del repo: los tres
+    tests (más el ya existente) fallan con el orden observado real en el mensaje.
+    `Tests/AppFoundationTests/ContainerTests.swift`.
+  - La guarda de generación de `performLoad`: el doc de `inFlightLoad` promete que se limpia
+    a `nil` al terminar "unless a newer load has already replaced it by then". El test
+    existente (`newLoadCancelsInFlightLoad`) solo comprobaba que la carga superada no pisa el
+    ESTADO (`phase`); faltaba la otra mitad — que tampoco deje `inFlightLoad` en `nil`
+    mientras la carga vigente sigue en curso. Nuevo test con dos cargas controladas por
+    relojes distintos (`Task.sleep` para la superada, un `TestClock` propio para la vigente,
+    de forma que se pueda observar el instante exacto en que la superada ya terminó pero la
+    vigente sigue viva). Verificado quitando el `if self.loadGeneration == generation` en una
+    copia fuera del repo: el test falla con `inFlightLoad == nil` en el mensaje.
+    `Tests/AppFoundationTests/BaseViewModelTests.swift`.
+  - `deinit` cancela `inFlightActivity` y `bannerDismissTask` — el suite de memoria solo
+    cubría `inFlightLoad`. Se completó con el análogo exacto (mismo patrón `TestClock` +
+    `Recorder`) para `inFlightActivity`, y con un test para `bannerDismissTask` que sí aísla
+    limpiamente la línea del `deinit` (sin cancelación manual del test): la señal es
+    `TestClock.sleeperCount` volviendo a 0 tras soltar la última referencia externa.
+    Verificado comentando cada línea del `deinit` por separado en una copia fuera del repo:
+    el test de banner falla exactamente cuando se comenta su línea (`sleeperCount` se queda
+    en 1). Hallazgo honesto documentado en el propio test: para `inFlightLoad`/
+    `inFlightActivity`, `_performLoad`/`_performActivity` resuelven `self` a una variable
+    local FUERTE antes de llamar a `_runLoad`/`_runActivity`, que sigue viva mientras el
+    `Task` está suspendido dentro de `work()` — así que soltar la última referencia externa
+    nunca desaloja el VM por sí sola con la carga/actividad genuinamente en curso, y
+    `deinit` no puede llegar a ejecutarse hasta que ALGO MÁS (cancelación externa vía el
+    `Task` que el propio caller retiene, o que el trabajo termine solo) desenrolle ese marco
+    primero. Confirmado comentando también `inFlightActivity?.cancel()` del `deinit`: el
+    test nuevo (que sí cancela externamente, igual que el ya existente para `inFlightLoad`)
+    sigue en verde — no hay forma de aislar esa línea en concreto sin tocar
+    `Sources/AppFoundation`. No se tocó producción; queda como recomendación (código
+    defensivo inofensivo tal cual, salvo que el equipo quiera invertir en reestructurar
+    `_performLoad`/`_performActivity` para hacerlo observable).
+    `Tests/AppFoundationTests/BaseViewModelMemoryTests.swift`.
+
 ## [1.2.6] - 2026-09-04
 
 ### Seguridad
