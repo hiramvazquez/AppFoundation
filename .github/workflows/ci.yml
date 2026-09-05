@@ -137,18 +137,14 @@ jobs:
   # ventana de verdad y reproduce la secuencia push → push → pop, saliendo con exit != 0 si
   # el orden observado no es el esperado.
   #
-  # `continue-on-error: true` es deliberado y TEMPORAL: esta app necesita un WindowServer
-  # activo, y aunque hay buenas razones para creer que los runners `macos-15` lo tienen
-  # (el job `test` de más arriba ya arranca un simulador iOS, que también lo necesita), no
-  # se ha podido confirmar ejecutando este job de verdad en GitHub Actions — ver el
-  # encabezado de `Scripts/verify-lifecycle-contract.sh`. En cuanto confirmes en el Actions
-  # tab de un run real que este job pasa (o falla) por el motivo correcto y no por un
-  # problema de infraestructura (ventana que no llega a crearse, timeout de arranque),
-  # quita `continue-on-error` para que empiece a bloquear el merge de verdad.
+  # Confirmado en un run real (AppFoundation, 306d677, 2026-09-05): los runners `macos-15`
+  # SÍ dan WindowServer a una app con ventana que no es un target de UI tests. El job pasó
+  # por el motivo correcto — el log trae la secuencia completa, incluida la aserción de que
+  # B NO se cancela mientras está tapada — así que bloquea de verdad, sin `continue-on-error`.
+  # Un gate que no puede fallar no es un gate.
   lifecycle-contract-probe:
     name: ScreenContainer — cancela solo al eliminar, nunca al tapar (probe con ventana real)
     runs-on: macos-15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: maxim-lobanov/setup-xcode@v1
