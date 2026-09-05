@@ -6,6 +6,90 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-05
+
+### Pruebas
+
+- **`AppFoundationTestSupport` deja de publicarse sin tests propios**: `InMemoryStore` y
+  `SpyRecorder` pasan de 0 % a 100 % de líneas, `ManualClock` a 97,45 %. Es un producto
+  público que los consumidores enlazan en sus test targets, y hasta ahora solo lo
+  ejercitaban de refilón los tests de los `Examples/` — un bug en `ManualClock` habría hecho
+  pasar los tests de otras apps sin que nada se pusiera rojo. No se encontró ninguno: los
+  tres se comportan como documentan.
+- **Dos tests intermitentes de banner, corregidos.** `bannerAutoDismissesAfterItsDuration`
+  dormía 200 ms de reloj real esperando un banner de 50 ms y fallaba entre el 5 % y el 10 %
+  de las veces bajo `--parallel` con carga. Y `indefiniteBannerStaysUntilDismissed` era
+  peor: afirmaba que el banner SIGUE ahí tras esperar, así que un scheduler lento lo
+  aprobaba sin haber probado nada — verde falso, que no se detecta contando fallos. Ambos
+  usan ahora el reloj inyectado; el segundo afirma algo más fuerte y determinista (un banner
+  sin `duration` no registra NINGÚN sleeper). Diez corridas seguidas sin fallos.
+  El doc los declaraba excepción de reloj real citando PRD-AF-06, pero la herramienta
+  determinista ya existía cincuenta líneas más abajo, en `BaseViewModelClockPrecedenceTests`.
+
+### Pruebas
+
+- **`AppFoundationTestSupport` tenía 0% de cobertura propia.** Es un producto público que
+  los cuatro `Examples/*` y cualquier consumidor externo enlazan en sus test targets
+  (`InMemoryStore`, `SpyRecorder`, `ManualClock`), pero ningún test del propio paquete lo
+  ejercitaba directamente — solo indirectamente, por casualidad, según lo que cada ejemplo
+  usara. Un bug en este andamio de test no lo detectaba el CI del paquete: lo detectaría (o
+  no) un ejemplo, y en `ManualClock` eso es especialmente grave, porque un reloj de test
+  roto hace que los tests de OTRO paquete pasen cuando no deberían. 19 tests nuevos en tres
+  ficheros nuevos de `Tests/AppFoundationTests/`, cada uno verificando el contrato que
+  promete el doc comment del tipo, no lo que "parece razonable":
+  - `InMemoryStoreTests.swift` (6 tests): `values()` conserva el ORDEN DE INSERCIÓN (un
+    `Dictionary` no lo garantiza); `set(_:_:)` sobre una clave existente conserva su
+    posición original en vez de moverla al final (el propio doc lo promete: "Preserves the
+    original insertion position on replace"); `remove(_:)` borra valor y hueco de orden a
+    la vez (una clave borrada y reinsertada entra como inserción NUEVA, al final); y
+    `removeAll()` vacía ambos. Verificado rompiendo, en una copia fuera del repo: `values()`
+    devolviendo `Array(storage.values)` sin orden, `set` sin la guarda de "ya existe" (deja
+    de conservar posición), `remove` sin limpiar `insertionOrder` (una clave reinsertada
+    duplica su entrada), y `removeAll` sin vaciar `storage`. Los cinco fallan exactamente
+    donde se esperaba.
+  - `SpyRecorderTests.swift` (5 tests): orden de grabación en `calls`, `isEmpty`/`wasCalled`
+    como negación exacta, `reset()`, la variante `Call == Void` (cuenta sin argumentos), y
+    grabar concurrentemente desde 200 tareas sin perder ni duplicar ninguna — la razón de
+    ser de que sea un `actor`. Verificado rompiendo `record` para que sobrescriba en vez de
+    acumular (`calls = [call]`): rompe tanto el test de orden como el de concurrencia (200
+    llamadas colapsan en 1); y rompiendo `wasCalled`, `reset()` y la variante `Void` por
+    separado — los cinco fallan.
+  - `ManualClockTests.swift` (8 tests, el más crítico): `sleep(until:)` no resume hasta que
+    `advance(by:)` cruza la deadline; una deadline igual o anterior a `now` no se registra
+    como sleeper; `advance(by:)` solo despierta a quien está due y despierta a TODOS los
+    debidos a la vez (ninguno se pierde); cancelar el `Task` que duerme lo saca de
+    `pendingDeadlines` y lanza `CancellationError`; `pendingDeadlines` lista en ORDEN DE
+    REGISTRO, no ordenado por deadline (documentado explícitamente); `waitUntilSleeping()`
+    no vuelve hasta que hay, como mínimo, un sleeper registrado; y `Instant.duration(to:)`
+    mide hacia adelante (`self → other`), no al revés. Verificado rompiendo, en una copia
+    fuera del repo: el filtro de `advance` despertando a todos sin mirar deadline (rompe el
+    test de "no antes de tiempo"); `advance` quedándose solo con el primer due (con 3
+    sleepers due a la vez, los otros dos cuelgan el test — el modo de fallo correcto para
+    "nunca se resume", no un booleano falso); `pendingDeadlines` ordenando por deadline en
+    vez de por registro; el `onCancel` sin quitar al waiter de la lista (queda huérfano en
+    `pendingDeadlines` aunque sí lance `CancellationError`); `waitUntilSleeping()` como
+    no-op; y `duration(to:)` con la resta invertida. Los siete fallan (el de "solo el
+    primer due" cuelga el test en vez de fallar rápido, que es el fallo correcto ahí).
+
+  Deliberadamente NO se comprueba con tareas concurrentes independientes el orden de
+  EJECUCIÓN posterior a `resume()` cuando varios sleepers vencen a la vez (`advance` sí los
+  ordena por deadline internamente antes de invocar `resume()` en ese orden): confirmado
+  empíricamente que, aun forzando `@MainActor in` en las tareas, ese orden de ejecución NO
+  es determinista (~15% de las ejecuciones lo reordenaban) — Swift Concurrency no garantiza
+  que resumir continuations en un orden concreto implique que el código que sigue a cada
+  una se ejecute en ese mismo orden. Se optó por verificar en su lugar que ninguna se
+  pierde (sí determinista) y, por separado, que `pendingDeadlines` — que no depende de
+  ejecución concurrente — respeta su propio contrato documentado de orden.
+
+  Cobertura de los tres ficheros, antes → después (`llvm-cov report`, líneas):
+  `InMemoryStore.swift` 0% → 100%; `SpyRecorder.swift` 0% → 100%; `ManualClock.swift` 0% →
+  97.45% (el 2.55% restante son `minimumResolution` — constante trivial — y una rama
+  defensiva de `sleep(until:)` que solo se alcanza por una carrera real entre hilos del
+  sistema operativo en la ventana de microsegundos entre dos `withLock`, no reproducible
+  con las herramientas deterministas de test disponibles vía API pública). No se tocó
+  `Sources/AppFoundationTestSupport/`: los tres tipos ya se comportaban como documentan.
+  `Tests/AppFoundationTests/{InMemoryStore,SpyRecorder,ManualClock}Tests.swift`.
+
 ## [1.3.0] - 2026-09-05
 
 ### Añadido
