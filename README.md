@@ -8,6 +8,11 @@ y un linter que la hacen cumplir.
 
 Swift 6.2+ (swift-tools 6.2) · iOS 17+ / macOS 14+ · sin dependencias externas.
 
+Para **contribuir** hace falta algo más: las suites de test usan facilidades que no existen
+hasta **Xcode 26.2**. La librería sí compila con 26.0 —lo comprueba el CI en cada corrida—,
+así que consumirla no exige esa versión.
+
+
 ## Instalación
 
 ```swift
