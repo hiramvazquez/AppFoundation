@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 import SwiftUI
 
 // Violates ArchLint.R12: `let viewModel:` instead of `@State private var viewModel:` — a

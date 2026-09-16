@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 
 // R15: a ViewModel subclass without @Observable never notifies its own properties.
 final class R15UnobservedViewModel: BaseViewModel, ActionHandling {

@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 
 /// El `ScreenViewModel` mínimo que necesita este probe: un `BaseViewModel` real (no un
 /// doble de test) para ejercitar el mecanismo COMPLETO — `ScreenContainer` +

@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// Everything an `ErrorViewStyle` needs to render — the `ScreenError` that put the screen

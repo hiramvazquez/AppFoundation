@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 import SwiftUI
 
 /// Las dos pantallas que la secuencia push → push → pop necesita. `b` es la que se

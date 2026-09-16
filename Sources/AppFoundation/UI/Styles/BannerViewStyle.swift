@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// Everything a `BannerViewStyle` needs to render — the `BannerState` to show, and the

@@ -1,4 +1,5 @@
 #if canImport(SwiftUI) && DEBUG
+import Foundation
 import SwiftUI
 
 /// Previews para ActivityState, AlertState y BannerState. Cada caso es su propio

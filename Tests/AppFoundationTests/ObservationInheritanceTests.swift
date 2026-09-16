@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 import Observation
 import Testing
 

@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 
 // R16: a MainActor class without an explicit deinit gets a synthesized isolated one.
 @Observable

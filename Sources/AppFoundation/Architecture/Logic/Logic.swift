@@ -1,3 +1,5 @@
+import Foundation
+
 /// Marker protocol every `XxxLogic` conforms to (`ARQUITECTURA-KIT-2026-09-02.md` §1-2).
 ///
 /// `Logic` carries no requirements on purpose: the architecture this package encodes is

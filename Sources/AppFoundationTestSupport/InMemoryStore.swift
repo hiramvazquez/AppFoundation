@@ -1,3 +1,5 @@
+import Foundation
+
 /// A generic, in-memory `actor` store for testing `Logic` types that depend on a
 /// `*Storing` protocol (`ARQUITECTURA-KIT-2026-09-02.md` §1-2 — a "solo local" or
 /// "API + local" app's `Logic` takes `any XxxStoring` through `init`; its tests need a

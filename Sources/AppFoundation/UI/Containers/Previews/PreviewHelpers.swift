@@ -1,4 +1,5 @@
 #if canImport(SwiftUI) && DEBUG
+import Foundation
 import SwiftUI
 
 // MARK: - Shared sample content used across all ScreenContainer previews

@@ -1,3 +1,5 @@
+import Foundation
+
 /// An error that crosses the `Logic` → `ViewModel` boundary in the View → ViewModel →
 /// Logic → Services/Stores architecture (`ARQUITECTURA-KIT-2026-09-02.md` §8, M1).
 ///

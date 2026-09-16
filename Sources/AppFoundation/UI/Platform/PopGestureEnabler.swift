@@ -1,4 +1,5 @@
 #if canImport(SwiftUI) && os(iOS)
+import Foundation
 import SwiftUI
 import UIKit
 

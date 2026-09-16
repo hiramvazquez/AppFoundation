@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// Cross-platform color definitions that work on both iOS and macOS.

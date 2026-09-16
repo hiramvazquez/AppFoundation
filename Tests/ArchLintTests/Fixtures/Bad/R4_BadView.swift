@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 import SwiftUI
 
 // Violates ArchLint.R4: a View referencing its Logic directly (outside any #Preview/#if

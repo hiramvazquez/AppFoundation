@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// A lightweight container view that displays content based on ViewPhase without navigation.

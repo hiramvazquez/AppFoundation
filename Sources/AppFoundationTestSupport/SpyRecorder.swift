@@ -1,3 +1,5 @@
+import Foundation
+
 /// Thread-safe call recorder for hand-written spies over a `*LogicProtocol`,
 /// `*Servicing` or `*Storing` conformance (`ARQUITECTURA-KIT-2026-09-02.md` §1).
 ///

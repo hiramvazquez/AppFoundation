@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 import Observation
 import Testing
 

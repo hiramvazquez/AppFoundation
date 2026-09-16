@@ -1,3 +1,4 @@
+import Foundation
 public import Observation
 
 /// What a screen shell (`ScreenContainer`, `.screen(_:)`) needs to observe and close out

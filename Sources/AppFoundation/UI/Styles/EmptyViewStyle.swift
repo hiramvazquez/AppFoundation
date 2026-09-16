@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// Everything an `EmptyViewStyle` needs to render. Empty rendering today never needs data

@@ -1,4 +1,5 @@
 import AppFoundation
+import Foundation
 import SwiftUI
 
 // Violates ArchLint.R2: imports SwiftUI and references a *ViewModel type. Also missing its

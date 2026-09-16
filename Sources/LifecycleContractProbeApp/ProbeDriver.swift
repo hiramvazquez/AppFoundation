@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 /// Conduce la secuencia entera y decide el veredicto. Es la traducción a código de la QA

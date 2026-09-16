@@ -15,6 +15,14 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
   compilar ese target a mano—; con 6.2.4 es error y tumbaba el build del paquete. Vuelve a
   ser un import interno, que es lo que era. La librería que consume un tercero no estaba
   afectada: falla el target ejecutable de la sonda, no el producto `AppFoundation`.
+- **Todo el paquete importa Foundation explícitamente** (49 ficheros de `Sources/` y
+  `Tests/` que no lo hacían). No es celo: `MemberImportVisibility`, que activó la 1.4.0,
+  rechaza usar un miembro de un módulo que el fichero no importa, y con Swift 6.2.4 —el
+  toolchain del CI— eso incluye `init(stringLiteral:)` de `LocalizedStringResource`. Ese
+  caso NO se puede encontrar leyendo el código: nace de un literal de cadena, así que el
+  nombre del tipo no aparece por ninguna parte. Se persiguió fichero a fichero dos veces y
+  dos veces se escapó alguno; la regla —cada fichero importa lo que usa, sin depender de
+  quién lo reexporte— es la única que cierra la clase entera.
 - **Cuatro ficheros que usan Foundation ya lo importan.** `DomainErrorTests`,
   `READMEExamplesTests`, `ScreenContainer` y `NavigationBarItem` usaban
   `LocalizedStringResource` o `URL` sin `import Foundation`. Con 6.4 se resuelven por

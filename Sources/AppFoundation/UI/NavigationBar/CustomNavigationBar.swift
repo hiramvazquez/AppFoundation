@@ -9,6 +9,7 @@
 //
 
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// A custom navigation bar — opt-in replacement for the native iOS navigation bar.

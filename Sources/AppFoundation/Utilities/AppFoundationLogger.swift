@@ -1,3 +1,4 @@
+import Foundation
 import os
 
 /// Internal logging used by AppFoundation, backed by `os.Logger`.

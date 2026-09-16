@@ -1,3 +1,5 @@
+import Foundation
+
 /// AppFoundation — a single-package foundation for SwiftUI apps.
 ///
 /// AppFoundation bundles the pieces most greenfield apps need from day one:

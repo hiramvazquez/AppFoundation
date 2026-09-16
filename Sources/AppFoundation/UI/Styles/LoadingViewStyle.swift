@@ -1,4 +1,5 @@
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 /// Everything a `LoadingViewStyle` needs to render — the `ActivityStyle` that produced it

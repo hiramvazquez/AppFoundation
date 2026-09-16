@@ -6,6 +6,7 @@
 // nada y que nadie invoca allí.
 #if os(macOS)
 
+import Foundation
 import AppKit
 import SwiftUI
 

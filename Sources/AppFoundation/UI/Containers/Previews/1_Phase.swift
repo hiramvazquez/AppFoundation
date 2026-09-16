@@ -1,4 +1,5 @@
 #if canImport(SwiftUI) && DEBUG
+import Foundation
 import SwiftUI
 
 /// Previews para cada estado de ViewPhase + LoadingStyle.
