@@ -1,4 +1,4 @@
-public import Observation
+import Observation
 
 /// Conduce la secuencia entera y decide el veredicto. Es la traducción a código de la QA
 /// manual documentada en `ScreenContainerCancellationTests.swift`:
