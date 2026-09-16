@@ -209,8 +209,11 @@ Los ejemplos de DocC están sincronizados con `Snippets/` por CI (`Scripts/check
 
 ## El toolchain que manda no es el tuyo
 
-El CI valida este paquete con **Xcode 26.0.1 (el mínimo que prometen los README) y con
-26.3**, fijados en `.github/workflows/ci.yml`. Quien desarrolla suele ir por delante
+El CI **del monorepo `spm-pro`**, que es de donde sale el `subtree split` que publica este
+paquete, lo valida con tres versiones fijas: **26.0.1** (compila la librería: el mínimo que
+prometen los README), **26.2** (ejecuta las suites de test) y **26.3** (el resto de la
+matriz). Ojo: el `ci.yml` que viaja DENTRO de este paquete es otro y todavía no hace esto.
+Quien desarrolla suele ir por delante
 —hoy Xcode 27 / Swift 6.4—, y eso NO es equivalente: **una verificación local en verde no
 prueba compatibilidad con el mínimo soportado**.
 
