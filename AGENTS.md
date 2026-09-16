@@ -206,3 +206,19 @@ ejemplos que compilan (`Snippets/`), y [AppStarter](https://github.com/hiramvazq
 — app real sobre DummyJSON con ambos paquetes, plantilla de arranque.
 
 Los ejemplos de DocC están sincronizados con `Snippets/` por CI (`Scripts/check-doc-snippets.sh`, job `docs`).
+
+## El toolchain que manda no es el tuyo
+
+El CI valida este paquete con **Xcode 26.0.1 (el mínimo que prometen los README) y con
+26.3**, fijados en `.github/workflows/ci.yml`. Quien desarrolla suele ir por delante
+—hoy Xcode 27 / Swift 6.4—, y eso NO es equivalente: **una verificación local en verde no
+prueba compatibilidad con el mínimo soportado**.
+
+Medido el 2026-09-16, y por eso está escrito aquí: Swift 6.4 no emite los diagnósticos de
+`MemberImportVisibility` que sí emite 6.2.4, y no hay forma de reproducir 6.2.4 en una
+máquina con el SDK de macOS 27 (ni instalando el toolchain suelto: no compila). Ignorarlo
+costó dos versiones publicadas con el CI en rojo y tres rondas para cerrarlo.
+
+La consecuencia práctica, para no repetirlo: **cada fichero importa lo que usa**, sin
+apoyarse en que otro módulo lo reexporte. Es lo que pide `MemberImportVisibility`, y es
+invisible en 6.4 — no lo vas a ver fallar aquí.
