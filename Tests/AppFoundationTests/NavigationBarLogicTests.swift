@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import Testing
+import Foundation
 
 @testable import AppFoundation
 

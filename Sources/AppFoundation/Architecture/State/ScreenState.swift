@@ -1,4 +1,4 @@
-import Observation
+public import Observation
 
 /// What a screen shell (`ScreenContainer`, `.screen(_:)`) needs to observe and close out
 /// (AF-05, `AUDITORIA-2026-09-01.md` — decisión del propietario). Before this protocol

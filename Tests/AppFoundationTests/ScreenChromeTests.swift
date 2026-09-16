@@ -1,5 +1,6 @@
 #if canImport(SwiftUI)
 import Testing
+import Foundation
 @testable import AppFoundation
 
 // MARK: - AF-12/AF-13: native chrome by default, hidden bar is opt-in only

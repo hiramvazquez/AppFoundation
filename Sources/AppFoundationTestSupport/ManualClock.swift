@@ -46,7 +46,7 @@ public final class ManualClock: Clock, @unchecked Sendable {
     private struct Waiter {
         let id: Int
         let deadline: Instant
-        let continuation: CheckedContinuation<Void, Error>
+        let continuation: CheckedContinuation<Void, any Error>
     }
 
     private struct State {
@@ -96,7 +96,7 @@ public final class ManualClock: Clock, @unchecked Sendable {
                 for watcher in watchersToWake { watcher.resume() }
             }
         } onCancel: {
-            let cancelled = state.withLock { s -> CheckedContinuation<Void, Error>? in
+            let cancelled = state.withLock { s -> CheckedContinuation<Void, any Error>? in
                 guard let index = s.waiters.firstIndex(where: { $0.id == id }) else { return nil }
                 return s.waiters.remove(at: index).continuation
             }

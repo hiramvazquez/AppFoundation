@@ -44,7 +44,7 @@ private enum READMEProjectFlowExamples {
     final class ProfileViewModel: BaseViewModel, ActionHandling {
         private(set) var profile: Profile?
 
-        private let repository: ProfileRepository
+        private let repository: any ProfileRepository
         private let router: any Router<AppRoute>
 
         /// Every gesture this screen recognizes (AF-05) — `handle(_:)` is the only method
@@ -56,7 +56,7 @@ private enum READMEProjectFlowExamples {
         }
 
         init(
-            repository: ProfileRepository,
+            repository: any ProfileRepository,
             router: any Router<AppRoute>
         ) {
             self.repository = repository

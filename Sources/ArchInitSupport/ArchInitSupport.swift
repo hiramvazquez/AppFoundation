@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Pure, side-effect-free content builders for `archinit --multi` (PRD-AF-10) — the
 /// generated `Package.swift`/`.archlint.yml`/`AGENTS.md` fragments, string manipulation,

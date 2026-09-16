@@ -74,9 +74,9 @@ struct ContainerTests {
 
     @Test func registerInstanceAsProtocolResolvesTheAbstraction() {
         let instance = MockService(name: "Abstract")
-        container.register(instance: instance, as: TestService.self)
+        container.register(instance: instance, as: (any TestService).self)
 
-        let resolved: TestService = container.resolve()
+        let resolved: any TestService = container.resolve()
         #expect(resolved === instance)
         #expect(!container.canResolve(MockService.self))
     }

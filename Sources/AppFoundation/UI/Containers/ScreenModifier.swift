@@ -1,5 +1,5 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 
 public extension View {
     /// Wraps `self` with `ScreenContainer`'s chrome/phase/activity/alert/banner rendering

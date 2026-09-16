@@ -1,5 +1,5 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 
 /// The ONE place in this package where `AnyView` is used (AF-15/AF-16).
 ///

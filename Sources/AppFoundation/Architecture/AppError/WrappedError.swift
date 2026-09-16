@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// A wrapper that preserves the original error while adding context.
 ///
@@ -52,7 +52,7 @@ import Foundation
 /// ``underlying``, ``context``, ``rootCause``, and ``contextChain`` directly.
 public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible {
     /// The original error that was caught.
-    public let underlying: Error
+    public let underlying: any Error
 
     /// Human-readable context describing what operation failed.
     public let context: String
@@ -86,7 +86,7 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
     ///   - now: Clock used to stamp `timestamp`. Injectable for deterministic tests;
     ///     defaults to `Date.init`.
     public init(
-        underlying: Error,
+        underlying: any Error,
         context: String,
         code: String? = nil,
         file: String = #fileID,
@@ -141,8 +141,8 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
     }
 
     /// The root cause error, unwrapping any nested WrappedErrors.
-    public var rootCause: Error {
-        var current: Error = underlying
+    public var rootCause: any Error {
+        var current: any Error = underlying
         while let wrapped = current as? WrappedError {
             current = wrapped.underlying
         }
@@ -152,7 +152,7 @@ public nonisolated struct WrappedError: Error, Sendable, CustomStringConvertible
     /// Chain of contexts from outermost to innermost.
     public var contextChain: [String] {
         var chain = [context]
-        var current: Error = underlying
+        var current: any Error = underlying
         while let wrapped = current as? WrappedError {
             chain.append(wrapped.context)
             current = wrapped.underlying
@@ -200,7 +200,7 @@ nonisolated extension WrappedError: CustomDebugStringConvertible {
         var desc = description
 
         // Unwrap nested WrappedErrors
-        var current: Error = underlying
+        var current: any Error = underlying
         var depth = 1
         while let wrapped = current as? WrappedError {
             desc += "\n  Nested[\(depth)]: \(wrapped.context)"
@@ -241,7 +241,7 @@ nonisolated extension WrappedError: LocalizedError {
     /// Unlike `localizedDescription`, this isn't raw internal text: it's a recovery message
     /// the underlying error's own author deliberately wrote for display. Safe to forward as-is.
     public var recoverySuggestion: String? {
-        (underlying as? LocalizedError)?.recoverySuggestion
+        (underlying as? any LocalizedError)?.recoverySuggestion
     }
 }
 

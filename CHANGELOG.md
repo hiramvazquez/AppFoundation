@@ -4,6 +4,34 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el versionado,
 [SemVer](https://semver.org/lang/es/).
 
+## [1.4.0] - 2026-09-15
+
+### Cambiado
+
+- **Las seis upcoming features con baseline Swift 7 quedan activadas** (faltaban
+  `ExistentialAny`, `InternalImportsByDefault`, `MemberImportVisibility` e
+  `ImmutableWeakCaptures`). El criterio no es una lista a ojo: sale de preguntárselo al
+  compilador con `swiftc -print-supported-features`, que en Swift 6.4 declara 21 features
+  upcoming, seis de ellas con baseline 7. Activarlas ahora es hacer la migración a Swift 7
+  un día tranquilo en vez del día en que el toolchain no deje otra opción. `archlint`, que
+  no lleva las de concurrencia por ser una herramienta síncrona de línea de comandos, sí
+  lleva las otras cuatro: también tendrá que compilar con el 7.
+- **`public import` donde la API pública expone tipos de otro módulo.** Es el efecto de
+  `InternalImportsByDefault`: el compilador obliga a declarar qué módulos viajan en la
+  superficie pública, y ahora está escrito en cada fichero —`Foundation` en los tipos de
+  estado y navegación, `SwiftUI` en los estilos, `Observation` donde hay `@Observable`—.
+  No es un cambio de API: `public import` ensancha visibilidad, no la estrecha, y los
+  cuatro ejemplos del paquete compilan sin tocar una línea.
+- **Existenciales escritos con `any`.** Mismo tipo, distinta escritura; obligatorio en
+  Swift 7.
+- **Las plantillas de `generate-feature` emiten `any Error`** en `CrashReporting` y su
+  adaptador de Firebase. El código que este paquete GENERA también tiene que compilar en un
+  proyecto con `ExistentialAny` activado, y no lo hacía.
+
+Verificado con Xcode 27 en modo estricto: 365 tests en 50 suites, más las suites de
+ArchLint, generador y ejemplos; `verify-generator.sh`, `check-doc-snippets.sh` y
+`verify-lifecycle-contract.sh` en verde, y los cuatro ejemplos compilando.
+
 ## [1.3.2] - 2026-09-15
 
 ### Cambiado

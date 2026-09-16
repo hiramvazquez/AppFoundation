@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Represents the current phase of a view's lifecycle and data loading state.
 ///

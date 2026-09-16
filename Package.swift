@@ -21,10 +21,17 @@ import PackageDescription
 // paquete) esta encendido; para quien lo consume, ausente.
 let modoEstricto = Context.environment["SWIFT_STRICT_WARNINGS"] != nil
 
+// Las upcoming features cuyo baseline es Swift 7: las que el language mode 6 NO subsume
+// todavía y serán obligatorias en el 7. El criterio no es una lista a ojo — sale de
+// preguntárselo al compilador: `swiftc -print-supported-features`.
 var swiftSettings: [SwiftSetting] = [
     .defaultIsolation(MainActor.self),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    .enableUpcomingFeature("NonisolatedNonsendingByDefault")
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("ImmutableWeakCaptures")
 ]
 
 if modoEstricto {
@@ -38,8 +45,15 @@ if modoEstricto {
 
 // `archlint` (PRD-AF-08) es una herramienta de línea de comandos, no una app: no necesita
 // `defaultIsolation(MainActor)` ni los upcoming features de concurrencia del resto del
-// paquete — es puro análisis léxico síncrono. Mismo `-warnings-as-errors` en modo estricto.
-var toolSwiftSettings: [SwiftSetting] = []
+// paquete — es puro análisis léxico síncrono. Las de baseline Swift 7 que NO son de
+// concurrencia sí las lleva: también tendrá que compilar el día que el 7 sea obligatorio.
+// Mismo `-warnings-as-errors` en modo estricto.
+var toolSwiftSettings: [SwiftSetting] = [
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("ImmutableWeakCaptures")
+]
 if modoEstricto {
     toolSwiftSettings.append(.treatAllWarnings(as: .error))
 }

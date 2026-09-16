@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// The single entry point for a screen's user actions (AF-05,
 /// `AUDITORIA-2026-09-01.md` — decisión del propietario). A view model conforms to

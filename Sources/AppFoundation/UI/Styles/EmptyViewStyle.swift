@@ -1,5 +1,5 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 
 /// Everything an `EmptyViewStyle` needs to render. Empty rendering today never needs data
 /// beyond "we're in the empty phase" — this struct exists so a future need (e.g. a

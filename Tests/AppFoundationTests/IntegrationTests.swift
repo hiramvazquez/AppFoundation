@@ -30,7 +30,7 @@ struct IntegrationTests {
 
     final class TestViewModel: BaseViewModel, ActionHandling {
         let router: any Router<TestRoute>
-        let dataService: DataService
+        let dataService: any DataService
 
         /// AF-05: the single entry point a view — or a test standing in for one — uses.
         enum Action: Sendable {
@@ -38,7 +38,7 @@ struct IntegrationTests {
             case navigateToDetail(id: Int)
         }
 
-        init(router: any Router<TestRoute>, dataService: DataService) {
+        init(router: any Router<TestRoute>, dataService: any DataService) {
             self.router = router
             self.dataService = dataService
             super.init()
@@ -88,15 +88,15 @@ struct IntegrationTests {
 
     @Test func moduleAssemblyRegistersFeatureService() {
         final class TestFeatureModule: DependencyModule {
-            let dataService: DataService
-            init(dataService: DataService) { self.dataService = dataService }
+            let dataService: any DataService
+            init(dataService: any DataService) { self.dataService = dataService }
             func register(in container: Container) {
                 container.register(instance: self.dataService)
             }
         }
 
         container.register(modules: [TestFeatureModule(dataService: dataService)])
-        let resolved: DataService = container.resolve()
+        let resolved: any DataService = container.resolve()
         #expect(resolved === dataService)
     }
 

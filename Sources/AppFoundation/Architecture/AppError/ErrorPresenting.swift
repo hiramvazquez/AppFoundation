@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Maps any thrown error to the `ScreenError` shown to the user.
 ///
@@ -53,12 +54,12 @@ public struct DefaultErrorPresenter: ErrorPresenting {
     public init() {}
 
     public func screenError(for error: any Error, fallbackTitle: String, retry: Action?) -> ScreenError {
-        if let convertible = error as? AppErrorConvertible {
+        if let convertible = error as? any AppErrorConvertible {
             let base = convertible.screenError
             return ScreenError(title: base.title, message: base.message, retry: retry ?? base.retry)
         }
 
-        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+        if let localized = error as? any LocalizedError, let description = localized.errorDescription {
             return ScreenError(title: fallbackTitle, message: description, retry: retry)
         }
 

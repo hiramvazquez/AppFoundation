@@ -1,5 +1,5 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 
 /// Everything a `BannerViewStyle` needs to render — the `BannerState` to show, and the
 /// action that dismisses it (tap-to-dismiss, a close button, or the auto-dismiss timer's

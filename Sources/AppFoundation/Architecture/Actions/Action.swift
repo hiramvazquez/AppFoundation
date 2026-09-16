@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Closure safe to execute on the main actor across concurrency boundaries.
 ///

@@ -28,13 +28,13 @@ final class LiveProfileRepository: ProfileRepository {
 }
 
 final class ProfileSyncService {
-    let repository: ProfileRepository
-    init(repository: ProfileRepository) { self.repository = repository }
+    let repository: any ProfileRepository
+    init(repository: any ProfileRepository) { self.repository = repository }
 }
 
 struct ProfileModule: DependencyModule {
     func register(in container: Container) {
-        container.register(ProfileRepository.self) { _ in LiveProfileRepository() }
+        container.register((any ProfileRepository).self) { _ in LiveProfileRepository() }
         // The factory receives the container it was registered in: resolve dependencies
         // from it, never from a global.
         container.register(ProfileSyncService.self) { c in
@@ -67,9 +67,9 @@ final class CheckoutCart {
 
 final class CheckoutViewModel: BaseViewModel {
     let cart: CheckoutCart
-    let repository: ProfileRepository
+    let repository: any ProfileRepository
 
-    init(cart: CheckoutCart, repository: ProfileRepository) {
+    init(cart: CheckoutCart, repository: any ProfileRepository) {
         self.cart = cart
         self.repository = repository
         super.init()
@@ -98,7 +98,7 @@ struct NoopAnalytics: AnalyticsService {
 }
 
 extension EnvironmentValues {
-    @Entry var analytics: AnalyticsService = NoopAnalytics()
+    @Entry var analytics: any AnalyticsService = NoopAnalytics()
 }
 
 struct ProfileView: View {
@@ -117,7 +117,7 @@ struct RootView: View {
 }
 
 final class AnalyticsAdapter {
-    @Inject private var analytics: AnalyticsService
+    @Inject private var analytics: any AnalyticsService
 
     func track(_ event: String) {
         analytics.log(event)
@@ -132,7 +132,7 @@ struct ReadmeDIExamplesTests {
         let container = Container()
         container.register(modules: [ProfileModule()])
 
-        let repository: ProfileRepository = container.resolve()
+        let repository: any ProfileRepository = container.resolve()
         let sync: ProfileSyncService = container.resolve()
         #expect(repository is LiveProfileRepository)
         // `ProfileRepository` is not class-constrained; compare through the concrete
@@ -145,10 +145,10 @@ struct ReadmeDIExamplesTests {
         app.register(modules: [ProfileModule()])
 
         let container = Container(parent: app)
-        container.register(instance: MockProfileRepository(), as: ProfileRepository.self)
+        container.register(instance: MockProfileRepository(), as: (any ProfileRepository).self)
 
-        let mocked: ProfileRepository = container.resolve()
-        let live: ProfileRepository = app.resolve()
+        let mocked: any ProfileRepository = container.resolve()
+        let live: any ProfileRepository = app.resolve()
         #expect(try await mocked.fetchProfile().name == "Mock")
         #expect(try await live.fetchProfile().name == "Hiram")
     }
@@ -169,9 +169,9 @@ struct ReadmeDIExamplesTests {
 
     @Test func environmentDefaultAndInjectLeafBothCompileAgainstTheSameProtocol() {
         let container = Container()
-        container.register(instance: NoopAnalytics(), as: AnalyticsService.self)
+        container.register(instance: NoopAnalytics(), as: (any AnalyticsService).self)
 
-        let analytics: AnalyticsService = container.resolve()
+        let analytics: any AnalyticsService = container.resolve()
         #expect(analytics is NoopAnalytics)
         #expect(EnvironmentValues().analytics is NoopAnalytics)
         _ = AnalyticsAdapter()

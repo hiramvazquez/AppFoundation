@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Which layer a file belongs to, decided purely from its name/path — the same convention
 /// the generator writes: `XxxViewModel.swift`,

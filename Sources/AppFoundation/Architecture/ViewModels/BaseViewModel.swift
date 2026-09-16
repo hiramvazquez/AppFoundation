@@ -1,5 +1,5 @@
-import Foundation
-import Observation
+public import Foundation
+public import Observation
 
 /// Controls how `performLoad` should finish after the async work succeeds.
 public nonisolated enum LoadSuccessTransition: Equatable, Sendable {
@@ -470,7 +470,7 @@ open class BaseViewModel {
     ///
     /// Consults `errorPresenter` so domain errors surface their user-facing message in
     /// banners and alerts too, exactly like `performLoad`.
-    open func handleActivityError(_ error: Error, strategy: ActivityErrorHandling) {
+    open func handleActivityError(_ error: any Error, strategy: ActivityErrorHandling) {
         let screenError = presenter.screenError(for: error, fallbackTitle: L10n.error, retry: nil)
         switch strategy {
         case .banner:

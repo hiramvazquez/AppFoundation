@@ -5,6 +5,6 @@ import Foundation
 /// directly — `FirebaseAdapters` is the ONLY module allowed to `import Firebase*`
 /// (`.archlint.yml`, R13).
 public protocol CrashReporting: Sendable {
-    func record(error: Error)
+    func record(error: any Error)
     func log(_ message: String)
 }

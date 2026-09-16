@@ -28,7 +28,7 @@ public struct FirebaseAnalyticsTracker: AnalyticsTracking {
 public struct FirebaseCrashReporter: CrashReporting {
     public init() {}
 
-    public func record(error: Error) {
+    public func record(error: any Error) {
         #if canImport(FirebaseCrashlytics)
         Crashlytics.crashlytics().record(error: error)
         #endif

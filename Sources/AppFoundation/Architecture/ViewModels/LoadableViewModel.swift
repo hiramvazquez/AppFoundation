@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Adds `performLoad`/`performActivity`/`load`/`activity` to `BaseViewModel` subclasses.
 ///

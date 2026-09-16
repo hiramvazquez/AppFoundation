@@ -37,7 +37,7 @@ public extension Container {
     /// entry point.
     ///
     /// - Parameter modules: Modules to register, applied in array order.
-    func register(modules: [DependencyModule]) {
+    func register(modules: [any DependencyModule]) {
         for module in modules {
             module.register(in: self)
         }

@@ -6,7 +6,7 @@
 //  map it to a navigation action, and let the coordinator apply it.
 //
 
-import Foundation
+public import Foundation
 
 /// Protocol for defining deep link types in your app.
 ///

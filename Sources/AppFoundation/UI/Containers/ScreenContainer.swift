@@ -1,6 +1,7 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 import Accessibility
+public import Observation
 
 /// Defines where the custom navigation bar is rendered relative to screen content.
 /// Only meaningful for `ScreenChrome.custom` — `.native` chrome has no notion of placement,

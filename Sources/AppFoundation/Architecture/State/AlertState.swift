@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Represents an alert dialog that requires user interaction.
 ///

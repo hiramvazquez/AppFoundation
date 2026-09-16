@@ -1,5 +1,5 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 
 /// Everything a `LoadingViewStyle` needs to render — the `ActivityStyle` that produced it
 /// (`.fullScreen`, `.overlay`, or `.inline`), so one style can adapt its presentation to

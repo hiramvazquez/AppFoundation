@@ -1,5 +1,5 @@
 #if canImport(SwiftUI)
-import SwiftUI
+public import SwiftUI
 
 /// Everything an `ErrorViewStyle` needs to render — the `ScreenError` that put the screen
 /// in `.error`, including its optional retry action.

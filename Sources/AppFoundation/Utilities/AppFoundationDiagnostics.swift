@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Development-time diagnostics for work that AppFoundation would otherwise drop
 /// silently (PRD-X-05, A7).
