@@ -6,6 +6,7 @@
 //
 
 #if canImport(SwiftUI)
+import Foundation
 public import SwiftUI
 
 // MARK: - Navigation Bar Item
