@@ -4,6 +4,26 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el versionado,
 [SemVer](https://semver.org/lang/es/).
 
+## [1.4.1] - 2026-09-16
+
+### Corregido
+
+- **El paquete vuelve a compilar entero con Swift 6.2.4 (Xcode 26.3), el toolchain del CI.**
+  En la 1.4.0, `LifecycleContractProbeApp/ProbeDriver.swift` quedó con un
+  `public import Observation` que no se usa en API pública. Con Swift 6.4 no hay diagnóstico
+  —comprobado reintroduciendo el fallo: no lo ven `swift build`, ni `--build-tests`, ni
+  compilar ese target a mano—; con 6.2.4 es error y tumbaba el build del paquete. Vuelve a
+  ser un import interno, que es lo que era. La librería que consume un tercero no estaba
+  afectada: falla el target ejecutable de la sonda, no el producto `AppFoundation`.
+- **Cuatro ficheros que usan Foundation ya lo importan.** `DomainErrorTests`,
+  `READMEExamplesTests`, `ScreenContainer` y `NavigationBarItem` usaban
+  `LocalizedStringResource` o `URL` sin `import Foundation`. Con 6.4 se resuelven por
+  reexportación de SwiftUI; con 6.2.4, `MemberImportVisibility` —que la 1.4.0 activó— los
+  rechaza. La regla que se aplica ahora es la que esa feature pide: todo fichero que use un
+  símbolo importa su módulo, sin depender de quién lo reexporte.
+- **Formato**: los dos imports que la 1.4.0 añadió en `GenerateFeatureSupportTests` quedaron
+  fuera de orden lexicográfico y rompían `swift format lint --strict`.
+
 ## [1.4.0] - 2026-09-15
 
 ### Cambiado
