@@ -28,7 +28,7 @@ final class NoteRecord {
 
 /// Local persistence for notes. `NotesLogic` depends on this protocol through `init` —
 /// never on `SwiftDataNotesStore` directly (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 3).
-public protocol NotesStoring: Sendable {
+public nonisolated protocol NotesStoring: Sendable {
     func fetchAll() async throws -> [Note]
     func save(_ note: Note) async throws
     func delete(_ id: UUID) async throws

@@ -4,7 +4,45 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el versionado,
 [SemVer](https://semver.org/lang/es/).
 
-## [Unreleased]
+## [1.3.2] - 2026-09-15
+
+### Cambiado
+
+- **`DomainError` y su `extension` se declaran `nonisolated`.** Desde Swift 6.4, un paquete
+  que consume este con `defaultIsolation(MainActor)` declara sus enums de error aislados al
+  main actor, y su conformidad se rechaza con `conformance ... crosses into main
+  actor-isolated code and can cause data races`. Anotar solo el protocolo no basta —medido—:
+  el testigo por defecto `isRetryable` vuelve a entrar por la `extension` y el consumidor
+  sigue sin compilar. Con los dos anotados, ningún consumidor necesita anotar sus propios
+  tipos de error; sin esto, el arreglo eran ocho anotaciones en cada app.
+- **Las plantillas del generador emiten `public nonisolated protocol {{Feature}}Servicing` y
+  `{{Feature}}Storing`.** Sus dobles de test son `actor`, así que con Swift 6.4 cada feature
+  recién generada nacía rota con `actor 'X' cannot conform to global-actor-isolated protocol
+  'Y'`.
+- **Los cuatro `Examples` migran a Swift 6.4.** Siete protocolos con conformante `actor`
+  —`SessionStoring`, `SessionExpiring`, `LoginServicing`, `CatalogServicing`,
+  `CatalogStoring`, `NotesStoring` y `NotesSettingsStoring`— pasan a `nonisolated`, y
+  `AppSessionState.sessionDidExpire()` pasa a `nonisolated` con el salto al main actor
+  explícito: lo llama el camino de fallo de `TokenRefreshRetrier`, que no está en el main
+  actor, y desde 6.4 el testigo de un requisito `nonisolated` no puede estarlo. El estado que
+  muta sigue en el main actor, en un método privado.
+
+### Corregido
+
+- **La sonda de R1 de `Scripts/verify-generator.sh` vuelve a medir lo que dice.** El `let`
+  opcional que inyecta necesitaba `= nil`: sin valor inicial la clase se queda sin
+  inicializador y el compilador corta con `class 'LoginViewModel' has no initializers` antes
+  de que `ArchitectureLint` llegue a emitir su diagnóstico, así que la sonda dejaba de medir
+  R1 para medir un error de compilación cualquiera.
+
+### Verificado con Xcode 27 (Swift 6.4)
+
+- `SWIFT_STRICT_WARNINGS=1 swift build --build-tests` limpio y `swift test --parallel` con
+  **365 tests en 50 suites** en verde.
+- Los cuatro ejemplos compilan con sus tests: 15, 6, 14 y 17 tests.
+- `Scripts/verify-generator.sh` entero en verde, incluido el modo multi.
+- `swift format lint --strict --recursive Sources Tests Examples Plugins Snippets`, limpio.
+
 
 ### Pruebas
 

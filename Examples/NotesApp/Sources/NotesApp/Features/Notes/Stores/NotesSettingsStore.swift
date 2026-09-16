@@ -7,7 +7,7 @@ import Foundation
 /// persistence mechanism than `Stores/NotesStore.swift`, so it gets its own `*Storing`
 /// protocol and its own implementation (same rule, M3 in `AGENTS.md` — a Store is the ONLY
 /// place that touches a given mechanism — applied to `UserDefaults` this time).
-public protocol NotesSettingsStoring: Sendable {
+public nonisolated protocol NotesSettingsStoring: Sendable {
     /// `true` sorts `NotesLogic.loadNotes()` oldest-first; `false` (the default, nothing
     /// set yet) keeps `NotesStoring`'s own newest-first order.
     func sortOldestFirst() async -> Bool

@@ -25,7 +25,7 @@ final class ItemRecord {
 /// The local cache `CatalogLogic.cached()`/`refresh()` reads and writes.
 /// `CatalogLogic` depends on this protocol through `init` — never on
 /// `SwiftDataCatalogStore` directly (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 3).
-public protocol CatalogStoring: Sendable {
+public nonisolated protocol CatalogStoring: Sendable {
     func fetchAll() async throws -> [Item]
 
     /// Replaces the ENTIRE cache with `items` — the catalog is a full snapshot from the

@@ -33,7 +33,7 @@ public final class {{Feature}}Record {
 /// Persistencia local para este feature. `{{Feature}}Logic` depende de este protocolo a
 /// través de `init` — nunca de `SwiftData{{Feature}}Store` directamente
 ///.
-public protocol {{Feature}}Storing: Sendable {
+public nonisolated protocol {{Feature}}Storing: Sendable {
     func fetchAll() async throws -> [{{Feature}}Item]
 {{#both}}
 

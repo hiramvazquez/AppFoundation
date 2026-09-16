@@ -182,9 +182,14 @@ import sys
 path = sys.argv[1]
 text = open(path).read()
 text = text.replace("import AppFoundation\n", "import AppFoundation\nimport CoreNetworking\n", 1)
+# `= nil` no es decoración: sin valor inicial, un `let` opcional deja la clase sin
+# inicializador y el compilador corta con "class 'LoginViewModel' has no initializers"
+# ANTES de que ArchitectureLint llegue a emitir su diagnóstico — la sonda dejaría de medir
+# R1 para medir un error de compilación cualquiera. La violación es el `import
+# CoreNetworking` y el `APIService` en un ViewModel, no que el código no compile.
 text = text.replace(
     "public private(set) var items: [LoginItem] = []",
-    "public private(set) var items: [LoginItem] = []\n    private let api: APIService?",
+    "public private(set) var items: [LoginItem] = []\n    private let api: APIService? = nil",
     1
 )
 open(path, "w").write(text)

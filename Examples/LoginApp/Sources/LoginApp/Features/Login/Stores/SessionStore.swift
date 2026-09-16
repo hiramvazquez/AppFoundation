@@ -9,7 +9,7 @@ import Foundation
 /// A real app persists this in Keychain instead of memory; the protocol is the same
 /// shape either way — only this file (and `InMemorySessionStore`/the eventual Keychain
 /// implementation) ever touches the concrete storage.
-public protocol SessionStoring: Sendable {
+public nonisolated protocol SessionStoring: Sendable {
     /// The current bearer token, or `nil` when signed out.
     func currentToken() async -> String?
 

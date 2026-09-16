@@ -129,7 +129,7 @@ public protocol {{Feature}}LogicProtocol: Logic {
 // {{Feature}}Logic compile. Dale una conformidad concreta y regístrala en {{Feature}}Module
 // (ver su // TODO), o vuelve a generar con --service-from <FeatureExistente> para reutilizar
 // un Servicing real en su lugar.
-public protocol {{Feature}}Servicing: Sendable {
+public nonisolated protocol {{Feature}}Servicing: Sendable {
     func fetchItems() async throws(APIError) -> [{{Feature}}Item]
 }
 {{/noService}}
@@ -141,7 +141,7 @@ public protocol {{Feature}}Servicing: Sendable {
 // {{Feature}}Logic compile. Dale una conformidad concreta y regístrala en {{Feature}}Module
 // (ver su // TODO), o vuelve a generar con --store-from <FeatureExistente> para reutilizar
 // un Storing real en su lugar.
-public protocol {{Feature}}Storing: Sendable {
+public nonisolated protocol {{Feature}}Storing: Sendable {
     func fetchAll() async throws -> [{{Feature}}Item]
 
     func save(_ item: {{Feature}}Item) async throws

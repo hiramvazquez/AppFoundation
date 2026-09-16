@@ -55,14 +55,24 @@
 /// `Sendable`, like `AppErrorConvertible`'s own `Error` requirement expects in this
 /// package's `@MainActor`-heavy call sites: a `DomainError` crosses from a `nonisolated`
 /// `Logic` method back to a `@MainActor` `ViewModel`.
-public protocol DomainError: Error, AppErrorConvertible, Sendable {
+///
+/// `nonisolated`, like `AppErrorConvertible` and `ScreenError` alongside it:
+/// this package builds with `defaultIsolation(MainActor)`, so without the annotation the
+/// protocol is isolated to the main actor and the `Logic` half of that crossing can't
+/// conform. A toolchain that enforces `InferIsolatedConformances` (Swift 6.4 onwards) then
+/// rejects every consumer's `XxxError: DomainError` with `conformance ... crosses into main
+/// actor-isolated code`.
+public nonisolated protocol DomainError: Error, AppErrorConvertible, Sendable {
     /// Whether retrying the operation that threw this error may succeed. Doesn't attach a
     /// retry action by itself — a presenter reads it to decide whether to offer one, since
     /// `AppErrorConvertible.screenError` alone has no closure to attach.
     var isRetryable: Bool { get }
 }
 
-extension DomainError {
+/// `nonisolated` for the same reason the protocol is: an unannotated extension puts the
+/// default `isRetryable` back on the main actor, and a conformer reading it from
+/// `nonisolated` code fails to build even though the protocol itself is fine.
+nonisolated extension DomainError {
     /// Conservative default: an error a feature doesn't override this for is treated as
     /// not worth retrying blindly.
     public var isRetryable: Bool { false }

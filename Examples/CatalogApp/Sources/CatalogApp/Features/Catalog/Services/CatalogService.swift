@@ -25,7 +25,7 @@ struct GetCatalogRequest: BaseRequest {
 /// One API call: `GET /catalog` → `[Item]`. `CatalogServicing` is what `CatalogLogic`
 /// depends on through `init` — never this concrete type
 /// (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 3). `struct Sendable` (M5).
-public protocol CatalogServicing: Sendable {
+public nonisolated protocol CatalogServicing: Sendable {
     func fetchItems() async throws(APIError) -> [Item]
 }
 

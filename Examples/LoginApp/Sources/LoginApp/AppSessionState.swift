@@ -6,7 +6,7 @@ import Observation
 /// global"). Implemented by whatever the app's root observes; wired into
 /// `makeAPIService(sessionExpiring:)` (`LoginService.swift`), never called directly by
 /// `LoginLogic`.
-public protocol SessionExpiring: Sendable {
+public nonisolated protocol SessionExpiring: Sendable {
     func sessionDidExpire() async
 }
 
@@ -43,7 +43,15 @@ public final class AppSessionState: SessionExpiring {
 
     public init() {}
 
-    public func sessionDidExpire() async {
+    /// `nonisolated`, because `SessionExpiring` is: the caller is `TokenRefreshRetrier`'s
+    /// off-main-actor failure path, and from Swift 6.4 a witness of a `nonisolated`
+    /// requirement can't be main-actor isolated. The hop that used to be implicit is now the
+    /// `await` below — `markLoggedOut()` is isolated by the class's `@MainActor`.
+    public nonisolated func sessionDidExpire() async {
+        await markLoggedOut()
+    }
+
+    private func markLoggedOut() {
         isLoggedOut = true
     }
 }

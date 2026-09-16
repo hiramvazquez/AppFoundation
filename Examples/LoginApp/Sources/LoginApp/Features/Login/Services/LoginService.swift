@@ -32,7 +32,7 @@ struct LoginRequest: BaseRequest {
 /// depends on through `init` — never this concrete type
 /// (`ARQUITECTURA-KIT-2026-09-02.md` §1, rule 3). `struct Sendable` (M5): a `Service`
 /// carries no mutable state of its own, only `api`.
-public protocol LoginServicing: Sendable {
+public nonisolated protocol LoginServicing: Sendable {
     func login(email: String, password: String) async throws(APIError) -> Session
 }
 

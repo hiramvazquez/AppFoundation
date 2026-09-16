@@ -28,7 +28,7 @@ struct Get{{Feature}}Request: BaseRequest {
 /// es lo que `{{Feature}}Logic` conoce a través de `init` — nunca este tipo concreto
 ///. `struct Sendable` (M5): un Service no
 /// carga estado mutable propio, solo `api`.
-public protocol {{Feature}}Servicing: Sendable {
+public nonisolated protocol {{Feature}}Servicing: Sendable {
     func fetchItems() async throws(APIError) -> [{{Feature}}Item]
 }
 
