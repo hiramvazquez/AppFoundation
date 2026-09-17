@@ -281,6 +281,216 @@ struct ManifestEditorTests {
         #expect(!newText.contains("        case login"))
     }
 
+    // MARK: - insertListElementBeforeMarker (App/AppModule.swift's array of modules)
+
+    @Test("A list whose last element has a trailing comma keeps that style")
+    func listElementAfterTrailingComma() throws {
+        let appModule = """
+            [
+                PlatformModule(),
+                // archinit:modules
+            ]
+            """
+
+        let result = try ManifestEditor.insertListElementBeforeMarker(
+            "LoginModule()",
+            duplicateOf: "LoginModule()",
+            marker: "// archinit:modules",
+            in: appModule
+        )
+
+        #expect(
+            result
+                == .inserted(
+                    """
+                    [
+                        PlatformModule(),
+                        LoginModule(),
+                        // archinit:modules
+                    ]
+                    """
+                )
+        )
+    }
+
+    @Test("A list without trailing comma: the old last element gets its separator, the new one none")
+    func listElementWithoutTrailingComma() throws {
+        let appModule = """
+            [
+                SettingsModule(baseURL: apiBaseURL),
+                CartModule()
+                // archinit:modules
+            ]
+            """
+
+        let result = try ManifestEditor.insertListElementBeforeMarker(
+            "try NotesModule()",
+            duplicateOf: "NotesModule(",
+            marker: "// archinit:modules",
+            in: appModule
+        )
+
+        #expect(
+            result
+                == .inserted(
+                    """
+                    [
+                        SettingsModule(baseURL: apiBaseURL),
+                        CartModule(),
+                        try NotesModule()
+                        // archinit:modules
+                    ]
+                    """
+                )
+        )
+    }
+
+    @Test("The separator goes before a trailing comment, and blank or comment lines above the marker are skipped")
+    func listElementSkipsCommentsAndKeepsTrailingComment() throws {
+        let appModule = """
+            [
+                ImageModule(url: "https://example.com") // último
+
+                // más abajo, las features
+                // archinit:modules
+            ]
+            """
+
+        let result = try ManifestEditor.insertListElementBeforeMarker(
+            "LoginModule()",
+            duplicateOf: "LoginModule()",
+            marker: "// archinit:modules",
+            in: appModule
+        )
+
+        #expect(
+            result
+                == .inserted(
+                    """
+                    [
+                        ImageModule(url: "https://example.com"), // último
+
+                        // más abajo, las features
+                        LoginModule()
+                        // archinit:modules
+                    ]
+                    """
+                )
+        )
+    }
+
+    @Test("An empty list gets the element with a trailing comma; an existing one is left alone")
+    func listElementEmptyListAndDuplicate() throws {
+        let empty = "[\n    // archinit:modules\n]"
+        let inserted = try ManifestEditor.insertListElementBeforeMarker(
+            "LoginModule()",
+            duplicateOf: "LoginModule()",
+            marker: "// archinit:modules",
+            in: empty
+        )
+        #expect(inserted == .inserted("[\n    LoginModule(),\n    // archinit:modules\n]"))
+
+        let present = "[\n    LoginModule()\n    // archinit:modules\n]"
+        let again = try ManifestEditor.insertListElementBeforeMarker(
+            "LoginModule()",
+            duplicateOf: "LoginModule()",
+            marker: "// archinit:modules",
+            in: present
+        )
+        #expect(again == .alreadyPresent)
+    }
+
+    // MARK: - insertImport (App/AppModule.swift, App/RootView.swift)
+
+    @Test("Inserts the import in order inside the block, not after the blank line above the marker")
+    func insertsImportInOrderAboveBlankLineAndMarker() throws {
+        let source = """
+            import AppFoundation
+            import GalleryFeatureUI
+            import SwiftUI
+
+            // archinit:imports
+
+            struct RootView {}
+            """
+
+        let result = try ManifestEditor.insertImport("PruebaModFeatureUI", marker: "// archinit:imports", in: source)
+
+        #expect(
+            result
+                == .inserted(
+                    """
+                    import AppFoundation
+                    import GalleryFeatureUI
+                    import PruebaModFeatureUI
+                    import SwiftUI
+
+                    // archinit:imports
+
+                    struct RootView {}
+                    """
+                )
+        )
+    }
+
+    @Test("Inserts the import in order when the marker sits right below the block")
+    func insertsImportInOrderRightAboveMarker() throws {
+        let source = "import AppFoundation\nimport SwiftUI\n// archinit:imports\n"
+
+        let result = try ManifestEditor.insertImport("ContratosFeature", marker: "// archinit:imports", in: source)
+
+        #expect(
+            result == .inserted("import AppFoundation\nimport ContratosFeature\nimport SwiftUI\n// archinit:imports\n")
+        )
+    }
+
+    @Test("A module that sorts last goes right after the last import, keeping the blank line before the marker")
+    func insertsImportAfterLastImport() throws {
+        let source = "import AppFoundation\nimport SwiftUI\n\n// archinit:imports"
+
+        let result = try ManifestEditor.insertImport("ZonasFeature", marker: "// archinit:imports", in: source)
+
+        #expect(result == .inserted("import AppFoundation\nimport SwiftUI\nimport ZonasFeature\n\n// archinit:imports"))
+    }
+
+    @Test("Compares like OrderedImports: code-point order, uppercase before lowercase")
+    func insertsImportInCodePointOrder() throws {
+        let source = "import GalleryFeature\nimport lowercaseKit\n// archinit:imports"
+
+        let result = try ManifestEditor.insertImport("GalleryFeatureUI", marker: "// archinit:imports", in: source)
+
+        #expect(
+            result
+                == .inserted("import GalleryFeature\nimport GalleryFeatureUI\nimport lowercaseKit\n// archinit:imports")
+        )
+    }
+
+    @Test("Without imports above the marker, the import goes right before it")
+    func insertsImportBeforeMarkerWithoutImportBlock() throws {
+        let source = "// Header comment\n\n// archinit:imports\nenum AppModule {}"
+
+        let result = try ManifestEditor.insertImport("ContratosFeature", marker: "// archinit:imports", in: source)
+
+        #expect(
+            result == .inserted("// Header comment\n\nimport ContratosFeature\n// archinit:imports\nenum AppModule {}")
+        )
+    }
+
+    @Test("Idempotent: an import already present is left unchanged")
+    func insertImportIsIdempotent() throws {
+        let source = "import AppFoundation\nimport ContratosFeature\n\n// archinit:imports"
+
+        let result = try ManifestEditor.insertImport("ContratosFeature", marker: "// archinit:imports", in: source)
+
+        #expect(result == .alreadyPresent)
+    }
+
+    @Test("Fails without the imports marker")
+    func insertImportFailsWithoutMarker() {
+        #expect(throws: ManifestEditor.EditError.markerNotFound("// archinit:imports")) {
+            _ = try ManifestEditor.insertImport("ContratosFeature", marker: "// archinit:imports", in: "import SwiftUI")
+        }
+    }
     // MARK: - existingPluginLiteral
 
     @Test("Finds and collapses an existing plugin literal to one line")

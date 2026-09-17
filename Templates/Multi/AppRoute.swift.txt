@@ -3,8 +3,8 @@ import Foundation
 /// Every screen {{Name}} can navigate to, resolved by `RootView`'s `CoordinatorView`
 /// (`Coordinator<AppRoute>`, registered in `AppModule.swift`). `generate-feature` (modo
 /// multi) adds a `case` here for each new feature, right above the marker — it never
-/// touches anything above it. Adding the matching `switch` arm in `RootView.swift` stays
-/// a manual step (same as single-module `archinit`): the generator prints it.
+/// touches anything above it. It also adds the matching `switch` arm in `RootView.swift`
+/// (marker `// archinit:destinations`), so a new route has its screen without a manual step.
 public enum AppRoute: Hashable {
     case placeholder
     // archinit:routes

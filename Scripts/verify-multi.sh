@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Scripts/verify-multi.sh — el test de integración real de PRD-AF-10: en un directorio
 # temporal, arranca una app modular de tres niveles con `Scripts/bootstrap-multi.sh`
-# (manifiesto mínimo + `archinit --multi`), genera dos features con `generate-feature`,
-# compila y testea ambos paquetes, comprueba `archlint` limpio, e introduce un `import`
-# entre features para comprobar que el build FALLA con `[ArchLint.R13]`. Si `xcodegen`
-# está en el PATH, genera también el proyecto y compila la app para iOS Simulator.
+# (manifiesto mínimo + `archinit --multi`), genera tres features con `generate-feature` (una
+# con `--module`), compila y testea ambos paquetes, comprueba `archlint` limpio, e introduce
+# un `import` entre features para comprobar que el build FALLA con `[ArchLint.R13]`. Si
+# `xcodegen` está en el PATH, genera también el proyecto y compila la app para iOS Simulator.
 #
 # Uso: Scripts/verify-multi.sh          (desde cualquier directorio; se autolocaliza)
 #      VERIFY_MULTI_FIREBASE=1 …        añade `--adapter Firebase` (resuelve y compila el SDK: lento)
@@ -51,6 +51,12 @@ for f in App/AppModule.swift App/AppRoute.swift Packages/Platform/Package.swift 
 done
 grep -q "archinit:features-begin" Packages/Features/Package.swift || fail "faltan los markers en Packages/Features/Package.swift"
 grep -q "modules:" .archlint.yml || fail "falta la sección modules: en .archlint.yml"
+# Con el `.swift-format` que copia el propio archinit, y antes de `use_local_kits`, que reescribe
+# los dos manifiestos: lo que se lintea es exactamente lo que deja archinit.
+swift format lint --strict --configuration .swift-format \
+    App/AppModule.swift App/RootView.swift App/AppRoute.swift App/DemoMultiApp.swift \
+    Packages/Platform/Package.swift Packages/Features/Package.swift \
+    || fail "App/ recién generado por archinit --multi no pasa swift format lint --strict"
 use_local_kits Packages/Features/Package.swift
 use_local_kits Packages/Platform/Package.swift
 
@@ -60,14 +66,22 @@ swift test --package-path Packages/Platform > "$WORK_DIR/platform-test.log" 2>&1
 swift package --package-path Packages/Platform archlint > "$WORK_DIR/platform-archlint.log" 2>&1 || { cat "$WORK_DIR/platform-archlint.log"; fail "Platform: archlint con errores"; }
 grep -q "archlint: 0 errors" "$WORK_DIR/platform-archlint.log" || fail "Platform: no se vio 'archlint: 0 errors'"
 
-log "generate-feature Contratos --api · MisCasos --api --local"
+log "generate-feature Contratos --api · MisCasos --api --local · Galeria --module"
 (cd Packages/Features && swift package --allow-writing-to-package-directory generate-feature Contratos --api > "$WORK_DIR/gen-contratos.log" 2>&1) || { cat "$WORK_DIR/gen-contratos.log"; fail "generate-feature Contratos falló"; }
 (cd Packages/Features && swift package --allow-writing-to-package-directory generate-feature MisCasos --api --local > "$WORK_DIR/gen-miscasos.log" 2>&1) || { cat "$WORK_DIR/gen-miscasos.log"; fail "generate-feature MisCasos falló"; }
+(cd Packages/Features && swift package --allow-writing-to-package-directory generate-feature Galeria --module > "$WORK_DIR/gen-galeria.log" 2>&1) || { cat "$WORK_DIR/gen-galeria.log"; fail "generate-feature Galeria --module falló"; }
 grep -q 'name: "ContratosFeature"' Packages/Features/Package.swift || fail "ContratosFeature no se dio de alta en el manifiesto"
 grep -q 'name: "MisCasosFeature"' Packages/Features/Package.swift || fail "MisCasosFeature no se dio de alta en el manifiesto"
-grep -q "ContratosModule(baseURL: AppModule.apiBaseURL)," App/AppModule.swift || fail "ContratosModule(baseURL:) no se añadió a App/AppModule.swift"
-grep -q "try MisCasosModule(baseURL: AppModule.apiBaseURL)," App/AppModule.swift || fail "try MisCasosModule(baseURL:) no se añadió a App/AppModule.swift"
+grep -q "ContratosModule(baseURL: AppModule.apiBaseURL)" App/AppModule.swift || fail "ContratosModule(baseURL:) no se añadió a App/AppModule.swift"
+grep -q "try MisCasosModule(baseURL: AppModule.apiBaseURL)" App/AppModule.swift || fail "try MisCasosModule(baseURL:) no se añadió a App/AppModule.swift"
 grep -q "import ContratosFeature" App/AppModule.swift || fail "import ContratosFeature no se añadió a App/AppModule.swift"
+# Con --module no existe un módulo GaleriaFeature (es solo el producto): la app importa el UI.
+for f in App/AppModule.swift App/RootView.swift; do
+    grep -qx "import GaleriaFeatureUI" "$f" || fail "import GaleriaFeatureUI no se añadió a $f"
+done
+for f in App/AppModule.swift App/RootView.swift; do
+    grep "^import " "$f" | LC_ALL=C sort -c || fail "los imports de $f no quedaron en orden lexicográfico"
+done
 grep -q "case .contratos: ContratosView" App/RootView.swift || fail "el destino de Contratos no se añadió a App/RootView.swift"
 grep -q "product: ContratosFeature" project.yml || fail "el producto ContratosFeature no se añadió a project.yml"
 grep -q "case contratos" App/AppRoute.swift || fail "case contratos no se añadió a App/AppRoute.swift"
@@ -100,4 +114,4 @@ else
     log "AVISO: xcodegen no está en el PATH — se omite el build de la app"
 fi
 
-log "Todo verde: archinit --multi + generate-feature (2 features, alta automática) + build/test de Platform y Features + archlint + R13 bloquea el import entre features${VERIFY_MULTI_FIREBASE:+ + Firebase}"
+log "Todo verde: archinit --multi + generate-feature (3 features, una --module, alta automática) + build/test de Platform y Features + archlint + R13 bloquea el import entre features${VERIFY_MULTI_FIREBASE:+ + Firebase}"

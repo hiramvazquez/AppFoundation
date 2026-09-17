@@ -64,6 +64,11 @@ struct GenerateFeaturePlugin: CommandPlugin {
         guard let rawName = remaining.first, !rawName.isEmpty else {
             throw GenerateFeatureError.missingFeatureName
         }
+        // Before anything else runs: every one of these names ends up in Swift code, target
+        // names and paths.
+        for name in [rawName, serviceFromRaw, storeFromRaw].compactMap({ $0 }) where !Self.isValidFeatureName(name) {
+            throw GenerateFeatureError.invalidFeatureName(name)
+        }
         let feature = Self.pascalCase(rawName)
         let featureLower = Self.camelCase(feature)
 
@@ -173,7 +178,9 @@ struct GenerateFeaturePlugin: CommandPlugin {
             if let coreModule { renderSubstitutions["CoreModule"] = coreModule }
             var renderFlags = flags
             renderFlags["splitModule"] = splitModule
-            return engine.render(text, substitutions: renderSubstitutions, flags: renderFlags)
+            return engine.sortingImports(
+                in: engine.render(text, substitutions: renderSubstitutions, flags: renderFlags)
+            )
         }
 
         // PRD-AF-10 (entregable 2): modo multi — un fichero `.archinit-multi` en la raíz
@@ -414,6 +421,28 @@ struct GenerateFeaturePlugin: CommandPlugin {
         return String(first).lowercased() + pascal.dropFirst()
     }
 
+    /// A Swift identifier of ASCII letters, digits and `_` starting with a letter (the generated
+    /// code also has to pass swift-format's `IdentifiersMustBeASCII`), that is not a keyword once
+    /// lower-camel-cased: `case <name>` in `AppRoute` is where it stands alone.
+    private static func isValidFeatureName(_ name: String) -> Bool {
+        guard let first = name.first, first.isASCII, first.isLetter,
+            name.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") })
+        else {
+            return false
+        }
+        return !reservedCaseNames.contains(camelCase(pascalCase(name)))
+    }
+
+    /// The keywords Swift 6.4 rejects as `case <name>` — asked of the compiler, not copied from a
+    /// list: contextual ones such as `open`, `any` or `await` are accepted there.
+    private static let reservedCaseNames: Set<String> = [
+        "as", "associatedtype", "break", "case", "catch", "class", "continue", "default", "defer", "deinit", "do",
+        "else", "enum", "extension", "fallthrough", "false", "fileprivate", "for", "func", "guard", "if", "import",
+        "in", "init", "inout", "internal", "is", "let", "nil", "operator", "precedencegroup", "private", "protocol",
+        "public", "repeat", "rethrows", "return", "self", "static", "struct", "subscript", "super", "switch",
+        "throw", "throws", "true", "try", "typealias", "var", "where", "while"
+    ]
+
     // `internal` (not `private`): `Plugins/GenerateFeature/MultiMode.swift` (a separate
     // file, same extension-friendly type) reuses this for its own generated-file listing.
     static func displayPath(_ url: URL, root: URL) -> String {
@@ -495,6 +524,7 @@ struct GenerateFeaturePlugin: CommandPlugin {
 
 enum GenerateFeatureError: Error, CustomStringConvertible {
     case missingFeatureName
+    case invalidFeatureName(String)
     case templatesNotFound
     case templateMissing(String)
     case noTarget
@@ -508,6 +538,15 @@ enum GenerateFeatureError: Error, CustomStringConvertible {
             return
                 "Falta el nombre del feature: swift package generate-feature <Nombre> [--api] [--local] "
                 + "[--no-service] [--no-store] [--service-from <Feature>] [--store-from <Feature>] …"
+        case .invalidFeatureName(let name):
+            let words = name.split(whereSeparator: \.isWhitespace)
+            let hint =
+                words.count > 1
+                ? " Las opciones van como argumentos aparte, sin comillas: generate-feature \(words.joined(separator: " "))"
+                : ""
+            return "'\(name)' no es un nombre de feature válido: tiene que ser un identificador Swift (letras ASCII, "
+                + "dígitos y _, empezando por letra) que no sea una palabra reservada. generate-feature no ha "
+                + "tocado nada.\(hint)"
         case .templatesNotFound:
             return "No se encontró AppFoundation/Templates — ¿AppFoundation es una dependencia de este paquete?"
         case .templateMissing(let name):

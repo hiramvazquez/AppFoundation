@@ -36,11 +36,18 @@ Logic), `--no-logic` (solo para una pantalla sin regla de negocio propia — ús
 Si este proyecto tiene un `.archinit-multi` en la raíz del paquete donde se invoca el
 comando (lo deja `archinit --multi`), cada feature es un target real —
 `Sources/<Nombre>Feature/…`, o `<Nombre>FeatureCore`/`<Nombre>FeatureUI` con `--module` —
-y el generador da de alta el target y el producto en `Package.swift`, e inserta
-`<Nombre>Module()`/`case <nombre>` en `App/AppModule.swift`/`App/AppRoute.swift` si esos
-ficheros y sus markers existen. `--no-register` desactiva las tres ediciones (el feature
-se genera igual, sin registrar nada). Si el target ya existe o falta un marker, el
-comando falla con un error claro sin tocar ni el manifiesto ni los ficheros del feature.
+y el generador da de alta el target y el producto en `Package.swift`. Además conecta el
+feature a la app, solo si el fichero y su marker existen, y justo encima de cada marker salvo
+los `import`, que entran ordenados entre los que ya hay: `import <Nombre>Feature` (o
+`<Nombre>FeatureUI` con `--module`) en `// archinit:imports` de `App/AppModule.swift` y
+`App/RootView.swift`; el módulo en `// archinit:modules` de `App/AppModule.swift`;
+`case <nombre>` en `// archinit:routes` de `App/AppRoute.swift`;
+`case .<nombre>: <Nombre>View(viewModel: Container.shared.resolve())` en
+`// archinit:destinations` de `App/RootView.swift`; y el producto `<Nombre>Feature` en
+`# archinit:products` de `project.yml`. `--no-register` desactiva todas esas ediciones (el
+feature se genera igual, sin registrar nada). Si el target ya existe o falta un marker de
+`Package.swift`, el comando falla con un error claro sin tocar ni el manifiesto ni los
+ficheros del feature.
 Fuera de ese `.archinit-multi`, nada de esto aplica — comportamiento idéntico al de
 siempre.
 

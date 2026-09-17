@@ -170,8 +170,8 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
 {{#local}}
     private let {{feature}}Store: any {{StoringType}}
 {{/local}}
-
 {{#both}}
+
     /// - Parameters:
     ///   - {{feature}}Service: La llamada a red de este feature. Inyectada como protocolo.
     ///   - {{feature}}Store: La caché local. Inyectada como protocolo — nunca el
@@ -230,6 +230,7 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
 {{/both}}
 {{^both}}
 {{#api}}
+
     /// - Parameter {{feature}}Service: La única llamada a red de este feature. Inyectada
     ///   como protocolo — nunca `{{Feature}}Service` directamente
     ///.
@@ -264,6 +265,7 @@ public nonisolated final class {{Feature}}Logic: {{Feature}}LogicProtocol {
     }
 {{/api}}
 {{#local}}
+
     /// - Parameter {{feature}}Store: La única dependencia de este feature. Inyectada como
     ///   protocolo — nunca `SwiftData{{Feature}}Store`/`InMemory{{Feature}}Store`
     ///   directamente.

@@ -5,8 +5,9 @@
 # pasan sus tests, activa `ArchitectureLint` y comprueba que el build pasa limpio, introduce
 # una violación de R1/R7/R10 y comprueba que el build FALLA con el diagnóstico esperado, y
 # finalmente corre `swift package archlint` sobre los cuatro ejemplos de AF-07 (deben pasar
-# limpios: son la referencia). También cubre PRD-X-05/A4 (`--service-from`) y, si `swiftlint`
-# está en el PATH, la configuración curada de PRD-AF-09.
+# limpios: son la referencia). También cubre PRD-X-05/A4 (`--service-from`), el formato del código
+# generado (`swift format lint --strict`) y, si `swiftlint` está en el PATH, la configuración curada
+# de PRD-AF-09.
 #
 # Este fichero existe por duplicado: aquí (monorepo) y en AppFoundation/Scripts/ (viaja en el
 # `subtree split` al repo publicado, que es donde lo ejecuta su propio CI). La copia de
@@ -147,6 +148,15 @@ if command -v swiftlint > /dev/null 2>&1; then
 else
     log "AVISO: swiftlint no está en el PATH — se omite la comprobación de calidad del código generado"
 fi
+
+# El código generado nace con formato limpio: `swift format lint --strict` con el `.swift-format` del
+# propio paquete. SwiftLint no lo cubre — da 0 violaciones sobre líneas vacías sobrantes, espacios al
+# final o imports desordenados, que es justo lo que dejaba el motor de plantillas.
+SWIFT_FORMAT_CONFIG="$APPFOUNDATION_DIR/.swift-format"
+log "swift format lint --strict sobre el código generado (.swift-format de AppFoundation)"
+swift format lint --strict --configuration "$SWIFT_FORMAT_CONFIG" --recursive \
+    "$DEMO_DIR/Sources/DemoApp/Features" "$DEMO_DIR/Tests/DemoAppTests/Features" \
+    || fail "El código generado no pasa swift format lint --strict"
 
 log "Activando el plugin ArchitectureLint en el target DemoApp"
 python3 - "$DEMO_DIR/Package.swift" <<'PYEOF'
@@ -367,6 +377,24 @@ diff -q "$WORK_DIR/Package.swift.before-duplicate" "$MULTI_MANIFEST" > /dev/null
     || fail "el intento duplicado no debería haber borrado los ficheros de la primera generación"
 log "Confirmado: sin markers/target duplicado, generate-feature no toca nada"
 
+log "Modo multi: un nombre que no es identificador Swift falla claro y no toca nada"
+cp "$APP_DIR/AppModule.swift" "$WORK_DIR/AppModule.swift.before-invalid-name"
+if swift package --package-path "$FEATURES_DIR" --allow-writing-to-package-directory generate-feature "Mal --local" \
+    > "$WORK_DIR/invalid-name.log" 2>&1; then
+    cat "$WORK_DIR/invalid-name.log"
+    fail "generate-feature \"Mal --local\" debería haber fallado (nombre inválido) y no falló"
+fi
+grep -q "no es un nombre de feature válido" "$WORK_DIR/invalid-name.log" || {
+    cat "$WORK_DIR/invalid-name.log"
+    fail "El error de nombre inválido no fue claro"
+}
+diff -q "$WORK_DIR/Package.swift.before-duplicate" "$MULTI_MANIFEST" > /dev/null \
+    || fail "generate-feature tocó Package.swift con un nombre inválido"
+diff -q "$WORK_DIR/AppModule.swift.before-invalid-name" "$APP_DIR/AppModule.swift" > /dev/null \
+    || fail "generate-feature tocó App/AppModule.swift con un nombre inválido"
+compgen -G "$FEATURES_DIR/Sources/Mal*" > /dev/null && fail "generate-feature creó ficheros con un nombre inválido"
+log "Confirmado: un nombre inválido se rechaza antes de escribir nada"
+
 log "Modo multi: App/AppModule.swift y App/AppRoute.swift recibieron las inserciones"
 grep -q "ContratosModule(baseURL: AppModule.apiBaseURL)," "$APP_DIR/AppModule.swift" || fail "ContratosModule(baseURL:) no se insertó en App/AppModule.swift"
 grep -q "try MisCasosModule(baseURL: AppModule.apiBaseURL)," "$APP_DIR/AppModule.swift" || fail "try MisCasosModule(baseURL:) no se insertó en App/AppModule.swift"
@@ -397,6 +425,10 @@ else
     log "AVISO: swiftlint no está en el PATH — se omite la comprobación de calidad del código generado en modo multi"
 fi
 
+log "Modo multi: swift format lint --strict sobre el código generado (.swift-format de AppFoundation)"
+swift format lint --strict --configuration "$SWIFT_FORMAT_CONFIG" --recursive "$FEATURES_DIR/Sources" "$FEATURES_DIR/Tests" \
+    || fail "El código generado en modo multi no pasa swift format lint --strict"
+
 log "Modo multi: --no-register no toca Package.swift ni App/"
 cp "$MULTI_MANIFEST" "$WORK_DIR/Package.swift.before-no-register"
 cp "$APP_DIR/AppModule.swift" "$WORK_DIR/AppModule.swift.before-no-register"
@@ -412,6 +444,6 @@ diff -q "$WORK_DIR/AppRoute.swift.before-no-register" "$APP_DIR/AppRoute.swift" 
     || fail "--no-register debía seguir generando los ficheros del feature, solo sin registrar nada"
 log "Confirmado: --no-register genera ficheros sin editar Package.swift ni App/"
 
-log "Todo verde: generate-feature (4 variantes) + modo multi (targets/producto registrados, duplicado rechazado sin tocar nada, App/AppModule+AppRoute, --no-register) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07 y sobre Features en modo multi."
+log "Todo verde: generate-feature (4 variantes, formato limpio) + modo multi (targets/producto registrados, duplicado y nombre inválido rechazados sin tocar nada, App/AppModule+AppRoute, --no-register) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07 y sobre Features en modo multi."
 # --- SOLO-APPFOUNDATION: end ---
-log "Todo verde: generate-feature (4 variantes) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07."
+log "Todo verde: generate-feature (4 variantes, formato limpio) + ArchitectureLint (pasa limpio, falla con R1, se recupera) + archlint sobre los 4 ejemplos de AF-07."

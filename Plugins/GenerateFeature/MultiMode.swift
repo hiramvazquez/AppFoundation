@@ -237,6 +237,7 @@ extension GenerateFeaturePlugin {
             for outcome in Self.registerAppWiring(
                 feature: feature,
                 featureLower: featureLower,
+                uiModule: layout.uiTargetName,
                 appDirectory: appDir,
                 repoRoot: appDir.deletingLastPathComponent()
             ) {
@@ -528,17 +529,23 @@ extension GenerateFeaturePlugin {
     /// `AppModule.swift` and `RootView.swift`, the navigation destination in `RootView.swift`,
     /// and the feature product in `project.yml` — each only if its marker exists. Returns one
     /// human-readable line per edit for the plugin's output.
-    static func registerAppWiring(feature: String, featureLower: String, appDirectory: URL, repoRoot: URL) -> [String] {
+    ///
+    /// `uiModule` is the target holding `<Feature>Module` and `<Feature>View`, the two types
+    /// the app uses: `<Feature>Feature`, or `<Feature>FeatureUI` with `--module` — where
+    /// `<Feature>Feature` is only the product's name, not a module anyone can import.
+    static func registerAppWiring(
+        feature: String,
+        featureLower: String,
+        uiModule: String,
+        appDirectory: URL,
+        repoRoot: URL
+    ) -> [String] {
         var lines: [String] = []
-        let importLine = "import \(feature)Feature"
         for file in ["AppModule.swift", "RootView.swift"] {
-            let outcome = insertAtMarker(
-                importLine,
-                duplicateOf: importLine,
-                marker: "// archinit:imports",
-                file: appDirectory.appendingPathComponent(file)
-            )
-            lines.append("App/\(file): \(outcome.describe("\(importLine)"))")
+            let outcome = editAtMarker("// archinit:imports", file: appDirectory.appendingPathComponent(file)) {
+                try ManifestEditor.insertImport(uiModule, marker: "// archinit:imports", in: $0)
+            }
+            lines.append("App/\(file): \(outcome.describe("import \(uiModule)"))")
         }
         let destination = "case .\(featureLower): \(feature)View(viewModel: Container.shared.resolve())"
         let destinationOutcome = insertAtMarker(
@@ -565,18 +572,23 @@ extension GenerateFeaturePlugin {
         marker: String,
         file: URL
     ) -> AppEditOutcome {
+        editAtMarker(marker, file: file) {
+            try ManifestEditor.insertBeforeMarker(entry, duplicateOf: duplicateOf, marker: marker, in: $0)
+        }
+    }
+
+    /// Reads `file`, applies `edit` to its text and writes the result back. `marker` only names
+    /// what `edit` looks for, for the message when it is missing.
+    private static func editAtMarker(
+        _ marker: String,
+        file: URL,
+        edit: (String) throws -> ManifestEditor.InsertResult
+    ) -> AppEditOutcome {
         guard let data = FileManager.default.contents(atPath: file.path), let text = String(data: data, encoding: .utf8)
         else {
             return .skipped(reason: "no existe \(file.lastPathComponent)")
         }
-        guard
-            let result = try? ManifestEditor.insertBeforeMarker(
-                entry,
-                duplicateOf: duplicateOf,
-                marker: marker,
-                in: text
-            )
-        else {
+        guard let result = try? edit(text) else {
             return .skipped(reason: "\(file.lastPathComponent) no tiene el marker '\(marker)'")
         }
         switch result {
@@ -597,8 +609,8 @@ extension GenerateFeaturePlugin {
             return .skipped(reason: "no existe App/AppModule.swift")
         }
         guard
-            let result = try? ManifestEditor.insertBeforeMarker(
-                "\(expression),",
+            let result = try? ManifestEditor.insertListElementBeforeMarker(
+                expression,
                 duplicateOf: "\(feature)Module(",
                 marker: "// archinit:modules",
                 in: text
