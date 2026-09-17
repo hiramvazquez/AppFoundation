@@ -1,6 +1,7 @@
 import AppFoundation
 {{#splitModule}}import {{CoreModule}}
 {{/splitModule}}
+
 #if canImport(SwiftUI)
 import SwiftUI
 

@@ -1,13 +1,13 @@
-import AppFoundation
-import Foundation
 {{ModuleImports}}
 // archinit:imports
 
 /// Composition root (`AppFoundation/AGENTS.md` § generador y linter): assembles every
 /// `DependencyModule` {{Name}} registers at startup. `PlatformModule` (below) wires
 /// navigation, Domain (nothing of its own — pure models/protocols), and every Kit/Adapter
-/// `archinit --multi` generated; `generate-feature` (modo multi) appends `<Name>Module()`
-/// right below the marker — nothing above it changes when a feature is added.
+/// `archinit --multi` generated; `generate-feature` (modo multi) inserts `import <Name>Feature`
+/// (`<Name>FeatureUI` with `--module`) in sorted order among the imports above
+/// `// archinit:imports`, and `<Name>Module()` right above `// archinit:modules`, adding the
+/// separator comma to the module above it if it has none. Nothing else in this file changes.
 enum AppModule {
     /// Base URL every `--api` feature module receives. Replace it with your environment
     /// configuration (schemes, xcconfig, remote config) — one place, not one per feature.
@@ -22,7 +22,7 @@ enum AppModule {
     @MainActor
     static func makeModules() throws -> [DependencyModule] {
         [
-            PlatformModule(),
+            PlatformModule()
             // archinit:modules
         ]
     }

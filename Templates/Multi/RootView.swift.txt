@@ -6,10 +6,13 @@ import SwiftUI
 /// `AppModule.swift` registers. Resolves every `ViewModel` from `Container.shared` —
 /// never constructs one directly (the composition root already did that work).
 ///
-/// `generate-feature` (modo multi) never edits this file: it adds the `case` to
-/// `AppRoute` automatically (marker `// archinit:routes`) but always prints the matching
-/// `switch` arm to add here by hand — the same manual step single-module `archinit`
-/// already documents.
+/// `generate-feature` (modo multi) wires each new feature in here, at two markers:
+/// `import <Name>Feature` (`<Name>FeatureUI` with `--module`), in sorted order among the
+/// imports above `// archinit:imports`; and, right above its marker, the `switch` arm
+/// `case .<name>: <Name>View(viewModel: Container.shared.resolve())` at
+/// `// archinit:destinations`. That arm uses the `case <name>` it adds to `AppRoute` at
+/// `// archinit:routes`; if that edit is skipped, add the `case` by hand or this file won't
+/// compile. `--no-register` turns every one of these edits off.
 struct RootView: View {
     @State private var coordinator = Container.shared.resolve(Coordinator<AppRoute>.self)
 

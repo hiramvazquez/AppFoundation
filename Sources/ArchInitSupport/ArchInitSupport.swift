@@ -65,15 +65,18 @@ public enum ArchInitSupport {
 
     // MARK: - App/AppModule.swift substitutions
 
-    /// `import Platform` doesn't exist — `Platform` is the PACKAGE (manifest) name, not a
-    /// module: Swift imports the library PRODUCTS it declares (`Domain`, `CameraKit`,
-    /// `FirebaseAdapters`…), one per line, only the ones this file actually references.
+    /// The whole `import` block at the top of the file: `AppFoundation`, `Foundation` and the
+    /// Platform modules it references. `import Platform` doesn't exist — `Platform` is the
+    /// PACKAGE (manifest) name, not a module: Swift imports the library PRODUCTS it declares
+    /// (`Domain`, `CameraKit`, `FirebaseAdapters`…), one per line, only the ones this file
+    /// actually references. Sorted as `swift format lint`'s `OrderedImports` checks the block:
+    /// plain code-point order (`String <`, uppercase before lowercase), all lines together.
     public static func moduleImports(capabilities: [String], hasFirebase: Bool, genericAdapters: [String]) -> String {
-        var modules = ["Domain"]
+        var modules = ["AppFoundation", "Foundation", "Domain"]
         modules += capabilities.map { "\($0)Kit" }
         if hasFirebase { modules.append("FirebaseAdapters") }
         modules += genericAdapters.map { "\($0)Adapters" }
-        return modules.map { "import \($0)" }.joined(separator: "\n")
+        return modules.sorted().map { "import \($0)" }.joined(separator: "\n")
     }
 
     public static func kitRegistrations(capabilities: [String]) -> String {
@@ -215,6 +218,25 @@ public enum ArchInitSupport {
 
     // MARK: - Packages/Platform/Package.swift and Packages/Features/Package.swift
 
+    /// The body of a multi-line collection literal, one entry per element: a comma after every
+    /// element but the last. The `.swift-format` that `archinit` copies into the project has
+    /// `multiElementCollectionTrailingCommas: false`, so `swift format lint --strict` rejects
+    /// a comma after the last one. An element may span several lines (a target, or a package
+    /// with a comment above it); its comma goes at the end of its last line.
+    public static func commaSeparated(_ elements: [[String]]) -> [String] {
+        let elements = elements.filter { !$0.isEmpty }
+        var lines: [String] = []
+        for (index, element) in elements.enumerated() {
+            lines += element
+            if index < elements.count - 1 {
+                lines[lines.count - 1] += ","
+            }
+        }
+        return lines
+    }
+
+    /// One `.target(…)`/`.testTarget(…)` element of `targets:`, without a trailing comma —
+    /// `commaSeparated` puts one between elements.
     public static func targetBlock(
         kind: String,
         name: String,
@@ -229,9 +251,7 @@ public enum ArchInitSupport {
             lines.append("            dependencies: [\(dependencies[0])],")
         } else if dependencies.count > 1 {
             lines.append("            dependencies: [")
-            for dep in dependencies {
-                lines.append("                \(dep),")
-            }
+            lines += commaSeparated(dependencies.map { ["                \($0)"] })
             lines.append("            ],")
         }
         lines.append("            path: \"\(path)\",")
@@ -241,7 +261,7 @@ public enum ArchInitSupport {
         } else {
             lines.append("            swiftSettings: swiftSettings")
         }
-        lines.append("        ),")
+        lines.append("        )")
         return lines
     }
 
@@ -254,72 +274,78 @@ public enum ArchInitSupport {
         let hasFirebase = adapters.contains("Firebase")
         let genericAdapters = adapters.filter { $0 != "Firebase" }
 
-        var products: [String] = ["        .library(name: \"Domain\", targets: [\"Domain\"]),"]
+        var products: [[String]] = [["        .library(name: \"Domain\", targets: [\"Domain\"])"]]
         for cap in capabilities {
-            products.append("        .library(name: \"\(cap)Kit\", targets: [\"\(cap)Kit\"]),")
+            products.append(["        .library(name: \"\(cap)Kit\", targets: [\"\(cap)Kit\"])"])
         }
         if hasFirebase {
-            products.append("        .library(name: \"FirebaseAdapters\", targets: [\"FirebaseAdapters\"]),")
+            products.append(["        .library(name: \"FirebaseAdapters\", targets: [\"FirebaseAdapters\"])"])
         }
         for sdk in genericAdapters {
-            products.append("        .library(name: \"\(sdk)Adapters\", targets: [\"\(sdk)Adapters\"]),")
+            products.append(["        .library(name: \"\(sdk)Adapters\", targets: [\"\(sdk)Adapters\"])"])
         }
 
-        var dependencies: [String] = [
-            "        .package(url: \"https://github.com/hiramvazquez/AppFoundation.git\", from: \"1.2.0\"),"
+        var dependencies: [[String]] = [
+            ["        .package(url: \"https://github.com/hiramvazquez/AppFoundation.git\", from: \"1.2.0\")"]
         ]
         if hasFirebase {
-            dependencies.append(
-                "        // R14: por tag, nunca por rama — ajusta al tag estable más reciente al generar."
-            )
-            dependencies.append(
-                "        .package(url: \"https://github.com/firebase/firebase-ios-sdk\", from: \"11.0.0\"),"
-            )
+            dependencies.append([
+                "        // R14: por tag, nunca por rama — ajusta al tag estable más reciente al generar.",
+                "        .package(url: \"https://github.com/firebase/firebase-ios-sdk\", from: \"11.0.0\")"
+            ])
         }
 
-        var targets: [String] = targetBlock(
-            kind: "target",
-            name: "Domain",
-            dependencies: [],
-            path: "Sources/Domain",
-            withArchLint: true
-        )
-        targets += targetBlock(
-            kind: "testTarget",
-            name: "DomainTests",
-            dependencies: ["\"Domain\""],
-            path: "Tests/DomainTests",
-            withArchLint: false
-        )
-        for cap in capabilities {
-            targets += targetBlock(
+        var targets: [[String]] = [
+            targetBlock(
                 kind: "target",
-                name: "\(cap)Kit",
-                dependencies: ["\"Domain\""],
-                path: "Sources/\(cap)Kit",
+                name: "Domain",
+                dependencies: [],
+                path: "Sources/Domain",
                 withArchLint: true
+            ),
+            targetBlock(
+                kind: "testTarget",
+                name: "DomainTests",
+                dependencies: ["\"Domain\""],
+                path: "Tests/DomainTests",
+                withArchLint: false
+            )
+        ]
+        for cap in capabilities {
+            targets.append(
+                targetBlock(
+                    kind: "target",
+                    name: "\(cap)Kit",
+                    dependencies: ["\"Domain\""],
+                    path: "Sources/\(cap)Kit",
+                    withArchLint: true
+                )
             )
         }
         if hasFirebase {
-            targets += targetBlock(
-                kind: "target",
-                name: "FirebaseAdapters",
-                dependencies: [
-                    "\"Domain\"",
-                    ".product(name: \"FirebaseAnalytics\", package: \"firebase-ios-sdk\")",
-                    ".product(name: \"FirebaseCrashlytics\", package: \"firebase-ios-sdk\")"
-                ],
-                path: "Sources/FirebaseAdapters",
-                withArchLint: true
+            targets.append(
+                targetBlock(
+                    kind: "target",
+                    name: "FirebaseAdapters",
+                    dependencies: [
+                        "\"Domain\"",
+                        ".product(name: \"FirebaseAnalytics\", package: \"firebase-ios-sdk\")",
+                        ".product(name: \"FirebaseCrashlytics\", package: \"firebase-ios-sdk\")"
+                    ],
+                    path: "Sources/FirebaseAdapters",
+                    withArchLint: true
+                )
             )
         }
         for sdk in genericAdapters {
-            targets += targetBlock(
-                kind: "target",
-                name: "\(sdk)Adapters",
-                dependencies: ["\"Domain\""],
-                path: "Sources/\(sdk)Adapters",
-                withArchLint: true
+            targets.append(
+                targetBlock(
+                    kind: "target",
+                    name: "\(sdk)Adapters",
+                    dependencies: ["\"Domain\""],
+                    path: "Sources/\(sdk)Adapters",
+                    withArchLint: true
+                )
             )
         }
 
@@ -345,13 +371,13 @@ public enum ArchInitSupport {
             "    ],",
             "    products: ["
         ]
-        lines += products
+        lines += commaSeparated(products)
         lines.append("    ],")
         lines.append("    dependencies: [")
-        lines += dependencies
+        lines += commaSeparated(dependencies)
         lines.append("    ],")
         lines.append("    targets: [")
-        lines += targets
+        lines += commaSeparated(targets)
         lines.append("    ]")
         lines.append(")")
         lines.append("")

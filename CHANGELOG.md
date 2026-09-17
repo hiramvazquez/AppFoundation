@@ -4,6 +4,58 @@ Todos los cambios notables de este paquete se documentan en este fichero. El for
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el versionado,
 [SemVer](https://semver.org/lang/es/).
 
+## [Unreleased]
+
+### Corregido
+
+- **`generate-feature` escribe código con formato limpio.** El motor de plantillas quitaba el
+  contenido de un bloque `{{#flag}}…{{/flag}}` pero dejaba cada línea de etiqueta como línea
+  vacía o con espacios. Probado en AppStarter con su `.swift-format`: 499 errores de
+  `swift format lint --strict` en las cuatro variantes. Ahora una línea con solo etiquetas
+  desaparece entera, como en Mustache, y los imports salen ordenados. Da 0 errores en las
+  combinaciones de opciones probadas, en modo normal y multi. `Scripts/verify-generator.sh`
+  pasa `swift format lint --strict` sobre lo generado, porque SwiftLint no ve estos errores.
+- **Modo multi: añadir un módulo a `App/AppModule.swift` ya no rompe la sintaxis** cuando el
+  último elemento no lleva coma final (un `.swift-format` con
+  `multiElementCollectionTrailingCommas: false`). El generador sigue la puntuación que ya tiene
+  la lista.
+- **`generate-feature` rechaza un nombre que no es identificador Swift** (p. ej. `"Notes
+  --local"`, entre comillas) antes de escribir nada. Antes terminaba con éxito y dejaba
+  `Package.swift`, `App/` y `project.yml` con ese nombre dentro.
+- **`Generator.md` explica todo lo que el modo multi toca en la app**: imports, destino en
+  `RootView`, producto en `project.yml`. También avisa de que la app no compila hasta añadir
+  el `case` a `AppRoute`, si el generador no pudo añadirlo.
+- **El `App/AppModule.swift` que genera `archinit --multi` pasa `swift format lint --strict`.**
+  Una app recién creada fallaba con el `.swift-format` que el propio archinit copia, antes de
+  cualquier `generate-feature`, por dos errores:
+  - `[OrderedImports]`: la plantilla ponía `AppFoundation` y `Foundation` primero, y después
+    Domain, los Kits y los Adapters en el orden de los argumentos. Ahora todo el bloque sale
+    ordenado como lo compara la regla: por código de carácter, con las mayúsculas delante
+    (`AppFoundation` va antes que `AppcuesAdapters`).
+  - `[TrailingComma]`: `PlatformModule(),` llevaba coma final y la configuración tiene
+    `multiElementCollectionTrailingCommas: false`. Ahora va sin coma.
+
+  `Scripts/verify-multi.sh` pasa `swift format lint --strict` sobre `AppModule.swift`,
+  `RootView.swift` y `AppRoute.swift` justo después de `archinit --multi`.
+- **El `Packages/Platform/Package.swift` que genera `archinit --multi` pasa
+  `swift format lint --strict`.** Con el `.swift-format` que el propio archinit copia al
+  proyecto (`multiElementCollectionTrailingCommas: false`) fallaba con `[TrailingComma]` en
+  el último elemento de `products:`, de `dependencies:` y de `targets:` y, con
+  `--adapter Firebase`, en la última dependencia de `FirebaseAdapters`. Ahora cada lista
+  lleva coma entre elementos y ninguna tras el último. El `ci.yml` generado solo pasa
+  `swift format lint` sobre `Sources`/`Tests` de cada paquete, así que no rompía el CI de
+  un consumidor, pero sí un `swift format lint --recursive .` del proyecto.
+- **`generate-feature --module` en modo multi importa en la app un módulo que existe.**
+  Insertaba `import <Nombre>Feature` en `App/AppModule.swift` y `App/RootView.swift`, pero con
+  `--module` los targets son `<Nombre>FeatureCore` y `<Nombre>FeatureUI`: `<Nombre>Feature` es
+  solo el producto, y la app no compilaba (`Unable to resolve module dependency:
+  'PruebaModFeature'`). Ahora importa `<Nombre>FeatureUI`, donde viven `<Nombre>Module` y
+  `<Nombre>View`; sin `--module` sigue siendo `<Nombre>Feature`.
+- **Ese `import` entra ordenado.** Iba justo encima de `// archinit:imports`; si el marker
+  queda debajo del bloque de imports con una línea en blanco (AppStarter), el fichero dejaba
+  de pasar `swift format lint --strict` (`[OrderedImports]`). Ahora se inserta en su posición
+  lexicográfica dentro de los imports que hay encima del marker, sin reordenar los demás.
+
 ## [1.4.1] - 2026-09-16
 
 ### Corregido

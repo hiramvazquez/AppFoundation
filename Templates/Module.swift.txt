@@ -40,15 +40,16 @@ public struct {{Feature}}Module: DependencyModule {
 {{#newStore}}
     private let modelContainer: ModelContainer
 {{/newStore}}
-
 {{#newService}}
 {{#newStore}}
+
     public init(baseURL: URL, modelContainer: ModelContainer? = nil) throws {
         self.baseURL = baseURL
         self.modelContainer = try modelContainer ?? ModelContainer(for: {{Feature}}Record.self)
     }
 {{/newStore}}
 {{^newStore}}
+
     public init(baseURL: URL) {
         self.baseURL = baseURL
     }
@@ -56,6 +57,7 @@ public struct {{Feature}}Module: DependencyModule {
 {{/newService}}
 {{^newService}}
 {{#newStore}}
+
     public init(modelContainer: ModelContainer? = nil) throws {
         self.modelContainer = try modelContainer ?? ModelContainer(for: {{Feature}}Record.self)
     }
@@ -76,41 +78,43 @@ public struct {{Feature}}Module: DependencyModule {
         container.register({{Feature}}Servicing.self) { c in
             {{Feature}}Service(api: c.resolve())
         }
+
 {{/newService}}
 {{#serviceFrom}}
         // MARK: Service (reutilizado)
         // {{Feature}}Logic depende de 'any {{ServiceFeature}}Servicing' — {{ServiceFeature}}Module ya
         // lo registra, así que aquí no hay nada que registrar. Recuerda registrar también
         // {{ServiceFeature}}Module en el Container.
+
 {{/serviceFrom}}
 {{#noService}}
         // MARK: Service (pendiente)
         // TODO: registra {{Feature}}Servicing.self — {{Feature}}Logic no resuelve sin una
         // implementación concreta (o vuelve a generar con --service-from <FeatureExistente>
         // para reutilizar una real).
+
 {{/noService}}
 {{#newStore}}
-
         // MARK: Store
         container.register({{Feature}}Storing.self) { [modelContainer] _ in
             SwiftData{{Feature}}Store(modelContainer: modelContainer)
         }
+
 {{/newStore}}
 {{#storeFrom}}
-
         // MARK: Store (reutilizado)
         // {{Feature}}Logic depende de 'any {{StoreFeature}}Storing' — {{StoreFeature}}Module ya lo
         // registra, así que aquí no hay nada que registrar. Recuerda registrar también
         // {{StoreFeature}}Module en el Container.
+
 {{/storeFrom}}
 {{#noStore}}
-
         // MARK: Store (pendiente)
         // TODO: registra {{Feature}}Storing.self — {{Feature}}Logic no resuelve sin una
         // implementación concreta (o vuelve a generar con --store-from <FeatureExistente>
         // para reutilizar una real).
-{{/noStore}}
 
+{{/noStore}}
         // MARK: Logic
 {{#both}}
         container.register({{Feature}}LogicProtocol.self) { c in
