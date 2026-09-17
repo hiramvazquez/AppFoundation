@@ -114,13 +114,116 @@ struct ArchInitSupportTests {
         #expect(contents.contains("AnalyticsAdapters"))
     }
 
+    // `swift format lint --strict` with the `.swift-format` archinit copies into the project
+    // (`multiElementCollectionTrailingCommas: false`) failed on a fresh
+    // `Packages/Platform/Package.swift` with `[TrailingComma]`: the last product, the last
+    // package dependency, the last target and, with `--adapter Firebase`, the last dependency
+    // of `FirebaseAdapters` all ended in a comma.
+
+    @Test("commaSeparated puts a comma after the last line of every element but the last")
+    func commaSeparatedSkipsTheLastElement() {
+        #expect(ArchInitSupport.commaSeparated([]) == [])
+        #expect(ArchInitSupport.commaSeparated([["a"]]) == ["a"])
+        let multiLine = ArchInitSupport.commaSeparated([["// c", "a"], ["b1", "b2"], ["c"]])
+        #expect(multiLine == ["// c", "a,", "b1", "b2,", "c"])
+        #expect(ArchInitSupport.commaSeparated([["a"], [], ["b"], []]) == ["a,", "b"])
+    }
+
+    @Test("targetBlock is one element without a trailing comma, and its last dependency has none either")
+    func targetBlockHasNoTrailingCommas() {
+        let block = ArchInitSupport.targetBlock(
+            kind: "target",
+            name: "X",
+            dependencies: ["\"A\"", "\"B\""],
+            path: "Sources/X",
+            withArchLint: false
+        )
+        #expect(
+            block == [
+                "        .target(",
+                "            name: \"X\",",
+                "            dependencies: [",
+                "                \"A\",",
+                "                \"B\"",
+                "            ],",
+                "            path: \"Sources/X\",",
+                "            swiftSettings: swiftSettings",
+                "        )"
+            ]
+        )
+    }
+
+    @Test(
+        "buildPlatformPackageSwift closes every multi-line collection without a trailing comma",
+        arguments: [
+            ([String](), [String]()),
+            (["Camera"], ["Analytics"]),
+            (["Camera", "Location"], ["Firebase", "Analytics"])
+        ]
+    )
+    func platformPackageSwiftHasNoTrailingCommaBeforeClosingBracket(capabilities: [String], adapters: [String]) {
+        let lines = ArchInitSupport.buildPlatformPackageSwift(capabilities: capabilities, adapters: adapters)
+            .components(separatedBy: "\n")
+        for (line, next) in zip(lines, lines.dropFirst())
+        where next.trimmingCharacters(in: .whitespaces).hasPrefix("]") {
+            #expect(!line.hasSuffix(","), "trailing comma before `\(next)`: \(line)")
+        }
+    }
+
+    @Test("buildPlatformPackageSwift keeps the comma between elements and drops only the last one")
+    func platformPackageSwiftCommasOnlyBetweenElements() {
+        let contents = ArchInitSupport.buildPlatformPackageSwift(capabilities: ["Camera"], adapters: ["Analytics"])
+        #expect(
+            contents.contains(
+                "[\"CameraKit\"]),\n        .library(name: \"AnalyticsAdapters\", targets: [\"AnalyticsAdapters\"])\n    ],"
+            )
+        )
+        #expect(contents.contains("from: \"1.2.0\")\n    ],\n    targets: ["))
+        #expect(contents.contains("        ),\n        .target(\n            name: \"AnalyticsAdapters\","))
+        #expect(contents.hasSuffix("        )\n    ]\n)\n"))
+
+        let firebase = ArchInitSupport.buildPlatformPackageSwift(capabilities: [], adapters: ["Firebase"])
+        #expect(firebase.contains("from: \"1.2.0\"),\n        // R14: por tag"))
+        #expect(firebase.contains("from: \"11.0.0\")\n    ],"))
+        #expect(
+            firebase.contains(
+                "\"firebase-ios-sdk\"),\n                .product(name: \"FirebaseCrashlytics\", package: \"firebase-ios-sdk\")\n            ],"
+            )
+        )
+    }
+
     // MARK: - App/AppModule.swift substitutions
 
     @Test("moduleImports always imports Domain, never the package name 'Platform'")
     func moduleImportsAlwaysIncludesDomain() {
         let imports = ArchInitSupport.moduleImports(capabilities: [], hasFirebase: false, genericAdapters: [])
-        #expect(imports == "import Domain")
+        #expect(imports == "import AppFoundation\nimport Domain\nimport Foundation")
         #expect(!imports.contains("import Platform"))
+    }
+
+    /// `swift format lint --strict` on a fresh `archinit --multi` app failed with
+    /// `[OrderedImports]`: the template put `AppFoundation`/`Foundation` first, then Domain,
+    /// Kits and Adapters in the order given. `OrderedImports` compares code points, so
+    /// `AppFoundation` < `AppcuesAdapters` (`F` < `c`), not the other way round.
+    @Test("moduleImports renders the whole import block in the code-point order OrderedImports checks")
+    func moduleImportsAreSortedLikeOrderedImports() {
+        let imports = ArchInitSupport.moduleImports(
+            capabilities: ["Camera", "Fitness"],
+            hasFirebase: true,
+            genericAdapters: ["Appcues", "Analytics"]
+        )
+        #expect(
+            imports == """
+                import AnalyticsAdapters
+                import AppFoundation
+                import AppcuesAdapters
+                import CameraKit
+                import Domain
+                import FirebaseAdapters
+                import FitnessKit
+                import Foundation
+                """
+        )
     }
 
     @Test("moduleImports adds one import per capability/adapter module actually referenced")

@@ -67,6 +67,93 @@ struct TemplateEngineTests {
         #expect(result == "outer-")
     }
 
+    // MARK: - Standalone tag lines
+
+    @Test("A line holding only a section tag leaves no line behind, whether the section renders or not")
+    func standaloneTagLinesVanish() {
+        let template = """
+            protocol Storing {
+                func fetchAll() async throws -> [Item]
+                {{#both}}
+                func replaceAll(_ items: [Item]) async throws
+                {{/both}}
+                {{^both}}
+                func save(_ item: Item) async throws
+                {{/both}}
+            }
+            """
+        let both = TemplateEngine.render(template, substitutions: [:], flags: ["both": true])
+        #expect(
+            both == """
+                protocol Storing {
+                    func fetchAll() async throws -> [Item]
+                    func replaceAll(_ items: [Item]) async throws
+                }
+                """
+        )
+        let single = TemplateEngine.render(template, substitutions: [:], flags: ["both": false])
+        #expect(
+            single == """
+                protocol Storing {
+                    func fetchAll() async throws -> [Item]
+                    func save(_ item: Item) async throws
+                }
+                """
+        )
+    }
+
+    @Test("Several section tags alone on one line are standalone too, even on the last line")
+    func severalTagsOnOneLineAreStandalone() {
+        let template = "a\n  {{/x}}{{#y}}  \nb\n{{/y}}"
+        let result = TemplateEngine.render("{{#x}}\(template)", substitutions: [:], flags: ["x": true, "y": true])
+        #expect(result == "a\nb\n")
+    }
+
+    @Test("A tag sharing its line with text or a variable is not standalone")
+    func inlineTagsKeepTheirLine() {
+        let template = "import A\n{{#split}}import {{Core}}\n{{/split}}import B\n    {{#on}}x{{/on}}\n{{Name}}\nend"
+        let result = TemplateEngine.render(
+            template,
+            substitutions: ["Core": "Core", "Name": ""],
+            flags: ["split": false, "on": false]
+        )
+        #expect(result == "import A\nimport B\n    \n\nend")
+    }
+
+    // MARK: - Imports of a rendered Swift file
+
+    @Test("Sorts each run of imports by module name, @testable imports on their own")
+    func sortsImportRuns() {
+        let source = """
+            import AppFoundation
+            import Foundation
+            import ApiFeatureCore
+            import CoreNetworking
+
+            @testable import ApiFeatureUI
+            @testable import ApiFeatureCore
+
+            #if canImport(SwiftUI)
+            import SwiftUI
+            #endif
+            """
+        #expect(
+            TemplateEngine.sortingImports(in: source) == """
+                import ApiFeatureCore
+                import AppFoundation
+                import CoreNetworking
+                import Foundation
+
+                @testable import ApiFeatureCore
+                @testable import ApiFeatureUI
+
+                #if canImport(SwiftUI)
+                import SwiftUI
+                #endif
+                """
+        )
+    }
+
     @Test("Renders a realistic Logic.swift.txt-shaped fragment for the API-only variant")
     func rendersApiOnlyFragment() {
         let template = """

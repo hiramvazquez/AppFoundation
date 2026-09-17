@@ -78,8 +78,9 @@ nunca pisa un fichero existente e imprime el diff sugerido.
 
 Después: `Scripts/bootstrap.sh` genera el `.xcodeproj` con xcodegen, y en `Packages/Features`
 cada `generate-feature <Name> --api` crea el target, su test target y el producto entre los
-markers del manifiesto, y añade el módulo al composition root y el `case` a `AppRoute`
-(<doc:Generator>, «Modo multi»).
+markers del manifiesto, y conecta el feature a la app: su `import` en `AppModule.swift` y
+`RootView.swift`, el módulo en el composition root, el `case` en `AppRoute`, su destino en
+el `switch` de `RootView` y el producto en `project.yml` (<doc:Generator>, «Modo multi»).
 
 ## Migrar una app existente
 
